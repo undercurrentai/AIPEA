@@ -1,0 +1,1287 @@
+# AI Prompt Engineer Agent - AWS Deployment Configuration
+# Complete infrastructure setup for enterprise and edge deployments
+
+---
+# Terraform configuration for AWS infrastructure
+# Save as: infrastructure/terraform/main.tf
+terraform {
+  required_version = ">= 1.5.0"
+  
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.23"
+    }
+  }
+  
+  backend "s3" {
+    bucket = "aipea-terraform-state"
+    key    = "infrastructure/terraform.tfstate"
+    region = "us-gov-west-1"  # GovCloud for FedRAMP
+    encrypt = true
+    dynamodb_table = "aipea-terraform-locks"
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+  
+  default_tags {
+    tags = {
+      Project     = "AIPEA"
+      Environment = var.environment
+      ManagedBy   = "Terraform"
+      CostCenter  = "Agora-Platform"
+      Security    = "FedRAMP-High"
+    }
+  }
+}
+
+# Variables
+variable "environment" {
+  description = "Deployment environment"
+  type        = string
+  validation {
+    condition     = contains(["dev", "staging", "prod", "dr"], var.environment)
+    error_message = "Environment must be dev, staging, prod, or dr"
+  }
+}
+
+variable "aws_region" {
+  description = "AWS region for deployment"
+  type        = string
+  default     = "us-gov-west-1"
+}
+
+variable "availability_zones" {
+  description = "List of availability zones"
+  type        = list(string)
+  default     = ["us-gov-west-1a", "us-gov-west-1b", "us-gov-west-1c"]
+}
+
+---
+# VPC and Networking Configuration
+# Save as: infrastructure/terraform/networking.tf
+
+# VPC with proper CIDR blocks for isolation
+resource "aws_vpc" "aipea_vpc" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+  
+  tags = {
+    Name = "aipea-${var.environment}-vpc"
+  }
+}
+
+# Public subnets for load balancers
+resource "aws_subnet" "public" {
+  count             = length(var.availability_zones)
+  vpc_id            = aws_vpc.aipea_vpc.id
+  cidr_block        = "10.0.${count.index + 1}.0/24"
+  availability_zone = var.availability_zones[count.index]
+  
+  map_public_ip_on_launch = true
+  
+  tags = {
+    Name = "aipea-${var.environment}-public-${var.availability_zones[count.index]}"
+    "kubernetes.io/role/elb" = "1"
+  }
+}
+
+# Private subnets for compute
+resource "aws_subnet" "private" {
+  count             = length(var.availability_zones)
+  vpc_id            = aws_vpc.aipea_vpc.id
+  cidr_block        = "10.0.${count.index + 10}.0/24"
+  availability_zone = var.availability_zones[count.index]
+  
+  tags = {
+    Name = "aipea-${var.environment}-private-${var.availability_zones[count.index]}"
+    "kubernetes.io/role/internal-elb" = "1"
+  }
+}
+
+# Isolated subnets for data/models
+resource "aws_subnet" "isolated" {
+  count             = length(var.availability_zones)
+  vpc_id            = aws_vpc.aipea_vpc.id
+  cidr_block        = "10.0.${count.index + 20}.0/24"
+  availability_zone = var.availability_zones[count.index]
+  
+  tags = {
+    Name = "aipea-${var.environment}-isolated-${var.availability_zones[count.index]}"
+    Purpose = "Model-Storage"
+  }
+}
+
+# Internet Gateway
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.aipea_vpc.id
+  
+  tags = {
+    Name = "aipea-${var.environment}-igw"
+  }
+}
+
+# NAT Gateways for private subnet internet access
+resource "aws_eip" "nat" {
+  count  = length(var.availability_zones)
+  domain = "vpc"
+  
+  tags = {
+    Name = "aipea-${var.environment}-nat-eip-${count.index + 1}"
+  }
+}
+
+resource "aws_nat_gateway" "main" {
+  count         = length(var.availability_zones)
+  allocation_id = aws_eip.nat[count.index].id
+  subnet_id     = aws_subnet.public[count.index].id
+  
+  tags = {
+    Name = "aipea-${var.environment}-nat-${count.index + 1}"
+  }
+}
+
+---
+# EKS Cluster Configuration
+# Save as: infrastructure/terraform/eks.tf
+
+# EKS Cluster
+resource "aws_eks_cluster" "aipea" {
+  name     = "aipea-${var.environment}"
+  role_arn = aws_iam_role.eks_cluster.arn
+  version  = "1.28"
+  
+  vpc_config {
+    subnet_ids              = concat(aws_subnet.private[*].id, aws_subnet.public[*].id)
+    endpoint_private_access = true
+    endpoint_public_access  = var.environment == "prod" ? false : true
+    
+    security_group_ids = [aws_security_group.eks_cluster.id]
+  }
+  
+  encryption_config {
+    provider {
+      key_arn = aws_kms_key.eks.arn
+    }
+    resources = ["secrets"]
+  }
+  
+  enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+  
+  tags = {
+    Name = "aipea-${var.environment}"
+  }
+}
+
+# Node Groups for different workload types
+resource "aws_eks_node_group" "cpu_optimized" {
+  cluster_name    = aws_eks_cluster.aipea.name
+  node_group_name = "cpu-optimized"
+  node_role_arn   = aws_iam_role.eks_node.arn
+  subnet_ids      = aws_subnet.private[*].id
+  
+  scaling_config {
+    desired_size = var.environment == "prod" ? 6 : 3
+    max_size     = var.environment == "prod" ? 20 : 10
+    min_size     = var.environment == "prod" ? 3 : 1
+  }
+  
+  instance_types = ["c6i.4xlarge", "c6i.8xlarge"]
+  
+  labels = {
+    workload-type = "cpu-optimized"
+    tier = "online"
+  }
+  
+  tags = {
+    Name = "aipea-${var.environment}-cpu-nodes"
+  }
+}
+
+resource "aws_eks_node_group" "gpu_inference" {
+  cluster_name    = aws_eks_cluster.aipea.name
+  node_group_name = "gpu-inference"
+  node_role_arn   = aws_iam_role.eks_node.arn
+  subnet_ids      = aws_subnet.isolated[*].id
+  
+  scaling_config {
+    desired_size = var.environment == "prod" ? 3 : 1
+    max_size     = var.environment == "prod" ? 10 : 3
+    min_size     = var.environment == "prod" ? 1 : 0
+  }
+  
+  instance_types = ["g5.12xlarge"]  # NVIDIA A10G GPUs
+  
+  labels = {
+    workload-type = "gpu-inference"
+    tier = "offline"
+    "nvidia.com/gpu" = "true"
+  }
+  
+  taints {
+    key    = "nvidia.com/gpu"
+    value  = "true"
+    effect = "NO_SCHEDULE"
+  }
+  
+  tags = {
+    Name = "aipea-${var.environment}-gpu-nodes"
+  }
+}
+
+# Fargate profile for serverless workloads
+resource "aws_eks_fargate_profile" "serverless" {
+  cluster_name           = aws_eks_cluster.aipea.name
+  fargate_profile_name   = "serverless-workloads"
+  pod_execution_role_arn = aws_iam_role.fargate_pod_execution.arn
+  subnet_ids             = aws_subnet.private[*].id
+  
+  selector {
+    namespace = "aipea-serverless"
+    labels = {
+      deployment-type = "serverless"
+    }
+  }
+  
+  tags = {
+    Name = "aipea-${var.environment}-fargate"
+  }
+}
+
+---
+# S3 Buckets for Model Storage
+# Save as: infrastructure/terraform/storage.tf
+
+# S3 bucket for model storage with versioning
+resource "aws_s3_bucket" "models" {
+  bucket = "aipea-models-${var.environment}-${data.aws_caller_identity.current.account_id}"
+  
+  tags = {
+    Name = "aipea-models-${var.environment}"
+    Purpose = "Model-Storage"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "models" {
+  bucket = aws_s3_bucket.models.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_encryption" "models" {
+  bucket = aws_s3_bucket.models.id
+  
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3.arn
+    }
+  }
+}
+
+# S3 bucket for offline knowledge base
+resource "aws_s3_bucket" "knowledge_base" {
+  bucket = "aipea-knowledge-${var.environment}-${data.aws_caller_identity.current.account_id}"
+  
+  tags = {
+    Name = "aipea-knowledge-${var.environment}"
+    Purpose = "Offline-Knowledge"
+  }
+}
+
+# S3 bucket for audit logs (FedRAMP requirement)
+resource "aws_s3_bucket" "audit_logs" {
+  bucket = "aipea-audit-logs-${var.environment}-${data.aws_caller_identity.current.account_id}"
+  
+  tags = {
+    Name = "aipea-audit-${var.environment}"
+    Compliance = "FedRAMP"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "audit_logs" {
+  bucket = aws_s3_bucket.audit_logs.id
+  
+  rule {
+    id     = "audit-retention"
+    status = "Enabled"
+    
+    transition {
+      days          = 90
+      storage_class = "GLACIER"
+    }
+    
+    expiration {
+      days = 2555  # 7 years for FedRAMP
+    }
+  }
+}
+
+---
+# RDS for Persistent Storage
+# Save as: infrastructure/terraform/database.tf
+
+# RDS subnet group
+resource "aws_db_subnet_group" "main" {
+  name       = "aipea-${var.environment}"
+  subnet_ids = aws_subnet.isolated[*].id
+  
+  tags = {
+    Name = "aipea-${var.environment}-db-subnet"
+  }
+}
+
+# RDS PostgreSQL for metadata and context storage
+resource "aws_db_instance" "metadata" {
+  identifier = "aipea-metadata-${var.environment}"
+  
+  engine         = "postgres"
+  engine_version = "15.4"
+  instance_class = var.environment == "prod" ? "db.r6i.2xlarge" : "db.t3.large"
+  
+  allocated_storage     = var.environment == "prod" ? 500 : 100
+  max_allocated_storage = var.environment == "prod" ? 2000 : 500
+  storage_encrypted     = true
+  kms_key_id           = aws_kms_key.rds.arn
+  
+  db_name  = "aipea_metadata"
+  username = "aipea_admin"
+  password = random_password.db_password.result
+  
+  vpc_security_group_ids = [aws_security_group.rds.id]
+  db_subnet_group_name   = aws_db_subnet_group.main.name
+  
+  backup_retention_period = 30
+  backup_window          = "03:00-04:00"
+  maintenance_window     = "sun:04:00-sun:05:00"
+  
+  enabled_cloudwatch_logs_exports = ["postgresql"]
+  
+  deletion_protection = var.environment == "prod" ? true : false
+  skip_final_snapshot = var.environment == "prod" ? false : true
+  
+  tags = {
+    Name = "aipea-metadata-${var.environment}"
+  }
+}
+
+# ElastiCache for caching
+resource "aws_elasticache_subnet_group" "main" {
+  name       = "aipea-${var.environment}"
+  subnet_ids = aws_subnet.private[*].id
+}
+
+resource "aws_elasticache_replication_group" "redis" {
+  replication_group_id = "aipea-cache-${var.environment}"
+  description          = "AIPEA Redis cache for enhanced queries"
+  
+  engine               = "redis"
+  engine_version       = "7.0"
+  node_type           = var.environment == "prod" ? "cache.r7g.xlarge" : "cache.t3.medium"
+  num_cache_clusters  = var.environment == "prod" ? 3 : 1
+  
+  subnet_group_name = aws_elasticache_subnet_group.main.name
+  security_group_ids = [aws_security_group.redis.id]
+  
+  at_rest_encryption_enabled = true
+  transit_encryption_enabled = true
+  auth_token_enabled         = true
+  auth_token                 = random_password.redis_auth.result
+  
+  automatic_failover_enabled = var.environment == "prod" ? true : false
+  multi_az_enabled          = var.environment == "prod" ? true : false
+  
+  tags = {
+    Name = "aipea-cache-${var.environment}"
+  }
+}
+
+---
+# Auto Scaling Configuration
+# Save as: infrastructure/terraform/autoscaling.tf
+
+# Application Auto Scaling for EKS
+resource "aws_autoscaling_policy" "cpu_scale_up" {
+  name                   = "aipea-cpu-scale-up"
+  scaling_adjustment     = 2
+  adjustment_type        = "ChangeInCapacity"
+  cooldown              = 300
+  autoscaling_group_name = aws_eks_node_group.cpu_optimized.resources[0].autoscaling_groups[0].name
+}
+
+resource "aws_autoscaling_policy" "cpu_scale_down" {
+  name                   = "aipea-cpu-scale-down"
+  scaling_adjustment     = -1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown              = 300
+  autoscaling_group_name = aws_eks_node_group.cpu_optimized.resources[0].autoscaling_groups[0].name
+}
+
+# CloudWatch alarms for scaling
+resource "aws_cloudwatch_metric_alarm" "high_cpu" {
+  alarm_name          = "aipea-${var.environment}-high-cpu"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EKS"
+  period              = "120"
+  statistic           = "Average"
+  threshold           = "80"
+  alarm_description   = "This metric monitors CPU utilization"
+  alarm_actions       = [aws_autoscaling_policy.cpu_scale_up.arn]
+}
+
+resource "aws_cloudwatch_metric_alarm" "low_cpu" {
+  alarm_name          = "aipea-${var.environment}-low-cpu"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EKS"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = "20"
+  alarm_description   = "This metric monitors CPU utilization"
+  alarm_actions       = [aws_autoscaling_policy.cpu_scale_down.arn]
+}
+
+---
+# Lambda Functions for Edge Deployment
+# Save as: infrastructure/terraform/edge.tf
+
+# Lambda function for lightweight edge inference
+resource "aws_lambda_function" "edge_inference" {
+  filename         = "edge_inference.zip"
+  function_name    = "aipea-edge-inference-${var.environment}"
+  role            = aws_iam_role.lambda_edge.arn
+  handler         = "index.handler"
+  runtime         = "python3.11"
+  timeout         = 300
+  memory_size     = 3008  # Maximum for CPU inference
+  
+  environment {
+    variables = {
+      MODEL_BUCKET = aws_s3_bucket.models.id
+      ENVIRONMENT  = var.environment
+    }
+  }
+  
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.lambda.id]
+  }
+  
+  tags = {
+    Name = "aipea-edge-${var.environment}"
+  }
+}
+
+# AWS IoT Greengrass for disconnected edge
+resource "aws_iot_thing" "edge_device" {
+  name = "aipea-edge-device-${var.environment}"
+  
+  attributes = {
+    deployment_type = "military_edge"
+    capability      = "offline_inference"
+  }
+}
+
+resource "aws_greengrass_group" "edge_deployment" {
+  name = "aipea-edge-group-${var.environment}"
+}
+
+---
+# Security and Compliance
+# Save as: infrastructure/terraform/security.tf
+
+# KMS Keys for encryption
+resource "aws_kms_key" "eks" {
+  description             = "AIPEA EKS encryption key"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+  
+  tags = {
+    Name = "aipea-eks-${var.environment}"
+  }
+}
+
+resource "aws_kms_key" "s3" {
+  description             = "AIPEA S3 encryption key"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+  
+  tags = {
+    Name = "aipea-s3-${var.environment}"
+  }
+}
+
+resource "aws_kms_key" "rds" {
+  description             = "AIPEA RDS encryption key"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+  
+  tags = {
+    Name = "aipea-rds-${var.environment}"
+  }
+}
+
+# WAF for API protection
+resource "aws_wafv2_web_acl" "api_protection" {
+  name  = "aipea-api-protection-${var.environment}"
+  scope = "REGIONAL"
+  
+  default_action {
+    allow {}
+  }
+  
+  rule {
+    name     = "RateLimitRule"
+    priority = 1
+    
+    statement {
+      rate_based_statement {
+        limit              = 2000
+        aggregate_key_type = "IP"
+      }
+    }
+    
+    action {
+      block {}
+    }
+    
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "RateLimitRule"
+      sampled_requests_enabled   = true
+    }
+  }
+  
+  rule {
+    name     = "SQLiProtection"
+    priority = 2
+    
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesSQLiRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+    
+    action {
+      block {}
+    }
+    
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "SQLiProtection"
+      sampled_requests_enabled   = true
+    }
+  }
+  
+  tags = {
+    Name = "aipea-waf-${var.environment}"
+  }
+}
+
+# GuardDuty for threat detection
+resource "aws_guardduty_detector" "main" {
+  enable = true
+  
+  datasources {
+    s3_logs {
+      enable = true
+    }
+    kubernetes {
+      audit_logs {
+        enable = true
+      }
+    }
+  }
+  
+  tags = {
+    Name = "aipea-guardduty-${var.environment}"
+  }
+}
+
+---
+# Kubernetes Manifests
+# Save as: kubernetes/base/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aipea
+  labels:
+    name: aipea
+    security.istio.io/tlsMode: STRICT
+---
+# Save as: kubernetes/base/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aipea-core
+  namespace: aipea
+  labels:
+    app: aipea
+    component: core
+    tier: online
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: aipea
+      component: core
+  template:
+    metadata:
+      labels:
+        app: aipea
+        component: core
+        tier: online
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: aipea-core
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      initContainers:
+      - name: download-models
+        image: aws-cli:latest
+        command:
+        - sh
+        - -c
+        - |
+          aws s3 cp s3://${MODEL_BUCKET}/models/tactical/ /models/ --recursive
+        env:
+        - name: MODEL_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: aipea-config
+              key: model_bucket
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+      
+      containers:
+      - name: aipea-core
+        image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/aipea:${VERSION}
+        
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 8081
+          name: grpc
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        
+        env:
+        - name: DEPLOYMENT_TIER
+          value: "tactical"
+        - name: AWS_REGION
+          value: "${AWS_REGION}"
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: aipea-redis
+              key: url
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: aipea-database
+              key: url
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aipea-api-keys
+              key: anthropic
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aipea-api-keys
+              key: openai
+        
+        resources:
+          requests:
+            cpu: 2
+            memory: 8Gi
+            ephemeral-storage: 20Gi
+          limits:
+            cpu: 4
+            memory: 16Gi
+            ephemeral-storage: 50Gi
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+          readOnly: true
+        - name: knowledge-base
+          mountPath: /knowledge
+          readOnly: true
+        
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+      
+      volumes:
+      - name: model-storage
+        emptyDir:
+          sizeLimit: 100Gi
+      - name: knowledge-base
+        persistentVolumeClaim:
+          claimName: aipea-knowledge-pvc
+      
+      nodeSelector:
+        workload-type: cpu-optimized
+      
+      tolerations:
+      - key: "tier"
+        operator: "Equal"
+        value: "online"
+        effect: "NoSchedule"
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - aipea
+              topologyKey: topology.kubernetes.io/zone
+
+---
+# Save as: kubernetes/base/deployment-offline.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aipea-offline
+  namespace: aipea
+  labels:
+    app: aipea
+    component: offline
+    tier: offline
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aipea
+      component: offline
+  template:
+    metadata:
+      labels:
+        app: aipea
+        component: offline
+        tier: offline
+    spec:
+      serviceAccountName: aipea-offline
+      
+      containers:
+      - name: aipea-offline
+        image: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/aipea-offline:${VERSION}
+        
+        env:
+        - name: DEPLOYMENT_TIER
+          value: "offline"
+        - name: MODEL_PATH
+          value: "/models/llama-3.3-70b-q4.gguf"
+        
+        resources:
+          requests:
+            cpu: 8
+            memory: 64Gi
+            nvidia.com/gpu: 1
+          limits:
+            cpu: 16
+            memory: 128Gi
+            nvidia.com/gpu: 1
+        
+        volumeMounts:
+        - name: model-storage
+          mountPath: /models
+        - name: knowledge-base
+          mountPath: /knowledge
+      
+      volumes:
+      - name: model-storage
+        persistentVolumeClaim:
+          claimName: aipea-models-pvc
+      - name: knowledge-base
+        persistentVolumeClaim:
+          claimName: aipea-knowledge-pvc
+      
+      nodeSelector:
+        workload-type: gpu-inference
+      
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+
+---
+# Save as: kubernetes/base/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: aipea-service
+  namespace: aipea
+  labels:
+    app: aipea
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: aipea
+    component: core
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: grpc
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+
+---
+# Save as: kubernetes/base/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aipea-hpa
+  namespace: aipea
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aipea-core
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "1000"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 4
+        periodSeconds: 15
+      selectPolicy: Max
+
+---
+# Disaster Recovery Configuration
+# Save as: infrastructure/terraform/disaster-recovery.tf
+
+# Cross-region replication for S3 buckets
+resource "aws_s3_bucket_replication_configuration" "models_replication" {
+  role   = aws_iam_role.s3_replication.arn
+  bucket = aws_s3_bucket.models.id
+  
+  rule {
+    id     = "replicate-all-models"
+    status = "Enabled"
+    
+    destination {
+      bucket        = aws_s3_bucket.models_dr.arn
+      storage_class = "STANDARD_IA"
+      
+      encryption_configuration {
+        replica_kms_key_id = aws_kms_key.s3_dr.arn
+      }
+    }
+  }
+}
+
+# RDS read replica in DR region
+resource "aws_db_instance" "metadata_dr" {
+  count = var.environment == "prod" ? 1 : 0
+  
+  identifier = "aipea-metadata-dr-${var.environment}"
+  replicate_source_db = aws_db_instance.metadata.identifier
+  
+  instance_class = "db.r6i.xlarge"
+  
+  skip_final_snapshot = true
+  
+  tags = {
+    Name = "aipea-metadata-dr-${var.environment}"
+    Purpose = "Disaster-Recovery"
+  }
+}
+
+# Route53 health checks and failover
+resource "aws_route53_health_check" "primary" {
+  fqdn              = "aipea.${var.environment}.agora.mil"
+  port              = 443
+  type              = "HTTPS"
+  resource_path     = "/health"
+  failure_threshold = "3"
+  request_interval  = "30"
+  
+  tags = {
+    Name = "aipea-primary-health-${var.environment}"
+  }
+}
+
+resource "aws_route53_record" "aipea_primary" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = "aipea.${var.environment}.agora.mil"
+  type    = "A"
+  
+  alias {
+    name                   = aws_lb.main.dns_name
+    zone_id                = aws_lb.main.zone_id
+    evaluate_target_health = true
+  }
+  
+  set_identifier = "Primary"
+  failover_routing_policy {
+    type = "PRIMARY"
+  }
+  
+  health_check_id = aws_route53_health_check.primary.id
+}
+
+---
+# Monitoring and Observability
+# Save as: kubernetes/monitoring/prometheus-values.yaml
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false
+    
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 100Gi
+          storageClassName: gp3
+    
+    retention: 30d
+    retentionSize: "90GB"
+    
+    resources:
+      requests:
+        cpu: 2
+        memory: 8Gi
+      limits:
+        cpu: 4
+        memory: 16Gi
+    
+    additionalScrapeConfigs:
+    - job_name: 'aipea-metrics'
+      kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+          - aipea
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+
+grafana:
+  enabled: true
+  
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClassName: gp3
+  
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+      - name: 'aipea'
+        orgId: 1
+        folder: 'AIPEA'
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/aipea
+  
+  dashboards:
+    aipea:
+      aipea-overview:
+        url: https://raw.githubusercontent.com/agora/aipea/main/dashboards/overview.json
+      aipea-performance:
+        url: https://raw.githubusercontent.com/agora/aipea/main/dashboards/performance.json
+
+alertmanager:
+  enabled: true
+  
+  config:
+    global:
+      resolve_timeout: 5m
+    
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      receiver: 'aipea-team'
+      
+      routes:
+      - match:
+          severity: critical
+        receiver: 'aipea-oncall'
+      - match:
+          severity: warning
+        receiver: 'aipea-team'
+    
+    receivers:
+    - name: 'aipea-team'
+      slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '#aipea-alerts'
+        
+    - name: 'aipea-oncall'
+      pagerduty_configs:
+      - service_key: '${PAGERDUTY_SERVICE_KEY}'
+
+---
+# Cost Optimization Configuration
+# Save as: infrastructure/terraform/cost-optimization.tf
+
+# Savings Plans
+resource "aws_ce_anomaly_monitor" "aipea" {
+  name              = "aipea-cost-monitor"
+  monitor_type      = "CUSTOM"
+  monitor_frequency = "DAILY"
+  
+  monitor_specification = jsonencode({
+    Dimensions = {
+      Key          = "SERVICE"
+      Values       = ["Amazon Elastic Compute Cloud - Compute", "Amazon Relational Database Service"]
+      MatchOptions = ["EQUALS"]
+    }
+  })
+}
+
+# Spot instance configuration for non-critical workloads
+resource "aws_launch_template" "spot_nodes" {
+  name_prefix = "aipea-spot-"
+  
+  instance_type = "c6i.4xlarge"
+  
+  instance_market_options {
+    market_type = "spot"
+    
+    spot_options {
+      max_price = "0.50"  # 50% of on-demand price
+      spot_instance_type = "one-time"
+      instance_interruption_behavior = "terminate"
+    }
+  }
+  
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "aipea-spot-node"
+      Purpose = "cost-optimization"
+    }
+  }
+}
+
+# Reserved Instance recommendations
+resource "aws_budgets_budget" "aipea" {
+  name              = "aipea-monthly-budget"
+  budget_type       = "COST"
+  limit_amount      = var.environment == "prod" ? "50000" : "5000"
+  limit_unit        = "USD"
+  time_period_start = "2024-01-01_00:00"
+  time_unit         = "MONTHLY"
+  
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 80
+    threshold_type            = "PERCENTAGE"
+    notification_type         = "FORECASTED"
+    subscriber_email_addresses = ["aipea-team@agora.mil"]
+  }
+}
+
+---
+# Edge Deployment Script
+# Save as: scripts/deploy-edge.sh
+#!/bin/bash
+set -euo pipefail
+
+# Edge deployment script for disconnected environments
+EDGE_VERSION="${1:-latest}"
+DEPLOYMENT_TYPE="${2:-tactical}"  # tactical, field, mobile
+
+echo "Deploying AIPEA Edge ${EDGE_VERSION} - Type: ${DEPLOYMENT_TYPE}"
+
+# Download models and knowledge base
+aws s3 sync s3://aipea-models-prod/edge/${EDGE_VERSION}/ ./models/ \
+  --exclude "*" \
+  --include "llama-3.3-70b-q4.gguf" \
+  --include "gemma-3n-*.gguf"
+
+aws s3 sync s3://aipea-knowledge-prod/edge/${EDGE_VERSION}/ ./knowledge/ \
+  --exclude "*" \
+  --include "*.db" \
+  --include "*.idx"
+
+# Build edge container
+docker build \
+  --build-arg VERSION=${EDGE_VERSION} \
+  --build-arg DEPLOYMENT_TYPE=${DEPLOYMENT_TYPE} \
+  -t aipea-edge:${EDGE_VERSION} \
+  -f Dockerfile.edge .
+
+# Create offline deployment package
+tar -czf aipea-edge-${EDGE_VERSION}-${DEPLOYMENT_TYPE}.tar.gz \
+  models/ \
+  knowledge/ \
+  docker-images/ \
+  scripts/ \
+  config/
+
+# Generate checksums
+sha256sum aipea-edge-${EDGE_VERSION}-${DEPLOYMENT_TYPE}.tar.gz > checksums.txt
+
+echo "Edge deployment package created: aipea-edge-${EDGE_VERSION}-${DEPLOYMENT_TYPE}.tar.gz"
+echo "Transfer this package to disconnected environment via secure media"
+
+# For AWS Snowball Edge deployment
+if [ "${DEPLOYMENT_TYPE}" == "snowball" ]; then
+  aws snowball-edge create-job \
+    --job-type IMPORT \
+    --resources '{"S3Resources":[{"BucketArn":"arn:aws:s3:::aipea-edge-deployment"}]}' \
+    --description "AIPEA Edge Deployment ${EDGE_VERSION}" \
+    --address-id ${SNOWBALL_ADDRESS_ID} \
+    --kms-key-arn ${KMS_KEY_ARN} \
+    --snowball-capacity-preference T100
+fi
+
+---
+# Makefile for deployment automation
+# Save as: Makefile
+
+.PHONY: all init plan apply destroy test
+
+ENVIRONMENT ?= dev
+AWS_REGION ?= us-gov-west-1
+
+all: init plan apply
+
+init:
+	cd infrastructure/terraform && \
+	terraform init -backend-config="key=aipea/$(ENVIRONMENT)/terraform.tfstate"
+
+plan:
+	cd infrastructure/terraform && \
+	terraform plan -var="environment=$(ENVIRONMENT)" -var="aws_region=$(AWS_REGION)" -out=tfplan
+
+apply:
+	cd infrastructure/terraform && \
+	terraform apply tfplan
+
+destroy:
+	cd infrastructure/terraform && \
+	terraform destroy -var="environment=$(ENVIRONMENT)" -var="aws_region=$(AWS_REGION)" -auto-approve
+
+deploy-k8s:
+	kubectl apply -k kubernetes/overlays/$(ENVIRONMENT)
+
+deploy-edge:
+	./scripts/deploy-edge.sh $(VERSION) $(DEPLOYMENT_TYPE)
+
+test-infrastructure:
+	cd tests && \
+	pytest test_infrastructure.py -v
+
+monitor:
+	kubectl port-forward -n monitoring svc/prometheus-operated 9090:9090 &
+	kubectl port-forward -n monitoring svc/grafana 3000:80 &
+	open http://localhost:3000
+
+backup:
+	./scripts/backup-data.sh $(ENVIRONMENT)
+
+restore:
+	./scripts/restore-data.sh $(ENVIRONMENT) $(BACKUP_ID)

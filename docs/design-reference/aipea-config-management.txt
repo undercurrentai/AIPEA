@@ -1,0 +1,1599 @@
+# AI Prompt Engineer Agent - Configuration Management System
+# Unified configuration schema with validation, hot-reload, and environment overrides
+
+---
+# Master Configuration Schema
+# Save as: config/schema/aipea-config-schema.yaml
+apiVersion: config.aipea.io/v1
+kind: ConfigurationSchema
+metadata:
+  name: aipea-master-schema
+  version: "1.0.0"
+spec:
+  description: "AIPEA Configuration Schema with validation rules"
+  
+  properties:
+    system:
+      type: object
+      required: true
+      properties:
+        deployment:
+          type: object
+          required: true
+          properties:
+            environment:
+              type: string
+              enum: ["dev", "staging", "prod", "dr", "edge", "tactical"]
+              description: "Deployment environment"
+            
+            tier:
+              type: string
+              enum: ["cloud", "hybrid", "edge", "disconnected"]
+              description: "Deployment tier"
+            
+            region:
+              type: string
+              pattern: "^[a-z]{2}-[a-z]+-[0-9]$"
+              default: "us-gov-west-1"
+              description: "AWS region"
+            
+            classification:
+              type: string
+              enum: ["UNCLASSIFIED", "CUI", "SECRET", "TOP_SECRET"]
+              default: "UNCLASSIFIED"
+              description: "Security classification level"
+    
+    agent:
+      type: object
+      required: true
+      properties:
+        identity:
+          type: object
+          properties:
+            id:
+              type: string
+              pattern: "^[a-z0-9_-]+$"
+              default: "prompt_engineer_001"
+            
+            version:
+              type: string
+              pattern: "^\\d+\\.\\d+\\.\\d+$"
+              default: "1.0.0"
+        
+        capabilities:
+          type: object
+          properties:
+            max_concurrent_requests:
+              type: integer
+              minimum: 1
+              maximum: 1000
+              default: 100
+            
+            timeout_seconds:
+              type: integer
+              minimum: 1
+              maximum: 300
+              default: 30
+            
+            retry_policy:
+              type: object
+              properties:
+                max_retries:
+                  type: integer
+                  minimum: 0
+                  maximum: 5
+                  default: 3
+                
+                backoff_multiplier:
+                  type: number
+                  minimum: 1.0
+                  maximum: 5.0
+                  default: 2.0
+    
+    models:
+      type: object
+      required: true
+      properties:
+        offline:
+          type: object
+          required: true
+          properties:
+            primary:
+              type: object
+              properties:
+                name:
+                  type: string
+                  default: "llama-3.3-70b"
+                
+                path:
+                  type: string
+                  default: "/models/llama-3.3-70b-q4.gguf"
+                
+                quantization:
+                  type: string
+                  enum: ["q4_0", "q4_1", "q5_0", "q5_1", "q8_0", "f16"]
+                  default: "q4_0"
+                
+                context_length:
+                  type: integer
+                  minimum: 512
+                  maximum: 131072
+                  default: 8192
+                
+                gpu_layers:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                  default: 35
+            
+            fallback:
+              type: object
+              properties:
+                name:
+                  type: string
+                  default: "gemma-3n"
+                
+                variants:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        enum: ["gemma-3n-e2b", "gemma-3n-e4b"]
+                      
+                      memory_required_gb:
+                        type: number
+                        minimum: 1.0
+                        maximum: 8.0
+        
+        tactical:
+          type: object
+          properties:
+            primary:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  enum: ["anthropic", "openai", "google"]
+                  default: "anthropic"
+                
+                model:
+                  type: string
+                  default: "claude-3-sonnet-20240229"
+                
+                temperature:
+                  type: number
+                  minimum: 0.0
+                  maximum: 2.0
+                  default: 0.2
+                
+                max_tokens:
+                  type: integer
+                  minimum: 1
+                  maximum: 100000
+                  default: 4096
+                
+                top_p:
+                  type: number
+                  minimum: 0.0
+                  maximum: 1.0
+                  default: 0.95
+            
+            fallback:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  default: "openai"
+                
+                model:
+                  type: string
+                  default: "gpt-4-turbo-preview"
+        
+        strategic:
+          type: object
+          properties:
+            coordinator:
+              type: object
+              properties:
+                model:
+                  type: string
+                  default: "claude-3-opus-20240229"
+                
+                agent_configs:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role:
+                        type: string
+                        enum: ["analyst", "builder", "specialist", "validator"]
+                      
+                      model:
+                        type: string
+                      
+                      temperature:
+                        type: number
+    
+    routing:
+      type: object
+      properties:
+        complexity_thresholds:
+          type: object
+          properties:
+            offline_max:
+              type: number
+              minimum: 0.0
+              maximum: 1.0
+              default: 0.3
+            
+            tactical_max:
+              type: number
+              minimum: 0.0
+              maximum: 1.0
+              default: 0.8
+            
+            strategic_min:
+              type: number
+              minimum: 0.0
+              maximum: 1.0
+              default: 0.8
+        
+        forced_routing:
+          type: object
+          properties:
+            security_sensitive:
+              type: string
+              enum: ["offline", "tactical", "strategic"]
+              default: "offline"
+            
+            high_priority:
+              type: string
+              enum: ["tactical", "strategic"]
+              default: "strategic"
+        
+        cost_controls:
+          type: object
+          properties:
+            daily_budget_usd:
+              type: number
+              minimum: 0
+              maximum: 10000
+              default: 100
+            
+            per_query_limit_usd:
+              type: number
+              minimum: 0
+              maximum: 10
+              default: 0.50
+            
+            fallback_on_budget_exceeded:
+              type: boolean
+              default: true
+    
+    enhancement_strategies:
+      type: object
+      properties:
+        technical:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              default: true
+            
+            techniques:
+              type: array
+              items:
+                type: string
+                enum: [
+                  "specification_extraction",
+                  "constraint_identification",
+                  "solution_space_mapping",
+                  "edge_case_enumeration",
+                  "performance_requirement_injection"
+                ]
+            
+            priority:
+              type: integer
+              minimum: 1
+              maximum: 10
+              default: 5
+        
+        research:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              default: true
+            
+            academic_level:
+              type: string
+              enum: ["undergraduate", "graduate", "professional", "expert"]
+              default: "professional"
+        
+        creative:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              default: true
+            
+            style_preferences:
+              type: array
+              items:
+                type: string
+                enum: ["concise", "detailed", "narrative", "technical"]
+        
+        operational:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              default: true
+            
+            include_timelines:
+              type: boolean
+              default: true
+            
+            include_resource_estimates:
+              type: boolean
+              default: true
+    
+    security:
+      type: object
+      required: true
+      properties:
+        input_validation:
+          type: object
+          properties:
+            max_query_length:
+              type: integer
+              minimum: 1
+              maximum: 100000
+              default: 10000
+            
+            blocked_patterns:
+              type: array
+              items:
+                type: string
+              default: [
+                "ignore all previous",
+                "system prompt",
+                "debug mode",
+                "</script>",
+                "DROP TABLE"
+              ]
+            
+            pii_detection:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: true
+                
+                patterns:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      
+                      regex:
+                        type: string
+                      
+                      action:
+                        type: string
+                        enum: ["redact", "block", "warn"]
+        
+        compliance:
+          type: object
+          properties:
+            fedramp:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: true
+                
+                controls:
+                  type: array
+                  items:
+                    type: string
+                  default: ["AC-2", "AC-3", "AU-2", "SC-7", "SC-8"]
+            
+            itar:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: false
+                
+                restricted_countries:
+                  type: array
+                  items:
+                    type: string
+            
+            gdpr:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  default: true
+                
+                data_retention_days:
+                  type: integer
+                  minimum: 1
+                  maximum: 3650
+                  default: 90
+    
+    knowledge_base:
+      type: object
+      properties:
+        offline:
+          type: object
+          properties:
+            storage_tier:
+              type: string
+              enum: ["ultra_compact", "compact", "standard", "extended"]
+              default: "standard"
+            
+            domains:
+              type: array
+              items:
+                type: string
+                enum: [
+                  "military",
+                  "technical", 
+                  "medical",
+                  "intelligence",
+                  "logistics",
+                  "communications",
+                  "cybersecurity",
+                  "engineering",
+                  "general"
+                ]
+              default: ["technical", "general"]
+            
+            sync_policy:
+              type: object
+              properties:
+                frequency:
+                  type: string
+                  enum: ["realtime", "hourly", "daily", "weekly", "manual"]
+                  default: "daily"
+                
+                conflict_resolution:
+                  type: string
+                  enum: ["local_wins", "remote_wins", "newest_wins", "manual"]
+                  default: "newest_wins"
+    
+    mcp_integration:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: true
+        
+        servers:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              
+              url:
+                type: string
+                pattern: "^mcp://.*$"
+              
+              transport:
+                type: string
+                enum: ["stdio", "http", "websocket"]
+              
+              timeout_ms:
+                type: integer
+                minimum: 100
+                maximum: 30000
+                default: 5000
+              
+              retry_attempts:
+                type: integer
+                minimum: 0
+                maximum: 5
+                default: 3
+    
+    monitoring:
+      type: object
+      properties:
+        metrics:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              default: true
+            
+            export_interval_seconds:
+              type: integer
+              minimum: 10
+              maximum: 300
+              default: 60
+            
+            retention_days:
+              type: integer
+              minimum: 1
+              maximum: 365
+              default: 30
+        
+        logging:
+          type: object
+          properties:
+            level:
+              type: string
+              enum: ["debug", "info", "warning", "error", "critical"]
+              default: "info"
+            
+            structured:
+              type: boolean
+              default: true
+            
+            destinations:
+              type: array
+              items:
+                type: string
+                enum: ["stdout", "file", "cloudwatch", "elasticsearch"]
+              default: ["stdout", "cloudwatch"]
+        
+        tracing:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              default: true
+            
+            sampling_rate:
+              type: number
+              minimum: 0.0
+              maximum: 1.0
+              default: 0.1
+            
+            exporter:
+              type: string
+              enum: ["jaeger", "zipkin", "otlp", "xray"]
+              default: "xray"
+    
+    feature_flags:
+      type: object
+      properties:
+        experimental:
+          type: object
+          properties:
+            multimodal_input:
+              type: boolean
+              default: false
+            
+            voice_interface:
+              type: boolean
+              default: false
+            
+            predictive_enhancement:
+              type: boolean
+              default: false
+        
+        rollout:
+          type: object
+          properties:
+            percentage:
+              type: integer
+              minimum: 0
+              maximum: 100
+              default: 0
+            
+            target_groups:
+              type: array
+              items:
+                type: string
+              default: []
+            
+            excluded_groups:
+              type: array
+              items:
+                type: string
+              default: []
+
+---
+# Base Configuration
+# Save as: config/base/config.yaml
+apiVersion: config.aipea.io/v1
+kind: Configuration
+metadata:
+  name: aipea-base-config
+  version: "1.0.0"
+spec:
+  system:
+    deployment:
+      environment: "dev"
+      tier: "cloud"
+      region: "us-gov-west-1"
+      classification: "UNCLASSIFIED"
+  
+  agent:
+    identity:
+      id: "prompt_engineer_001"
+      version: "1.0.0"
+    
+    capabilities:
+      max_concurrent_requests: 100
+      timeout_seconds: 30
+      retry_policy:
+        max_retries: 3
+        backoff_multiplier: 2.0
+  
+  models:
+    offline:
+      primary:
+        name: "llama-3.3-70b"
+        path: "/models/llama-3.3-70b-q4.gguf"
+        quantization: "q4_0"
+        context_length: 8192
+        gpu_layers: 35
+      
+      fallback:
+        name: "gemma-3n"
+        variants:
+        - name: "gemma-3n-e2b"
+          memory_required_gb: 2.0
+        - name: "gemma-3n-e4b"
+          memory_required_gb: 3.5
+    
+    tactical:
+      primary:
+        provider: "anthropic"
+        model: "claude-3-sonnet-20240229"
+        temperature: 0.2
+        max_tokens: 4096
+        top_p: 0.95
+      
+      fallback:
+        provider: "openai"
+        model: "gpt-4-turbo-preview"
+        temperature: 0.2
+        max_tokens: 4096
+    
+    strategic:
+      coordinator:
+        model: "claude-3-opus-20240229"
+        agent_configs:
+        - role: "analyst"
+          model: "claude-3-sonnet-20240229"
+          temperature: 0.1
+        - role: "builder"
+          model: "gpt-4-turbo-preview"
+          temperature: 0.3
+        - role: "specialist"
+          model: "claude-3-sonnet-20240229"
+          temperature: 0.2
+        - role: "validator"
+          model: "claude-3-opus-20240229"
+          temperature: 0.0
+  
+  routing:
+    complexity_thresholds:
+      offline_max: 0.3
+      tactical_max: 0.8
+      strategic_min: 0.8
+    
+    forced_routing:
+      security_sensitive: "offline"
+      high_priority: "strategic"
+    
+    cost_controls:
+      daily_budget_usd: 100.0
+      per_query_limit_usd: 0.50
+      fallback_on_budget_exceeded: true
+  
+  enhancement_strategies:
+    technical:
+      enabled: true
+      techniques:
+      - "specification_extraction"
+      - "constraint_identification"
+      - "solution_space_mapping"
+      priority: 5
+    
+    research:
+      enabled: true
+      academic_level: "professional"
+    
+    creative:
+      enabled: true
+      style_preferences: ["detailed", "technical"]
+    
+    operational:
+      enabled: true
+      include_timelines: true
+      include_resource_estimates: true
+  
+  security:
+    input_validation:
+      max_query_length: 10000
+      blocked_patterns:
+      - "ignore all previous"
+      - "system prompt"
+      - "debug mode"
+      - "</script>"
+      - "DROP TABLE"
+      
+      pii_detection:
+        enabled: true
+        patterns:
+        - name: "ssn"
+          regex: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+          action: "redact"
+        - name: "credit_card"
+          regex: "\\b\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}[\\s-]?\\d{4}\\b"
+          action: "block"
+    
+    compliance:
+      fedramp:
+        enabled: true
+        controls: ["AC-2", "AC-3", "AU-2", "SC-7", "SC-8"]
+      
+      itar:
+        enabled: false
+        restricted_countries: []
+      
+      gdpr:
+        enabled: true
+        data_retention_days: 90
+  
+  knowledge_base:
+    offline:
+      storage_tier: "standard"
+      domains: ["technical", "general"]
+      
+      sync_policy:
+        frequency: "daily"
+        conflict_resolution: "newest_wins"
+  
+  mcp_integration:
+    enabled: true
+    servers:
+    - name: "context7"
+      url: "mcp://context7.upstash.io"
+      transport: "stdio"
+      timeout_ms: 5000
+      retry_attempts: 3
+    
+    - name: "sequential_thinking"
+      url: "mcp://sequential.anthropic.com"
+      transport: "stdio"
+      timeout_ms: 10000
+      retry_attempts: 2
+    
+    - name: "web_search"
+      url: "mcp://search.agora.io"
+      transport: "http"
+      timeout_ms: 3000
+      retry_attempts: 3
+  
+  monitoring:
+    metrics:
+      enabled: true
+      export_interval_seconds: 60
+      retention_days: 30
+    
+    logging:
+      level: "info"
+      structured: true
+      destinations: ["stdout", "cloudwatch"]
+    
+    tracing:
+      enabled: true
+      sampling_rate: 0.1
+      exporter: "xray"
+  
+  feature_flags:
+    experimental:
+      multimodal_input: false
+      voice_interface: false
+      predictive_enhancement: false
+    
+    rollout:
+      percentage: 0
+      target_groups: []
+      excluded_groups: []
+
+---
+# Production Override
+# Save as: config/overlays/production/config.yaml
+apiVersion: config.aipea.io/v1
+kind: ConfigurationOverlay
+metadata:
+  name: aipea-production-overlay
+  base: aipea-base-config
+spec:
+  system:
+    deployment:
+      environment: "prod"
+      tier: "hybrid"
+      classification: "SECRET"
+  
+  agent:
+    capabilities:
+      max_concurrent_requests: 500
+      timeout_seconds: 60
+  
+  models:
+    offline:
+      primary:
+        context_length: 16384
+        gpu_layers: 50
+  
+  routing:
+    cost_controls:
+      daily_budget_usd: 1000.0
+      per_query_limit_usd: 2.00
+  
+  security:
+    compliance:
+      fedramp:
+        enabled: true
+        controls: [
+          "AC-2", "AC-3", "AC-4", "AC-6", "AC-7",
+          "AU-2", "AU-3", "AU-4", "AU-8", "AU-9",
+          "CA-2", "CA-7", "CA-8", "CA-9",
+          "CM-2", "CM-3", "CM-4", "CM-6", "CM-7",
+          "IA-2", "IA-5", "IA-8",
+          "SC-7", "SC-8", "SC-12", "SC-13", "SC-28",
+          "SI-2", "SI-3", "SI-4", "SI-7"
+        ]
+      
+      itar:
+        enabled: true
+        restricted_countries: [
+          "CN", "RU", "IR", "KP", "CU", "SY", "VE"
+        ]
+  
+  monitoring:
+    logging:
+      level: "warning"
+      destinations: ["stdout", "cloudwatch", "elasticsearch"]
+    
+    tracing:
+      sampling_rate: 1.0  # 100% for production debugging
+
+---
+# Edge Deployment Override
+# Save as: config/overlays/edge/config.yaml
+apiVersion: config.aipea.io/v1
+kind: ConfigurationOverlay
+metadata:
+  name: aipea-edge-overlay
+  base: aipea-base-config
+spec:
+  system:
+    deployment:
+      environment: "edge"
+      tier: "disconnected"
+      classification: "SECRET"
+  
+  agent:
+    capabilities:
+      max_concurrent_requests: 10
+      timeout_seconds: 120  # Longer timeout for slower edge devices
+  
+  models:
+    offline:
+      primary:
+        quantization: "q4_1"  # Slightly better quality for edge
+        context_length: 4096  # Reduced for memory constraints
+        gpu_layers: 0  # CPU only on edge devices
+      
+      fallback:
+        variants:
+        - name: "gemma-3n-e2b"  # Only ultra-compact variant
+          memory_required_gb: 2.0
+    
+    tactical:
+      primary:
+        provider: "offline"  # Force offline on edge
+        model: "llama-3.3-70b"
+  
+  routing:
+    complexity_thresholds:
+      offline_max: 1.0  # Everything goes to offline
+      tactical_max: 0.0
+      strategic_min: 1.1  # Never use strategic
+    
+    forced_routing:
+      security_sensitive: "offline"
+      high_priority: "offline"
+  
+  knowledge_base:
+    offline:
+      storage_tier: "compact"  # Limited storage on edge
+      domains: ["military", "tactical", "medical"]  # Mission-critical only
+      
+      sync_policy:
+        frequency: "manual"  # Only when connected
+        conflict_resolution: "local_wins"  # Preserve field modifications
+  
+  mcp_integration:
+    enabled: false  # No external connections on edge
+  
+  monitoring:
+    metrics:
+      export_interval_seconds: 300  # Less frequent to save resources
+    
+    logging:
+      level: "error"  # Only critical issues
+      destinations: ["file"]  # Local storage only
+    
+    tracing:
+      enabled: false  # Disabled to save resources
+
+---
+# Dynamic Configuration Service
+# Save as: config/service/config-service.py
+"""
+Configuration Service with validation, hot-reload, and API
+"""
+
+import os
+import yaml
+import json
+import asyncio
+from typing import Dict, Any, Optional, List
+from dataclasses import dataclass
+from datetime import datetime
+import jsonschema
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import aioredis
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ConfigUpdate:
+    timestamp: datetime
+    path: str
+    old_value: Any
+    new_value: Any
+    source: str
+    approved_by: Optional[str] = None
+
+
+class ConfigurationValidator:
+    """Validates configuration against schema"""
+    
+    def __init__(self, schema_path: str):
+        with open(schema_path, 'r') as f:
+            self.schema = yaml.safe_load(f)
+    
+    def validate(self, config: Dict[str, Any]) -> List[str]:
+        """Validate configuration and return list of errors"""
+        errors = []
+        
+        try:
+            # Convert YAML schema to JSON Schema format
+            json_schema = self._yaml_to_json_schema(self.schema['spec']['properties'])
+            jsonschema.validate(config, json_schema)
+        except jsonschema.ValidationError as e:
+            errors.append(f"Validation error at {'.'.join(str(p) for p in e.path)}: {e.message}")
+        except Exception as e:
+            errors.append(f"Unexpected validation error: {str(e)}")
+        
+        # Custom business logic validation
+        errors.extend(self._validate_business_logic(config))
+        
+        return errors
+    
+    def _yaml_to_json_schema(self, yaml_schema: Dict) -> Dict:
+        """Convert YAML schema format to JSON Schema"""
+        # Simplified conversion - in production would be more comprehensive
+        json_schema = {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+        
+        for key, value in yaml_schema.items():
+            if isinstance(value, dict) and 'type' in value:
+                json_schema['properties'][key] = {
+                    "type": value['type']
+                }
+                if value.get('required', False):
+                    json_schema['required'].append(key)
+        
+        return json_schema
+    
+    def _validate_business_logic(self, config: Dict[str, Any]) -> List[str]:
+        """Additional business logic validation"""
+        errors = []
+        
+        # Ensure offline models are available for disconnected tier
+        if config.get('system', {}).get('deployment', {}).get('tier') == 'disconnected':
+            if not config.get('models', {}).get('offline', {}).get('primary'):
+                errors.append("Disconnected deployment requires offline model configuration")
+        
+        # Validate cost controls
+        daily_budget = config.get('routing', {}).get('cost_controls', {}).get('daily_budget_usd', 0)
+        per_query_limit = config.get('routing', {}).get('cost_controls', {}).get('per_query_limit_usd', 0)
+        
+        if per_query_limit * 100 > daily_budget:
+            errors.append("Per-query limit would exceed daily budget with just 100 queries")
+        
+        return errors
+
+
+class ConfigurationManager:
+    """Manages configuration with hot-reload and caching"""
+    
+    def __init__(self, base_path: str, schema_path: str):
+        self.base_path = base_path
+        self.validator = ConfigurationValidator(schema_path)
+        self.current_config = {}
+        self.config_cache = {}
+        self.update_history = []
+        self.subscribers = []
+        self.redis = None
+        
+    async def initialize(self):
+        """Initialize configuration manager"""
+        # Load initial configuration
+        await self.reload_config()
+        
+        # Connect to Redis for distributed config
+        self.redis = await aioredis.create_redis_pool('redis://localhost')
+        
+        # Start file watcher for hot reload
+        self._start_file_watcher()
+    
+    async def reload_config(self):
+        """Reload configuration from files"""
+        # Load base config
+        base_config_path = os.path.join(self.base_path, 'base/config.yaml')
+        with open(base_config_path, 'r') as f:
+            config = yaml.safe_load(f)['spec']
+        
+        # Apply environment-specific overlays
+        environment = os.environ.get('AIPEA_ENVIRONMENT', 'dev')
+        overlay_path = os.path.join(self.base_path, f'overlays/{environment}/config.yaml')
+        
+        if os.path.exists(overlay_path):
+            with open(overlay_path, 'r') as f:
+                overlay = yaml.safe_load(f)['spec']
+                config = self._merge_configs(config, overlay)
+        
+        # Apply dynamic overrides from Redis
+        if self.redis:
+            dynamic_overrides = await self.redis.get('aipea:config:overrides')
+            if dynamic_overrides:
+                overrides = json.loads(dynamic_overrides)
+                config = self._merge_configs(config, overrides)
+        
+        # Validate configuration
+        errors = self.validator.validate(config)
+        if errors:
+            logger.error(f"Configuration validation failed: {errors}")
+            raise ValueError(f"Invalid configuration: {errors}")
+        
+        # Update current config
+        old_config = self.current_config
+        self.current_config = config
+        
+        # Record update
+        self._record_update(old_config, config, "file_reload")
+        
+        # Notify subscribers
+        await self._notify_subscribers(old_config, config)
+        
+        logger.info("Configuration reloaded successfully")
+    
+    def _merge_configs(self, base: Dict, overlay: Dict) -> Dict:
+        """Deep merge overlay configuration onto base"""
+        result = base.copy()
+        
+        for key, value in overlay.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = self._merge_configs(result[key], value)
+            else:
+                result[key] = value
+        
+        return result
+    
+    def _start_file_watcher(self):
+        """Start watching config files for changes"""
+        class ConfigFileHandler(FileSystemEventHandler):
+            def __init__(self, manager):
+                self.manager = manager
+                
+            def on_modified(self, event):
+                if event.src_path.endswith('.yaml'):
+                    logger.info(f"Config file modified: {event.src_path}")
+                    asyncio.create_task(self.manager.reload_config())
+        
+        observer = Observer()
+        observer.schedule(ConfigFileHandler(self), self.base_path, recursive=True)
+        observer.start()
+    
+    async def get_config(self, path: Optional[str] = None) -> Any:
+        """Get configuration value by path"""
+        if path is None:
+            return self.current_config
+        
+        # Check cache first
+        if path in self.config_cache:
+            return self.config_cache[path]
+        
+        # Navigate path
+        parts = path.split('.')
+        value = self.current_config
+        
+        for part in parts:
+            if isinstance(value, dict) and part in value:
+                value = value[part]
+            else:
+                return None
+        
+        # Cache result
+        self.config_cache[path] = value
+        return value
+    
+    async def set_config(self, path: str, value: Any, source: str = "api") -> bool:
+        """Set configuration value dynamically"""
+        # Create override
+        override = self._create_override_from_path(path, value)
+        
+        # Validate with override
+        test_config = self._merge_configs(self.current_config, override)
+        errors = self.validator.validate(test_config)
+        
+        if errors:
+            logger.error(f"Configuration override validation failed: {errors}")
+            return False
+        
+        # Store override in Redis
+        if self.redis:
+            current_overrides = await self.redis.get('aipea:config:overrides')
+            overrides = json.loads(current_overrides) if current_overrides else {}
+            overrides = self._merge_configs(overrides, override)
+            await self.redis.set('aipea:config:overrides', json.dumps(overrides))
+        
+        # Reload configuration
+        await self.reload_config()
+        
+        return True
+    
+    def _create_override_from_path(self, path: str, value: Any) -> Dict:
+        """Create nested dict from dot-separated path"""
+        parts = path.split('.')
+        result = {}
+        current = result
+        
+        for i, part in enumerate(parts[:-1]):
+            current[part] = {}
+            current = current[part]
+        
+        current[parts[-1]] = value
+        return result
+    
+    def _record_update(self, old_config: Dict, new_config: Dict, source: str):
+        """Record configuration update for audit"""
+        # Find differences
+        differences = self._find_differences(old_config, new_config)
+        
+        for path, (old_val, new_val) in differences.items():
+            update = ConfigUpdate(
+                timestamp=datetime.utcnow(),
+                path=path,
+                old_value=old_val,
+                new_value=new_val,
+                source=source
+            )
+            self.update_history.append(update)
+    
+    def _find_differences(self, old: Dict, new: Dict, path: str = "") -> Dict:
+        """Find differences between configurations"""
+        differences = {}
+        
+        all_keys = set(old.keys()) | set(new.keys())
+        
+        for key in all_keys:
+            current_path = f"{path}.{key}" if path else key
+            
+            if key not in old:
+                differences[current_path] = (None, new[key])
+            elif key not in new:
+                differences[current_path] = (old[key], None)
+            elif old[key] != new[key]:
+                if isinstance(old[key], dict) and isinstance(new[key], dict):
+                    differences.update(self._find_differences(old[key], new[key], current_path))
+                else:
+                    differences[current_path] = (old[key], new[key])
+        
+        return differences
+    
+    async def _notify_subscribers(self, old_config: Dict, new_config: Dict):
+        """Notify subscribers of configuration changes"""
+        for subscriber in self.subscribers:
+            try:
+                await subscriber(old_config, new_config)
+            except Exception as e:
+                logger.error(f"Error notifying subscriber: {e}")
+    
+    def subscribe(self, callback):
+        """Subscribe to configuration changes"""
+        self.subscribers.append(callback)
+    
+    async def get_feature_flag(self, flag_path: str, user_context: Dict = None) -> bool:
+        """Get feature flag value with user context"""
+        base_value = await self.get_config(f"feature_flags.{flag_path}")
+        
+        if user_context:
+            # Check rollout percentage
+            rollout = await self.get_config("feature_flags.rollout")
+            if rollout:
+                percentage = rollout.get('percentage', 0)
+                if self._hash_user(user_context.get('user_id', '')) < percentage:
+                    return True
+                
+                # Check target groups
+                user_groups = user_context.get('groups', [])
+                target_groups = rollout.get('target_groups', [])
+                excluded_groups = rollout.get('excluded_groups', [])
+                
+                if any(group in target_groups for group in user_groups):
+                    return True
+                if any(group in excluded_groups for group in user_groups):
+                    return False
+        
+        return bool(base_value)
+    
+    def _hash_user(self, user_id: str) -> int:
+        """Hash user ID to percentage for consistent rollout"""
+        import hashlib
+        return int(hashlib.md5(user_id.encode()).hexdigest(), 16) % 100
+
+
+# FastAPI Configuration API
+app = FastAPI(title="AIPEA Configuration Service")
+security = HTTPBearer()
+config_manager = None
+
+
+class ConfigRequest(BaseModel):
+    path: str
+    value: Any
+
+
+class FeatureFlagRequest(BaseModel):
+    flag_path: str
+    user_context: Optional[Dict[str, Any]] = None
+
+
+@app.on_event("startup")
+async def startup():
+    global config_manager
+    config_manager = ConfigurationManager(
+        base_path="/app/config",
+        schema_path="/app/config/schema/aipea-config-schema.yaml"
+    )
+    await config_manager.initialize()
+
+
+@app.get("/config")
+async def get_config(path: Optional[str] = None, 
+                    credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get configuration value"""
+    value = await config_manager.get_config(path)
+    if value is None and path is not None:
+        raise HTTPException(status_code=404, detail=f"Configuration not found: {path}")
+    return {"path": path or "root", "value": value}
+
+
+@app.post("/config")
+async def set_config(request: ConfigRequest,
+                    credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Set configuration value dynamically"""
+    success = await config_manager.set_config(request.path, request.value)
+    if not success:
+        raise HTTPException(status_code=400, detail="Configuration validation failed")
+    return {"success": True, "path": request.path}
+
+
+@app.post("/feature-flag")
+async def check_feature_flag(request: FeatureFlagRequest,
+                           credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Check feature flag with user context"""
+    enabled = await config_manager.get_feature_flag(
+        request.flag_path, 
+        request.user_context
+    )
+    return {"flag": request.flag_path, "enabled": enabled}
+
+
+@app.get("/config/history")
+async def get_config_history(limit: int = 100,
+                           credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get configuration change history"""
+    history = config_manager.update_history[-limit:]
+    return {
+        "count": len(history),
+        "updates": [
+            {
+                "timestamp": update.timestamp.isoformat(),
+                "path": update.path,
+                "old_value": update.old_value,
+                "new_value": update.new_value,
+                "source": update.source
+            }
+            for update in history
+        ]
+    }
+
+
+@app.post("/config/reload")
+async def reload_config(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Force configuration reload"""
+    await config_manager.reload_config()
+    return {"success": True, "message": "Configuration reloaded"}
+
+
+@app.get("/config/validate")
+async def validate_config(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Validate current configuration"""
+    errors = config_manager.validator.validate(config_manager.current_config)
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors
+    }
+
+
+---
+# CLI Tool for Configuration Management
+# Save as: scripts/aipea-config.py
+#!/usr/bin/env python3
+"""
+AIPEA Configuration Management CLI
+"""
+
+import click
+import yaml
+import json
+import requests
+from typing import Optional
+from tabulate import tabulate
+import os
+
+
+API_BASE = os.environ.get('AIPEA_CONFIG_API', 'http://localhost:8000')
+API_TOKEN = os.environ.get('AIPEA_API_TOKEN', '')
+
+
+@click.group()
+def cli():
+    """AIPEA Configuration Management CLI"""
+    pass
+
+
+@cli.command()
+@click.argument('path', required=False)
+@click.option('--format', '-f', type=click.Choice(['json', 'yaml', 'table']), default='yaml')
+def get(path: Optional[str], format: str):
+    """Get configuration value"""
+    headers = {'Authorization': f'Bearer {API_TOKEN}'}
+    params = {'path': path} if path else {}
+    
+    response = requests.get(f'{API_BASE}/config', params=params, headers=headers)
+    response.raise_for_status()
+    
+    data = response.json()
+    
+    if format == 'json':
+        click.echo(json.dumps(data['value'], indent=2))
+    elif format == 'yaml':
+        click.echo(yaml.dump(data['value'], default_flow_style=False))
+    elif format == 'table' and isinstance(data['value'], dict):
+        table_data = [(k, v) for k, v in data['value'].items()]
+        click.echo(tabulate(table_data, headers=['Key', 'Value']))
+    else:
+        click.echo(data['value'])
+
+
+@cli.command()
+@click.argument('path')
+@click.argument('value')
+@click.option('--type', '-t', type=click.Choice(['string', 'int', 'float', 'bool', 'json']), default='string')
+def set(path: str, value: str, type: str):
+    """Set configuration value"""
+    # Convert value to appropriate type
+    if type == 'int':
+        value = int(value)
+    elif type == 'float':
+        value = float(value)
+    elif type == 'bool':
+        value = value.lower() in ['true', 'yes', '1']
+    elif type == 'json':
+        value = json.loads(value)
+    
+    headers = {'Authorization': f'Bearer {API_TOKEN}'}
+    data = {'path': path, 'value': value}
+    
+    response = requests.post(f'{API_BASE}/config', json=data, headers=headers)
+    response.raise_for_status()
+    
+    click.echo(f"Successfully set {path}")
+
+
+@cli.command()
+def validate():
+    """Validate current configuration"""
+    headers = {'Authorization': f'Bearer {API_TOKEN}'}
+    response = requests.get(f'{API_BASE}/config/validate', headers=headers)
+    response.raise_for_status()
+    
+    data = response.json()
+    
+    if data['valid']:
+        click.echo("✓ Configuration is valid")
+    else:
+        click.echo("✗ Configuration has errors:")
+        for error in data['errors']:
+            click.echo(f"  - {error}")
+
+
+@cli.command()
+@click.option('--limit', '-l', default=10, help='Number of history entries to show')
+def history(limit: int):
+    """Show configuration change history"""
+    headers = {'Authorization': f'Bearer {API_TOKEN}'}
+    params = {'limit': limit}
+    
+    response = requests.get(f'{API_BASE}/config/history', params=params, headers=headers)
+    response.raise_for_status()
+    
+    data = response.json()
+    
+    if data['updates']:
+        table_data = [
+            [
+                update['timestamp'][:19],
+                update['path'],
+                str(update['old_value'])[:30],
+                str(update['new_value'])[:30],
+                update['source']
+            ]
+            for update in data['updates']
+        ]
+        
+        headers = ['Timestamp', 'Path', 'Old Value', 'New Value', 'Source']
+        click.echo(tabulate(table_data, headers=headers))
+    else:
+        click.echo("No configuration changes found")
+
+
+@cli.command()
+def reload():
+    """Force configuration reload"""
+    headers = {'Authorization': f'Bearer {API_TOKEN}'}
+    response = requests.post(f'{API_BASE}/config/reload', headers=headers)
+    response.raise_for_status()
+    
+    click.echo("✓ Configuration reloaded successfully")
+
+
+@cli.command()
+@click.argument('environment')
+def switch(environment: str):
+    """Switch to different environment configuration"""
+    os.environ['AIPEA_ENVIRONMENT'] = environment
+    headers = {'Authorization': f'Bearer {API_TOKEN}'}
+    response = requests.post(f'{API_BASE}/config/reload', headers=headers)
+    response.raise_for_status()
+    
+    click.echo(f"✓ Switched to {environment} environment")
+
+
+@cli.command()
+@click.argument('flag_path')
+@click.option('--user-id', '-u', help='User ID for rollout check')
+@click.option('--groups', '-g', multiple=True, help='User groups')
+def flag(flag_path: str, user_id: Optional[str], groups: tuple):
+    """Check feature flag status"""
+    headers = {'Authorization': f'Bearer {API_TOKEN}'}
+    
+    user_context = {}
+    if user_id:
+        user_context['user_id'] = user_id
+    if groups:
+        user_context['groups'] = list(groups)
+    
+    data = {'flag_path': flag_path, 'user_context': user_context if user_context else None}
+    
+    response = requests.post(f'{API_BASE}/feature-flag', json=data, headers=headers)
+    response.raise_for_status()
+    
+    result = response.json()
+    status = "✓ Enabled" if result['enabled'] else "✗ Disabled"
+    click.echo(f"{flag_path}: {status}")
+
+
+if __name__ == '__main__':
+    cli()
+
+---
+# Docker Compose for Config Service
+# Save as: docker-compose.config.yaml
+version: '3.8'
+
+services:
+  config-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.config
+    ports:
+      - "8000:8000"
+    environment:
+      - AIPEA_ENVIRONMENT=${AIPEA_ENVIRONMENT:-dev}
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./config:/app/config:ro
+      - config-cache:/app/cache
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  config-cache:
+  redis-data:
+
+---
+# Dockerfile for Config Service
+# Save as: Dockerfile.config
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+RUN pip install --no-cache-dir \
+    fastapi \
+    uvicorn \
+    pyyaml \
+    jsonschema \
+    aioredis \
+    watchdog \
+    pydantic \
+    click \
+    tabulate \
+    requests
+
+# Copy configuration service
+COPY config/service/config-service.py /app/
+COPY scripts/aipea-config.py /usr/local/bin/aipea-config
+RUN chmod +x /usr/local/bin/aipea-config
+
+# Create necessary directories
+RUN mkdir -p /app/config /app/cache
+
+# Run the service
+CMD ["uvicorn", "config-service:app", "--host", "0.0.0.0", "--port", "8000"]
