@@ -1,0 +1,22 @@
+name: Scaffold Checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  scaffold-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: AI RMF artifact check
+        run: python tools/ci/ai_rmf_validate_artifacts.py
+      - name: AI Act technical file check
+        run: python tools/ci/ai_act_lint.py
+      - name: Log schema validation
+        run: python tools/ci/validate_log_schema.py
+      - name: Scaffold adoption check
+        run: python tools/ci/validate_scaffold_adoption.py

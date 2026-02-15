@@ -1,0 +1,112 @@
+name: "Change Request"
+description: "SOC 2 CC8.x / FedRAMP CM-2,CM-3 — Document a change management request"
+title: "[Change Request]"
+labels:
+  - "compliance/soc2"
+  - "evidence/change-mgmt"
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Change Management Request
+        Complete this form to document a change request per the change management process.
+        Reference: `docs/compliance/CHANGE-MANAGEMENT.md` for the full change management policy.
+
+        **Compliance mapping**: SOC 2 CC8.1 | FedRAMP CM-2, CM-3 | ISO 42001 Operation | NIST AI RMF MANAGE
+
+  - type: dropdown
+    id: change-class
+    attributes:
+      label: "Change Class"
+      description: "Classify the change per Engineering Standards S10 (Governance)"
+      options:
+        - "Class A — Style-only (auto-merge eligible)"
+        - "Class B — Refactor (perf + golden dataset verification required)"
+        - "Class C — Behavioral (backtest delta report + risk sign-off required)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: risk-level
+    attributes:
+      label: "Risk Level"
+      description: "Assessed risk level of this change"
+      options:
+        - "Low — No customer impact, easily reversible"
+        - "Medium — Limited customer impact, reversible with effort"
+        - "High — Significant customer impact or difficult to reverse"
+        - "Critical — Production-wide impact, requires maintenance window"
+    validations:
+      required: true
+
+  - type: input
+    id: requester
+    attributes:
+      label: "Requester"
+      description: "Person requesting the change"
+      placeholder: "Jane Smith"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "Change Description"
+      description: "Describe what is being changed and why"
+      placeholder: |
+        **What**: Upgrade PostgreSQL from 15.4 to 16.1
+        **Why**: End-of-life for 15.x in Q2, performance improvements for JSONB queries
+        **Scope**: Production RDS instances (us-east-1, us-west-2)
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact-analysis
+    attributes:
+      label: "Impact Analysis"
+      description: "Document affected systems, users, and services"
+      placeholder: |
+        - Affected systems: API servers, background workers, analytics pipeline
+        - Affected users: All (during maintenance window)
+        - Dependencies: Application code is compatible (tested in staging)
+    validations:
+      required: true
+
+  - type: textarea
+    id: rollback-plan
+    attributes:
+      label: "Rollback Plan"
+      description: "Document how to revert this change if needed"
+      placeholder: |
+        1. Restore RDS from pre-upgrade snapshot (< 15 min)
+        2. Repoint DNS to restored instance
+        3. Verify application connectivity
+    validations:
+      required: true
+
+  - type: textarea
+    id: test-plan
+    attributes:
+      label: "Test Plan"
+      description: "How will this change be verified?"
+      placeholder: |
+        - [ ] Staging environment upgrade completed successfully
+        - [ ] Integration tests pass against upgraded instance
+        - [ ] Performance benchmarks show no regression
+        - [ ] Backup/restore verified on upgraded version
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: attestation
+    attributes:
+      label: "Requester Attestation"
+      description: "Confirm the following"
+      options:
+        - label: "This change has been tested in a non-production environment"
+          required: true
+        - label: "A rollback plan has been documented and verified"
+          required: true
+        - label: "Affected stakeholders have been notified"
+          required: true

@@ -1,4 +1,4 @@
-.PHONY: install fmt lint type test sec all ci
+.PHONY: install fmt lint type test sec all ci mut sbom score deps perf
 
 install:
 	pip install -e ".[dev]"
@@ -23,3 +23,18 @@ sec:
 all: fmt lint type test
 
 ci: lint type test
+
+mut:
+	mutmut run --paths-to-mutate src --simple-output
+
+sbom:
+	syft dir:. -o spdx-json > sbom.spdx.json
+
+score:
+	python tools/ci/generate_scorecard.py
+
+deps:
+	pip list --outdated 2>/dev/null || true
+
+perf:
+	bash benchmarks/run.sh || true

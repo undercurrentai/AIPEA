@@ -1,0 +1,28 @@
+# AI System Register
+# EU AI Act Art. 16 | FedRAMP PL-2 | SOC 2 CC1.x | ISO 42001 Planning | NIST AI RMF GOVERN
+# Purpose: Inventory of AI systems in scope for governance, risk, and compliance.
+# NOTE: Keep this file current; link each entry to its model/data cards and technical file.
+
+systems:
+  - id: example-llm
+    name: Example Assistant
+    version: "1.2.3"
+    owner: team-ml@example.com
+    purpose: "Assist support workflows with summarization and suggestions"
+    markets: ["US","EU"]
+    classification:
+      eu_ai_act: "assess-if-high-risk-per-Annex-III | transparency-only | GPAI"
+      notes: "TODO: complete formal classification analysis"
+    model_type: "GPAI | task-specific | ensemble"
+    data_categories: ["customer support transcripts", "product docs"]
+    articles_applicable: ["9","10","11","12","13","14","15","17"]
+    risk_level: "medium"
+    last_reviewed: "YYYY-MM-DD"
+    status: "in-development | in-production | retired"
+    dependencies:
+      cloud: ["<cloud-provider-accounts>"]
+      vendors: ["<llm-api-provider>"]
+    references:
+      model_card: "ai/model-card.yaml"
+      data_card: "ai/data-card.yaml"
+      technical_file: "ai/technical_file/"

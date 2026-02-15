@@ -1,0 +1,527 @@
+# Compliance Evidence Scheduler
+# Automatically creates GitHub Issues for recurring compliance evidence tasks.
+#
+# IMPORTANT: This is a GitHub Actions workflow template. If your team uses
+# GitLab CI, Bitbucket Pipelines, or another CI system, adapt the cron
+# triggers and issue-creation commands to your platform's equivalent:
+#   - GitLab: use scheduled pipelines + gitlab-cli
+#   - Bitbucket: use scheduled pipelines + Bitbucket API
+#   - Azure DevOps: use scheduled triggers + az boards work-item create
+#
+# Before enabling:
+#   1. Create the required labels in your repository:
+#        Evidence labels: compliance/soc2, compliance/eu-ai-act, compliance/fedramp,
+#          cadence/quarterly, cadence/monthly, cadence/annual,
+#          evidence/access-review, evidence/vendor-risk, evidence/incident-drill,
+#          evidence/postmarket, evidence/bcp-drp, evidence/fsi-test
+#        Alert labels: compliance/alert, priority/high
+#   2. Replace ASSIGNEE placeholders with actual GitHub usernames
+#   3. Ensure the GITHUB_TOKEN has issues:write permission
+
+name: "Compliance Evidence Scheduler"
+
+on:
+  schedule:
+    # Monthly: 1st of every month at 09:00 UTC
+    # Quarterly detection (Jan/Apr/Jul/Oct) is handled in the determine-schedule job.
+    # Using a single cron avoids duplicate workflow runs on quarterly months.
+    - cron: "0 9 1 * *"
+    # Annual: January 15 at 09:00 UTC (separate day avoids overlap)
+    - cron: "0 9 15 1 *"
+  workflow_dispatch:
+    inputs:
+      evidence_type:
+        description: "Which evidence type to create (leave blank for scheduled)"
+        required: false
+        type: choice
+        options:
+          - ""
+          - "access-review"
+          - "vendor-risk"
+          - "incident-drill"
+          - "fsi-emergency-test"
+          - "postmarket-monitoring"
+          - "bcp-drp-test"
+
+permissions:
+  issues: write
+
+env:
+  # Replace with actual assignees in your repo.
+  # Leave as empty string "" to create issues without an assignee.
+  QUARTERLY_ASSIGNEE: "joshuakirby"
+  MONTHLY_ASSIGNEE: "joshuakirby"
+  ANNUAL_ASSIGNEE: "joshuakirby"
+
+jobs:
+  determine-schedule:
+    runs-on: ubuntu-latest
+    outputs:
+      is_quarterly: ${{ steps.check.outputs.is_quarterly }}
+      is_monthly: ${{ steps.check.outputs.is_monthly }}
+      is_annual: ${{ steps.check.outputs.is_annual }}
+      quarter: ${{ steps.check.outputs.quarter }}
+      year: ${{ steps.check.outputs.year }}
+      month: ${{ steps.check.outputs.month }}
+    steps:
+      - name: Determine schedule type
+        id: check
+        run: |
+          MONTH=$(date +%m | sed 's/^0//')
+          YEAR=$(date +%Y)
+          DAY=$(date +%d | sed 's/^0//')
+          echo "year=$YEAR" >> "$GITHUB_OUTPUT"
+          echo "month=$(date +%Y-%m)" >> "$GITHUB_OUTPUT"
+
+          # Determine quarter
+          if [ "$MONTH" -le 3 ]; then echo "quarter=Q1" >> "$GITHUB_OUTPUT"
+          elif [ "$MONTH" -le 6 ]; then echo "quarter=Q2" >> "$GITHUB_OUTPUT"
+          elif [ "$MONTH" -le 9 ]; then echo "quarter=Q3" >> "$GITHUB_OUTPUT"
+          else echo "quarter=Q4" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Determine which schedules fire
+          if [ "$MONTH" -eq 1 ] || [ "$MONTH" -eq 4 ] || [ "$MONTH" -eq 7 ] || [ "$MONTH" -eq 10 ]; then
+            echo "is_quarterly=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_quarterly=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Monthly tasks always fire — quarterly/annual months also get monthly tasks.
+          echo "is_monthly=true" >> "$GITHUB_OUTPUT"
+
+          if [ "$MONTH" -eq 1 ] && [ "$DAY" -eq 15 ]; then
+            echo "is_annual=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_annual=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Manual dispatch override
+          if [ -n "${{ github.event.inputs.evidence_type }}" ]; then
+            echo "is_quarterly=false" >> "$GITHUB_OUTPUT"
+            echo "is_monthly=false" >> "$GITHUB_OUTPUT"
+            echo "is_annual=false" >> "$GITHUB_OUTPUT"
+            case "${{ github.event.inputs.evidence_type }}" in
+              access-review|vendor-risk|incident-drill|fsi-emergency-test) echo "is_quarterly=true" >> "$GITHUB_OUTPUT" ;;
+              postmarket-monitoring) echo "is_monthly=true" >> "$GITHUB_OUTPUT" ;;
+              bcp-drp-test) echo "is_annual=true" >> "$GITHUB_OUTPUT" ;;
+            esac
+          fi
+
+  quarterly-access-review:
+    needs: determine-schedule
+    if: needs.determine-schedule.outputs.is_quarterly == 'true' && (github.event.inputs.evidence_type == '' || github.event.inputs.evidence_type == 'access-review')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for existing access review issue
+        id: check_existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COUNT=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --label "compliance/soc2" \
+            --label "cadence/quarterly" \
+            --label "evidence/access-review" \
+            --state open \
+            --json number \
+            --jq 'length')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Create access review issue
+        if: steps.check_existing.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSIGNEE: ${{ env.QUARTERLY_ASSIGNEE }}
+        run: |
+          ASSIGNEE_FLAG=""
+          if [ -n "$ASSIGNEE" ]; then ASSIGNEE_FLAG="--assignee $ASSIGNEE"; fi
+          created=false
+          for attempt in 1 2 3; do
+            if gh issue create \
+              --repo "${{ github.repository }}" \
+              --title "[Access Review] ${{ needs.determine-schedule.outputs.quarter }} ${{ needs.determine-schedule.outputs.year }}" \
+              --label "compliance/soc2,cadence/quarterly,evidence/access-review" \
+              $ASSIGNEE_FLAG \
+              --body "## Quarterly Access Review — ${{ needs.determine-schedule.outputs.quarter }} ${{ needs.determine-schedule.outputs.year }}
+
+          This is an automatically scheduled compliance evidence task.
+
+          **Procedure**: Follow \`docs/compliance/ACCESS-REVIEW.md\`
+          **Compliance**: SOC 2 CC6.x | FedRAMP AC-2, IA-5
+          **Due**: End of quarter
+
+          ### Checklist
+          - [ ] Review all user accounts across production systems
+          - [ ] Identify and remove orphaned/inactive accounts
+          - [ ] Verify MFA enforcement on privileged accounts
+          - [ ] Document findings and remediation actions
+          - [ ] Attach evidence (screenshots, export CSVs) to this issue"; then
+              created=true
+              break
+            fi
+            echo "Attempt $attempt failed, retrying in 10s..."
+            sleep 10
+          done
+          if [ "$created" = false ]; then
+            echo "::error::Failed to create access review issue after 3 attempts"
+            exit 1
+          fi
+
+  quarterly-vendor-risk:
+    needs: determine-schedule
+    if: needs.determine-schedule.outputs.is_quarterly == 'true' && (github.event.inputs.evidence_type == '' || github.event.inputs.evidence_type == 'vendor-risk')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for existing vendor risk issue
+        id: check_existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COUNT=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --label "compliance/soc2" \
+            --label "cadence/quarterly" \
+            --label "evidence/vendor-risk" \
+            --state open \
+            --json number \
+            --jq 'length')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Create vendor risk issue
+        if: steps.check_existing.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSIGNEE: ${{ env.QUARTERLY_ASSIGNEE }}
+        run: |
+          ASSIGNEE_FLAG=""
+          if [ -n "$ASSIGNEE" ]; then ASSIGNEE_FLAG="--assignee $ASSIGNEE"; fi
+          created=false
+          for attempt in 1 2 3; do
+            if gh issue create \
+              --repo "${{ github.repository }}" \
+              --title "[Vendor Risk] ${{ needs.determine-schedule.outputs.quarter }} ${{ needs.determine-schedule.outputs.year }}" \
+              --label "compliance/soc2,cadence/quarterly,evidence/vendor-risk" \
+              $ASSIGNEE_FLAG \
+              --body "## Quarterly Vendor Risk Assessment — ${{ needs.determine-schedule.outputs.quarter }} ${{ needs.determine-schedule.outputs.year }}
+
+          This is an automatically scheduled compliance evidence task.
+
+          **Procedure**: Follow \`docs/compliance/VENDOR-RISK.md\`
+          **Compliance**: SOC 2 CC9.x | FedRAMP SA-12
+          **Due**: End of quarter
+
+          ### Checklist
+          - [ ] Review all vendors at critical/high risk tier
+          - [ ] Verify current SOC 2 / ISO 27001 reports on file
+          - [ ] Check for subprocessor list changes
+          - [ ] Document findings and remediation actions
+          - [ ] Attach evidence to this issue"; then
+              created=true
+              break
+            fi
+            echo "Attempt $attempt failed, retrying in 10s..."
+            sleep 10
+          done
+          if [ "$created" = false ]; then
+            echo "::error::Failed to create vendor risk issue after 3 attempts"
+            exit 1
+          fi
+
+  quarterly-incident-drill:
+    needs: determine-schedule
+    if: needs.determine-schedule.outputs.is_quarterly == 'true' && (github.event.inputs.evidence_type == '' || github.event.inputs.evidence_type == 'incident-drill')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for existing incident drill issue
+        id: check_existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COUNT=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --label "compliance/soc2" \
+            --label "cadence/quarterly" \
+            --label "evidence/incident-drill" \
+            --state open \
+            --json number \
+            --jq 'length')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Create incident drill issue
+        if: steps.check_existing.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSIGNEE: ${{ env.QUARTERLY_ASSIGNEE }}
+        run: |
+          ASSIGNEE_FLAG=""
+          if [ -n "$ASSIGNEE" ]; then ASSIGNEE_FLAG="--assignee $ASSIGNEE"; fi
+          created=false
+          for attempt in 1 2 3; do
+            if gh issue create \
+              --repo "${{ github.repository }}" \
+              --title "[IR Drill] ${{ needs.determine-schedule.outputs.quarter }} ${{ needs.determine-schedule.outputs.year }}" \
+              --label "compliance/soc2,cadence/quarterly,evidence/incident-drill" \
+              $ASSIGNEE_FLAG \
+              --body "## Quarterly Incident Response Drill — ${{ needs.determine-schedule.outputs.quarter }} ${{ needs.determine-schedule.outputs.year }}
+
+          This is an automatically scheduled compliance evidence task.
+
+          **Procedure**: Follow \`docs/compliance/IRP.md\`
+          **Compliance**: SOC 2 CC7.x | FedRAMP IR-4, IR-5
+          **Due**: End of quarter
+
+          ### Checklist
+          - [ ] Select incident scenario for tabletop exercise
+          - [ ] Schedule drill with all required participants
+          - [ ] Conduct drill and document timeline
+          - [ ] Record lessons learned and action items
+          - [ ] Update IRP if procedural changes identified
+          - [ ] Attach drill report to this issue"; then
+              created=true
+              break
+            fi
+            echo "Attempt $attempt failed, retrying in 10s..."
+            sleep 10
+          done
+          if [ "$created" = false ]; then
+            echo "::error::Failed to create incident drill issue after 3 attempts"
+            exit 1
+          fi
+
+  quarterly-fsi-emergency-test:
+    needs: determine-schedule
+    if: needs.determine-schedule.outputs.is_quarterly == 'true' && (github.event.inputs.evidence_type == '' || github.event.inputs.evidence_type == 'fsi-emergency-test')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for existing FSI test issue
+        id: check_existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COUNT=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --label "compliance/fedramp" \
+            --label "cadence/quarterly" \
+            --label "evidence/fsi-test" \
+            --state open \
+            --json number \
+            --jq 'length')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Create FSI Emergency Test issue
+        if: steps.check_existing.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSIGNEE: ${{ env.QUARTERLY_ASSIGNEE }}
+        run: |
+          ASSIGNEE_FLAG=""
+          if [ -n "$ASSIGNEE" ]; then ASSIGNEE_FLAG="--assignee $ASSIGNEE"; fi
+          created=false
+          for attempt in 1 2 3; do
+            if gh issue create \
+              --repo "${{ github.repository }}" \
+              --title "[FSI Emergency Test] ${{ needs.determine-schedule.outputs.quarter }} ${{ needs.determine-schedule.outputs.year }}" \
+              --label "compliance/fedramp,cadence/quarterly,evidence/fsi-test" \
+              $ASSIGNEE_FLAG \
+              --body "## Quarterly FSI Emergency Test Drill — ${{ needs.determine-schedule.outputs.quarter }} ${{ needs.determine-schedule.outputs.year }}
+
+          This is an automatically scheduled compliance evidence task.
+
+          **Procedure**: Follow \`docs/compliance/IRP.md\` Section 8 (FSI Emergency Test drill)
+          **Compliance**: FedRAMP IR-4/6, SI-4 | FSI mandatory since Jan 5, 2026
+          **Due**: End of quarter
+
+          ### Checklist
+          - [ ] Verify FSI inbox is operational and monitored
+          - [ ] Confirm receipt of FedRAMP Emergency Test message (or simulate if no PMO test this quarter)
+          - [ ] Respond within required SLA (12hr high / 2BD moderate / 3BD low)
+          - [ ] Document response timeline and personnel involved
+          - [ ] Verify escalation path from FSI inbox to Incident Commander
+          - [ ] Attach evidence (email logs, response timestamps) to this issue"; then
+              created=true
+              break
+            fi
+            echo "Attempt $attempt failed, retrying in 10s..."
+            sleep 10
+          done
+          if [ "$created" = false ]; then
+            echo "::error::Failed to create FSI Emergency Test issue after 3 attempts"
+            exit 1
+          fi
+
+  monthly-postmarket-monitoring:
+    needs: determine-schedule
+    if: needs.determine-schedule.outputs.is_monthly == 'true' && (github.event.inputs.evidence_type == '' || github.event.inputs.evidence_type == 'postmarket-monitoring')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for existing post-market monitoring issue
+        id: check_existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COUNT=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --label "compliance/eu-ai-act" \
+            --label "cadence/monthly" \
+            --label "evidence/postmarket" \
+            --state open \
+            --json number \
+            --jq 'length')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Create post-market monitoring issue
+        if: steps.check_existing.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSIGNEE: ${{ env.MONTHLY_ASSIGNEE }}
+        run: |
+          ASSIGNEE_FLAG=""
+          if [ -n "$ASSIGNEE" ]; then ASSIGNEE_FLAG="--assignee $ASSIGNEE"; fi
+          created=false
+          for attempt in 1 2 3; do
+            if gh issue create \
+              --repo "${{ github.repository }}" \
+              --title "[Post-Market Monitoring] ${{ needs.determine-schedule.outputs.month }}" \
+              --label "compliance/eu-ai-act,cadence/monthly,evidence/postmarket" \
+              $ASSIGNEE_FLAG \
+              --body "## Monthly Post-Market Monitoring Review — ${{ needs.determine-schedule.outputs.month }}
+
+          This is an automatically scheduled compliance evidence task.
+
+          **Procedure**: Follow \`ai/postmarket-monitoring.md\`
+          **Compliance**: EU AI Act Art. 72 | ISO 42001 Improvement | NIST AI RMF MANAGE
+          **Due**: End of month
+
+          ### Checklist
+          - [ ] Review AI system performance metrics against baselines
+          - [ ] Check for model drift or degradation
+          - [ ] Review safety incident reports (if any)
+          - [ ] Review user feedback and complaints related to AI
+          - [ ] Update risk register if new risks identified
+          - [ ] Attach monitoring dashboard exports to this issue"; then
+              created=true
+              break
+            fi
+            echo "Attempt $attempt failed, retrying in 10s..."
+            sleep 10
+          done
+          if [ "$created" = false ]; then
+            echo "::error::Failed to create post-market monitoring issue after 3 attempts"
+            exit 1
+          fi
+
+  annual-bcp-drp-test:
+    needs: determine-schedule
+    if: needs.determine-schedule.outputs.is_annual == 'true' && (github.event.inputs.evidence_type == '' || github.event.inputs.evidence_type == 'bcp-drp-test')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for existing BCP/DRP test issue
+        id: check_existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COUNT=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --label "compliance/soc2" \
+            --label "cadence/annual" \
+            --label "evidence/bcp-drp" \
+            --state open \
+            --json number \
+            --jq 'length')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Create BCP/DRP test issue
+        if: steps.check_existing.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSIGNEE: ${{ env.ANNUAL_ASSIGNEE }}
+        run: |
+          ASSIGNEE_FLAG=""
+          if [ -n "$ASSIGNEE" ]; then ASSIGNEE_FLAG="--assignee $ASSIGNEE"; fi
+          created=false
+          for attempt in 1 2 3; do
+            if gh issue create \
+              --repo "${{ github.repository }}" \
+              --title "[BCP/DRP Test] ${{ needs.determine-schedule.outputs.year }}" \
+              --label "compliance/soc2,cadence/annual,evidence/bcp-drp" \
+              $ASSIGNEE_FLAG \
+              --body "## Annual BCP/DRP Test — ${{ needs.determine-schedule.outputs.year }}
+
+          This is an automatically scheduled compliance evidence task.
+
+          **Procedure**: Follow \`docs/compliance/BCP-DRP.md\`
+          **Compliance**: SOC 2 A1.x | FedRAMP CP-9, CP-10
+          **Due**: End of Q1
+
+          ### Checklist
+          - [ ] Define test scope (which systems, which recovery procedures)
+          - [ ] Schedule test window with stakeholders
+          - [ ] Execute failover/restoration test
+          - [ ] Measure actual RTO/RPO against targets
+          - [ ] Document findings and improvement actions
+          - [ ] Update BCP/DRP plan with lessons learned
+          - [ ] Attach test report to this issue"; then
+              created=true
+              break
+            fi
+            echo "Attempt $attempt failed, retrying in 10s..."
+            sleep 10
+          done
+          if [ "$created" = false ]; then
+            echo "::error::Failed to create BCP/DRP test issue after 3 attempts"
+            exit 1
+          fi
+
+  notify-on-failure:
+    needs:
+      - quarterly-access-review
+      - quarterly-vendor-risk
+      - quarterly-incident-drill
+      - quarterly-fsi-emergency-test
+      - monthly-postmarket-monitoring
+      - annual-bcp-drp-test
+    if: always() && contains(needs.*.result, 'failure')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create failure notification issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FAILED_JOBS=""
+          if [ "${{ needs.quarterly-access-review.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-access-review\n"; fi
+          if [ "${{ needs.quarterly-vendor-risk.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-vendor-risk\n"; fi
+          if [ "${{ needs.quarterly-incident-drill.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-incident-drill\n"; fi
+          if [ "${{ needs.quarterly-fsi-emergency-test.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-fsi-emergency-test\n"; fi
+          if [ "${{ needs.monthly-postmarket-monitoring.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- monthly-postmarket-monitoring\n"; fi
+          if [ "${{ needs.annual-bcp-drp-test.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- annual-bcp-drp-test\n"; fi
+          created=false
+          for attempt in 1 2 3; do
+            if gh issue create \
+              --repo "${{ github.repository }}" \
+              --title "[Compliance Alert] Evidence scheduler failure — $(date +%Y-%m-%d)" \
+              --label "compliance/alert,priority/high" \
+              --body "## Compliance Evidence Scheduler Failure
+
+          One or more compliance evidence jobs failed on $(date +%Y-%m-%d).
+          **Run**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          ### Failed Jobs
+          $(printf '%b' "$FAILED_JOBS")
+
+          ### Action Required
+          - [ ] Investigate the failed job(s) in the workflow run linked above
+          - [ ] Manually create any missing evidence issues
+          - [ ] Resolve the root cause (permissions, rate limits, network)
+          - [ ] Close this issue once all evidence tasks are accounted for"; then
+              created=true
+              break
+            fi
+            echo "Attempt $attempt failed, retrying in 10s..."
+            sleep 10
+          done
+          if [ "$created" = false ]; then
+            echo "::error::Failed to create failure notification issue after 3 attempts"
+            echo "::error::The following evidence jobs failed: $(printf '%b' "$FAILED_JOBS")"
+            exit 1
+          fi

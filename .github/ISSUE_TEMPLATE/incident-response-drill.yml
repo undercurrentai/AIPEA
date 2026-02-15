@@ -1,0 +1,118 @@
+name: "Incident Response Drill"
+description: "SOC 2 CC7.x / FedRAMP IR-4,IR-5 — Document tabletop exercise or IR drill results"
+title: "[IR Drill] Q_ YYYY"
+labels:
+  - "compliance/soc2"
+  - "cadence/quarterly"
+  - "evidence/incident-drill"
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Incident Response Drill / Tabletop Exercise
+        Complete this form to document the periodic incident response drill.
+        Reference: `docs/compliance/IRP.md` for the full Incident Response Plan.
+
+        **Compliance mapping**: SOC 2 CC7.2/CC7.3/CC7.4 | FedRAMP IR-4, IR-5 | ISO 42001 Support | NIST AI RMF MANAGE
+
+  - type: dropdown
+    id: quarter
+    attributes:
+      label: "Review Period"
+      description: "Which quarter does this drill cover?"
+      options:
+        - "Q1 (Jan–Mar)"
+        - "Q2 (Apr–Jun)"
+        - "Q3 (Jul–Sep)"
+        - "Q4 (Oct–Dec)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: drill-type
+    attributes:
+      label: "Drill Type"
+      description: "What type of exercise was conducted?"
+      options:
+        - "Tabletop exercise (discussion-based)"
+        - "Functional exercise (hands-on simulation)"
+        - "Full-scale exercise (live simulation)"
+    validations:
+      required: true
+
+  - type: input
+    id: facilitator
+    attributes:
+      label: "Facilitator"
+      description: "Person who facilitated the drill"
+      placeholder: "Jane Smith"
+    validations:
+      required: true
+
+  - type: textarea
+    id: scenario
+    attributes:
+      label: "Scenario Description"
+      description: "Describe the incident scenario used for the drill"
+      placeholder: |
+        Scenario: Unauthorized access to production database detected via anomalous
+        query patterns. Attacker appears to have exploited a SQL injection vulnerability
+        in the /api/search endpoint.
+    validations:
+      required: true
+
+  - type: textarea
+    id: participants
+    attributes:
+      label: "Participants"
+      description: "List all drill participants and their roles"
+      placeholder: |
+        - Jane Smith (Incident Commander)
+        - John Doe (Engineering Lead)
+        - Alice Johnson (Security)
+        - Bob Williams (Communications)
+    validations:
+      required: true
+
+  - type: textarea
+    id: timeline
+    attributes:
+      label: "Drill Timeline & Actions"
+      description: "Document the sequence of actions taken during the drill"
+      placeholder: |
+        1. T+0: Alert received, triage initiated
+        2. T+5: Incident Commander assigned, severity classified
+        3. T+15: Containment actions identified and (simulated) executed
+        4. T+30: Communication plan activated
+        5. T+45: Root cause analysis discussion
+        6. T+60: Recovery plan developed
+    validations:
+      required: true
+
+  - type: textarea
+    id: lessons-learned
+    attributes:
+      label: "Lessons Learned & Improvements"
+      description: "Document what went well, what needs improvement, and action items"
+      placeholder: |
+        **Went well**: Rapid triage, clear communication chain
+        **Needs improvement**: Runbook for database isolation was outdated
+        **Action items**:
+        - [ ] Update database isolation runbook by YYYY-MM-DD
+        - [ ] Add automated alerting for anomalous query patterns
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: attestation
+    attributes:
+      label: "Facilitator Attestation"
+      description: "Confirm the following"
+      options:
+        - label: "The drill was conducted in accordance with docs/compliance/IRP.md"
+          required: true
+        - label: "All lessons learned have been documented with owners and due dates"
+          required: true
+        - label: "The IRP will be updated to reflect any procedural changes identified"
+          required: true

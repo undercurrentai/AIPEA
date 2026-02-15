@@ -1,0 +1,44 @@
+# AI Risk Register
+# EU AI Act Art. 9 | FedRAMP RA-3/5 | SOC 2 CC3.x | ISO 42001 Planning | NIST AI RMF MAP/MEASURE
+# Scale examples: likelihood 1=rare..5=almost certain; impact 1=negligible..5=severe
+# Use this as the single source of truth; reference risks in PRs that introduce AI changes.
+
+risks:
+  - id: R-AI-001
+    title: "Jailbreak leading to PII exfiltration"
+    description: "Adversarial prompts may cause model to output PII or secrets."
+    source: "Threat modeling; prior incidents in industry"
+    likelihood: 3
+    impact: 4
+    inherent_score: 12
+    controls:
+      - "Adversarial prompt suite in CI"
+      - "Default-deny egress & PII filters"
+      - "Human oversight on sensitive intents"
+    residual_score: 6
+    owner: security@example.com
+    treatment: "Mitigate"
+    status: "Open"
+    review_date: "YYYY-MM-DD"
+    references:
+      - "ai/oversight-plan.md"
+      - "ai/technical_file/testing/tev_report_template.md"
+
+  - id: R-AI-002
+    title: "Training data bias leading to unfair outputs"
+    description: "Imbalanced data may degrade performance for certain groups."
+    source: "Data profiling"
+    likelihood: 3
+    impact: 3
+    inherent_score: 9
+    controls:
+      - "Data-card balance checks"
+      - "Slice-based evaluations & fairness probes"
+    residual_score: 5
+    owner: data-steward@example.com
+    treatment: "Mitigate"
+    status: "Open"
+    review_date: "YYYY-MM-DD"
+    references:
+      - "ai/data-card.yaml"
+      - "ai/technical_file/testing/tev_report_template.md"

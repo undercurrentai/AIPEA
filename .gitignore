@@ -32,3 +32,10 @@ Thumbs.db
 # Environment
 .env
 .env.*
+
+# Scaffold artifacts
+sbom.spdx.json
+sbom.cdx.json
+.mutmut-cache/
+coverage.json
+perf_results.json

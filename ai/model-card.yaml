@@ -1,0 +1,49 @@
+# Model Card (Template)
+# EU AI Act Art. 11 | ISO 42001 Operation | NIST AI RMF MAP
+
+model:
+  name: example-llm
+  version: "1.2.3"
+  provider_or_arch: "e.g., transformer-based LLM; foundation model reference if applicable"
+  license: "internal | open-source license | commercial"
+  training_window: "YYYY-MM..YYYY-MM | unknown (for proprietary GPAI)"
+  provenance_summary: "Describe sources & licenses at a high level"
+  known_failure_modes:
+    - "Hallucination under sparse context"
+    - "Non-robust to obfuscated jailbreaks"
+
+intended_use:
+  description: "Support assistant for summarization and suggestion"
+  out_of_scope:
+    - "Legal advice"
+    - "Medical diagnosis"
+
+evaluation:
+  topline_metrics:
+    accuracy_or_quality: "0.86 (example)"
+    latency_p95_ms: 350
+  slice_metrics:
+    - slice: "en-US support tickets"
+      quality: 0.88
+    - slice: "accented English"
+      quality: 0.81
+  fairness_probes:
+    methodology: "e.g., demographic parity where lawfully processed"
+    results: "TODO"
+
+robustness:
+  tests:
+    - "noise-injection"
+    - "prompt-jailbreak-suite"
+  red_team_summary: "TODO"
+
+security_privacy:
+  pii_handling: "Describe PII controls & masking"
+  egress_control: "Allowlist; deny by default"
+  logging: "See schemas/log_event.schema.json"
+
+operational:
+  intended_deployment: "Kubernetes; region(s)"
+  rollback_strategy: "Blue/green; canary"
+  monitoring: "Drift metrics; safety violations; SLOs"
+  oversight_mode: "human-on-the-loop"

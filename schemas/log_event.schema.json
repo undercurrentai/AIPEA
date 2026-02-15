@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:undercurrent:schemas:log_event:v1",
+  "type": "object",
+  "required": [
+    "ts_utc",
+    "request_id",
+    "subject",
+    "action",
+    "object",
+    "outcome"
+  ],
+  "properties": {
+    "ts_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Event timestamp in UTC (ISO 8601 format)"
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Unique identifier for the originating request (trace correlation)"
+    },
+    "seed_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "PRNG seed identifier for deterministic reproducibility (S0 Gate 1)"
+    },
+    "user_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Authenticated user or service account identifier"
+    },
+    "subject": {
+      "type": "string",
+      "description": "The actor performing the action (user, service, or agent name)"
+    },
+    "action": {
+      "type": "string",
+      "description": "The operation being performed (e.g., 'login', 'query', 'deploy')"
+    },
+    "object": {
+      "type": "string",
+      "description": "The resource or target acted upon (e.g., 'database/orders', '/api/v1/predict')"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "allow",
+        "deny",
+        "error"
+      ],
+      "description": "Result of the action: allow (permitted), deny (rejected by policy), or error (system failure)"
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Human-readable explanation for deny/error outcomes"
+    },
+    "src_ip": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Source IP address of the request originator"
+    },
+    "agent_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "AI agent or model identifier when the action involves an AI system"
+    },
+    "dataset_hash": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Cryptographic hash of the dataset used in this operation (S0 Gate 3 provenance)"
+    }
+  },
+  "additionalProperties": false
+}
