@@ -16,22 +16,21 @@ These tests are marked as 'integration' and 'slow' since they require real model
 
 from __future__ import annotations
 
-import asyncio
 import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
 
+from aipea._types import (
+    ProcessingTier,
+    QueryType,
+)
 from aipea.engine import (
     EnhancedQuery,
     OfflineModel,
     OfflineTierProcessor,
     OllamaOfflineClient,
     get_ollama_client,
-)
-from aipea._types import (
-    ProcessingTier,
-    QueryType,
 )
 
 if TYPE_CHECKING:

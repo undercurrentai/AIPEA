@@ -20,7 +20,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -221,7 +221,7 @@ class SecurityScanner:
     """
 
     # PII patterns - always checked
-    PII_PATTERNS: dict[str, str] = {
+    PII_PATTERNS: ClassVar[dict[str, str]] = {
         "ssn": r"\b\d{3}-\d{2}-\d{4}\b",
         "credit_card": r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b",
         "api_key": r"\b(sk-|api[_-]?key|bearer\s+)[a-zA-Z0-9]{20,}\b",
@@ -229,14 +229,14 @@ class SecurityScanner:
     }
 
     # HIPAA-specific PHI patterns - only checked in HIPAA mode
-    PHI_PATTERNS: dict[str, str] = {
+    PHI_PATTERNS: ClassVar[dict[str, str]] = {
         "mrn": r"\b(MRN|medical record)\s*[:=]?\s*\d+\b",
         "dob": r"\b(DOB|date of birth)\s*[:=]?\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",
         "patient_name": r"\bpatient\s*[:=]?\s*[A-Z][a-z]+\s+[A-Z][a-z]+\b",
     }
 
     # Classified content markers - only checked in TACTICAL mode
-    CLASSIFIED_MARKERS: list[str] = [
+    CLASSIFIED_MARKERS: ClassVar[list[str]] = [
         "TOP SECRET",
         "SECRET",
         "CONFIDENTIAL",
@@ -245,7 +245,7 @@ class SecurityScanner:
     ]
 
     # Injection patterns - always checked and always blocked
-    INJECTION_PATTERNS: list[str] = [
+    INJECTION_PATTERNS: ClassVar[list[str]] = [
         r"ignore\s+(previous|all)\s+instructions",
         r"</?(system|user|assistant)>",
         r"\[/?(system|user|assistant|human)\]",  # Bracket-style role tags
@@ -270,10 +270,10 @@ class SecurityScanner:
         logger.debug("SecurityScanner initialized with %d PII patterns", len(self.PII_PATTERNS))
 
     # Maximum pattern length to prevent ReDoS attacks
-    _MAX_PATTERN_LENGTH = 200
+    _MAX_PATTERN_LENGTH: ClassVar[int] = 200
 
     # Dangerous patterns that can cause catastrophic backtracking
-    _DANGEROUS_PATTERNS = [
+    _DANGEROUS_PATTERNS: ClassVar[list[str]] = [
         r"\(\.\*\)\+",  # Nested .* with quantifier
         r"\(\.\+\)\+",  # Nested .+ with quantifier
         r"\(\[.*\]\)\+.*\1",  # Backreference with quantifier
@@ -622,16 +622,12 @@ def quick_scan(query: str, mode: ComplianceMode = ComplianceMode.GENERAL) -> Sca
 
 
 __all__ = [
-    # Enums
-    "SecurityLevel",
-    "ComplianceMode",
-    # Data models
-    "SecurityContext",
-    "ScanResult",
-    # Classes
-    "SecurityScanner",
     "ComplianceHandler",
-    # Convenience functions
+    "ComplianceMode",
+    "ScanResult",
+    "SecurityContext",
+    "SecurityLevel",
+    "SecurityScanner",
     "create_security_context_for_mode",
     "quick_scan",
 ]

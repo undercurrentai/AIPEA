@@ -26,7 +26,7 @@ from __future__ import annotations
 import logging
 import re
 import threading
-from typing import Any
+from typing import ClassVar
 
 from aipea._types import ProcessingTier, QueryType, SearchStrategy
 from aipea.models import QueryAnalysis
@@ -63,7 +63,7 @@ class QueryRouter:
     """
 
     # Temporal detection patterns
-    TEMPORAL_PATTERNS: list[str] = [
+    TEMPORAL_PATTERNS: ClassVar[list[str]] = [
         r"\b(latest|recent|current|today|now|this\s+(?:week|month|year))\b",
         r"\b(breaking|news|update|happening)\b",
         r"\b20[2-9][0-9]\b",  # Years 2020-2099
@@ -72,7 +72,7 @@ class QueryRouter:
     ]
 
     # Domain indicator patterns
-    DOMAIN_PATTERNS: dict[str, list[str]] = {
+    DOMAIN_PATTERNS: ClassVar[dict[str, list[str]]] = {
         "medical": [
             r"\b(patient|diagnosis|treatment|symptom|disease)\b",
             r"\b(HIPAA|PHI|medical|clinical|healthcare)\b",
@@ -101,7 +101,7 @@ class QueryRouter:
     }
 
     # Complexity indicators
-    COMPLEXITY_PATTERNS: dict[str, float] = {
+    COMPLEXITY_PATTERNS: ClassVar[dict[str, float]] = {
         r"\bif\b.*\bthen\b": 0.1,  # Conditional reasoning
         r"\bwhen\b.*\bwhile\b": 0.1,  # Nested conditions
         r"\band\b.*\bor\b": 0.05,  # Boolean logic
@@ -167,7 +167,7 @@ class QueryRouter:
         complexity = self._calculate_complexity(query)
 
         # Detect temporal needs
-        needs_temporal, temporal_markers = self._detect_temporal_needs(query)
+        needs_temporal, _temporal_markers = self._detect_temporal_needs(query)
 
         # Identify domain
         domains = self._identify_domain(query)
@@ -385,10 +385,7 @@ class QueryRouter:
             return True
 
         # High ambiguity
-        if analysis.ambiguity_score > 0.7:
-            return True
-
-        return False
+        return analysis.ambiguity_score > 0.7
 
 
 # =============================================================================
@@ -412,7 +409,7 @@ class QueryAnalyzer:
     """
 
     # Query type patterns (more comprehensive than QueryRouter)
-    QUERY_TYPE_PATTERNS: dict[QueryType, list[str]] = {
+    QUERY_TYPE_PATTERNS: ClassVar[dict[QueryType, list[str]]] = {
         QueryType.TECHNICAL: [
             r"\b(code|program|api|function|class|method|debug|error|exception)\b",
             r"\b(python|javascript|java|c\+\+|rust|golang|typescript)\b",
@@ -691,10 +688,7 @@ class QueryAnalyzer:
 
         # Domain-specific queries may need specialized search
         specialized_domains = {"financial", "legal", "medical"}
-        if any(d in specialized_domains for d in analysis.domain_indicators):
-            return True
-
-        return False
+        return any(d in specialized_domains for d in analysis.domain_indicators)
 
     def _determine_search_strategy(self, analysis: QueryAnalysis) -> SearchStrategy:
         """Determine the appropriate search strategy.
@@ -788,15 +782,14 @@ class QueryAnalyzer:
             )
 
         # Technical query suggestions
-        if analysis.query_type == QueryType.TECHNICAL:
-            if not any(
-                entity.lower() in ["python", "javascript", "typescript", "java"]
-                for entity in analysis.detected_entities
-            ):
-                suggestions.append(
-                    "Specifying the programming language or technology would help provide "
-                    "more relevant code examples."
-                )
+        if analysis.query_type == QueryType.TECHNICAL and not any(
+            entity.lower() in ["python", "javascript", "typescript", "java"]
+            for entity in analysis.detected_entities
+        ):
+            suggestions.append(
+                "Specifying the programming language or technology would help provide "
+                "more relevant code examples."
+            )
 
         return suggestions
 
@@ -872,11 +865,9 @@ def get_query_analyzer() -> QueryAnalyzer:
 
 
 __all__ = [
-    # Classes
-    "QueryRouter",
     "QueryAnalyzer",
-    # Convenience functions
+    "QueryRouter",
     "analyze_query",
-    "route_query",
     "get_query_analyzer",
+    "route_query",
 ]

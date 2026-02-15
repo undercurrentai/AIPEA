@@ -404,7 +404,6 @@ class TestOfflineKnowledgeBase:
         Bug fix: access_count should only update for successfully retrieved nodes.
         """
         import sqlite3
-        import zlib
 
         # Create knowledge base and add a valid node
         kb = OfflineKnowledgeBase(temp_db, StorageTier.COMPACT)

@@ -22,6 +22,7 @@ Design principles:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import sqlite3
@@ -179,10 +180,8 @@ class OfflineKnowledgeBase:
         especially in test environments to avoid ResourceWarning.
         """
         if self._conn is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._conn.close()
-            except Exception:
-                pass  # Already closed or invalid
             self._conn = None
             logger.debug("Database connection closed")
 
@@ -637,78 +636,6 @@ class OfflineKnowledgeBase:
 
         return deleted
 
-
-# Example usage and testing
-if __name__ == "__main__":
-    import asyncio
-
-    async def demo() -> None:
-        """Demonstrate offline knowledge base capabilities."""
-        import os
-        import tempfile
-
-        # Create temporary database for demo
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = os.path.join(tmpdir, "demo_knowledge.db")
-            kb = OfflineKnowledgeBase(db_path, StorageTier.COMPACT)
-
-            # Add military operational knowledge
-            await kb.add_knowledge(
-                "Field communication protocols: Use frequency hopping spread spectrum (FHSS) "
-                "for jam-resistant communications. Primary: 30-88 MHz VHF, "
-                "Secondary: 225-400 MHz UHF. Emergency: 121.5 MHz guard frequency.",
-                KnowledgeDomain.MILITARY,
-                classification="SECRET",
-                relevance_score=0.9,
-            )
-
-            await kb.add_knowledge(
-                "Tactical medical priorities: 1) Massive hemorrhage control (tourniquet within "
-                "60 seconds), 2) Airway management, 3) Respiratory support, 4) Circulation, "
-                "5) Hypothermia prevention. Golden hour critical for CASEVAC.",
-                KnowledgeDomain.MEDICAL,
-                classification="UNCLASSIFIED",
-                relevance_score=0.95,
-            )
-
-            await kb.add_knowledge(
-                "Offline navigation: Primary: GPS with cached maps. Secondary: Compass bearing "
-                "+ pace count. Tertiary: Celestial navigation. Terrain association as "
-                "continuous backup. Grid reference format: MGRS 10-digit minimum.",
-                KnowledgeDomain.MILITARY,
-                classification="UNCLASSIFIED",
-                relevance_score=0.85,
-            )
-
-            # Search demonstration
-            print("Scenario: Zero connectivity, field medical emergency")
-            print("-" * 60)
-
-            query = "soldier injured need immediate treatment protocol"
-            results = await kb.search(query, domain=KnowledgeDomain.MEDICAL, limit=3)
-
-            print(f"Query: {query}")
-            print(f"Retrieved {len(results)} knowledge nodes:")
-            for i, node in enumerate(results, 1):
-                print(
-                    f"  {i}. [{node.security_classification}] (Score: {node.relevance_score:.2f})"
-                )
-                print(f"     {node.content[:80]}...")
-
-            # Storage statistics
-            print("\nStorage Statistics:")
-            stats = await kb.get_storage_stats()
-            print(f"  Nodes: {stats['node_count']}")
-            print(f"  DB Size: {stats['db_size_bytes']:,} bytes")
-            print(f"  Utilization: {stats['utilization_percent']:.4f}%")
-
-            # Domain summary
-            print("\nDomain Summary:")
-            domains = await kb.get_domains_summary()
-            for domain, count in domains.items():
-                print(f"  {domain}: {count} nodes")
-
-    asyncio.run(demo())
 
 __all__ = [
     "KnowledgeDomain",

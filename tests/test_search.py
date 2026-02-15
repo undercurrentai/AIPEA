@@ -794,22 +794,24 @@ class TestMultiSourceEdgeCases:
             confidence=0.8,
         )
 
-        with patch.object(
-            orchestrator.exa_provider,
-            "search",
-            new_callable=AsyncMock,
-            return_value=SearchContext(query="test", results=[], source="exa"),
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                orchestrator.exa_provider,
+                "search",
+                new_callable=AsyncMock,
+                return_value=SearchContext(query="test", results=[], source="exa"),
+            ),
+            patch.object(
                 orchestrator.firecrawl_provider,
                 "search",
                 new_callable=AsyncMock,
                 return_value=firecrawl_context,
-            ):
-                result = await orchestrator.search("test", strategy="multi_source")
-                # Should return firecrawl context when exa is empty
-                assert result.source == "firecrawl"
-                assert len(result.results) == 1
+            ),
+        ):
+            result = await orchestrator.search("test", strategy="multi_source")
+            # Should return firecrawl context when exa is empty
+            assert result.source == "firecrawl"
+            assert len(result.results) == 1
 
     @pytest.mark.asyncio
     async def test_multi_source_firecrawl_empty_exa_has_results(self) -> None:
@@ -824,22 +826,24 @@ class TestMultiSourceEdgeCases:
             confidence=0.9,
         )
 
-        with patch.object(
-            orchestrator.exa_provider,
-            "search",
-            new_callable=AsyncMock,
-            return_value=exa_context,
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                orchestrator.exa_provider,
+                "search",
+                new_callable=AsyncMock,
+                return_value=exa_context,
+            ),
+            patch.object(
                 orchestrator.firecrawl_provider,
                 "search",
                 new_callable=AsyncMock,
                 return_value=SearchContext(query="test", results=[], source="firecrawl"),
-            ):
-                result = await orchestrator.search("test", strategy="multi_source")
-                # Should return exa context when firecrawl is empty
-                assert result.source == "exa"
-                assert len(result.results) == 1
+            ),
+        ):
+            result = await orchestrator.search("test", strategy="multi_source")
+            # Should return exa context when firecrawl is empty
+            assert result.source == "exa"
+            assert len(result.results) == 1
 
     @pytest.mark.asyncio
     async def test_multi_source_both_have_results_merge(self) -> None:
@@ -859,23 +863,25 @@ class TestMultiSourceEdgeCases:
             confidence=0.7,
         )
 
-        with patch.object(
-            orchestrator.exa_provider,
-            "search",
-            new_callable=AsyncMock,
-            return_value=exa_context,
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                orchestrator.exa_provider,
+                "search",
+                new_callable=AsyncMock,
+                return_value=exa_context,
+            ),
+            patch.object(
                 orchestrator.firecrawl_provider,
                 "search",
                 new_callable=AsyncMock,
                 return_value=firecrawl_context,
-            ):
-                result = await orchestrator.search("test", strategy="multi_source")
-                # Should merge both contexts
-                assert result.source == "exa+firecrawl"
-                assert len(result.results) == 2
-                assert result.confidence == 0.8  # Average of 0.9 and 0.7
+            ),
+        ):
+            result = await orchestrator.search("test", strategy="multi_source")
+            # Should merge both contexts
+            assert result.source == "exa+firecrawl"
+            assert len(result.results) == 2
+            assert result.confidence == 0.8  # Average of 0.9 and 0.7
 
 
 if __name__ == "__main__":

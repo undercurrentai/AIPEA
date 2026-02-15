@@ -33,7 +33,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 from aipea._types import ProcessingTier, QueryType
 from aipea.search import (
@@ -330,11 +330,11 @@ class OllamaOfflineClient:
             return response
 
         except subprocess.TimeoutExpired:
-            raise RuntimeError(f"Ollama generation timed out for {model.value}")
+            raise RuntimeError(f"Ollama generation timed out for {model.value}") from None
         except FileNotFoundError:
-            raise RuntimeError("Ollama not found. Install from https://ollama.ai")
+            raise RuntimeError("Ollama not found. Install from https://ollama.ai") from None
         except Exception as e:
-            raise RuntimeError(f"Ollama generation error: {e}")
+            raise RuntimeError(f"Ollama generation error: {e}") from e
 
 
 # Singleton accessor for Ollama client
@@ -645,7 +645,7 @@ class OfflineTierProcessor(TierProcessor):
     """
 
     # Query type patterns for classification
-    QUERY_PATTERNS: dict[QueryType, list[str]] = {
+    QUERY_PATTERNS: ClassVar[dict[QueryType, list[str]]] = {
         QueryType.TECHNICAL: [
             r"\b(code|program|api|function|class|method|debug|error|exception)\b",
             r"\b(python|javascript|java|c\+\+|rust|golang|typescript)\b",
@@ -679,7 +679,7 @@ class OfflineTierProcessor(TierProcessor):
     }
 
     # Enhancement templates by query type
-    ENHANCEMENT_TEMPLATES: dict[QueryType, str] = {
+    ENHANCEMENT_TEMPLATES: ClassVar[dict[QueryType, str]] = {
         QueryType.TECHNICAL: (
             "Technical Query: {query}\n\n"
             "Please provide a detailed technical response including:\n"
@@ -875,12 +875,24 @@ class OfflineTierProcessor(TierProcessor):
 
         # Build system prompt based on query type
         system_prompts = {
-            QueryType.TECHNICAL: "You are a technical expert. Provide detailed, accurate technical responses.",
-            QueryType.RESEARCH: "You are a research analyst. Provide evidence-based, comprehensive responses.",
-            QueryType.CREATIVE: "You are a creative advisor. Provide innovative, inspiring responses.",
-            QueryType.ANALYTICAL: "You are a data analyst. Provide systematic, analytical responses.",
-            QueryType.OPERATIONAL: "You are an operations expert. Provide clear, step-by-step guidance.",
-            QueryType.STRATEGIC: "You are a strategic advisor. Provide thoughtful, high-level guidance.",
+            QueryType.TECHNICAL: (
+                "You are a technical expert. Provide detailed, accurate technical responses."
+            ),
+            QueryType.RESEARCH: (
+                "You are a research analyst. Provide evidence-based, comprehensive responses."
+            ),
+            QueryType.CREATIVE: (
+                "You are a creative advisor. Provide innovative, inspiring responses."
+            ),
+            QueryType.ANALYTICAL: (
+                "You are a data analyst. Provide systematic, analytical responses."
+            ),
+            QueryType.OPERATIONAL: (
+                "You are an operations expert. Provide clear, step-by-step guidance."
+            ),
+            QueryType.STRATEGIC: (
+                "You are a strategic advisor. Provide thoughtful, high-level guidance."
+            ),
             QueryType.UNKNOWN: "You are a helpful assistant. Provide comprehensive responses.",
         }
 
@@ -927,7 +939,7 @@ class OfflineTierProcessor(TierProcessor):
         enhanced = template.replace("{query}", query)
 
         # Determine confidence based on classification
-        confidence = 0.75 if query_type != QueryType.UNKNOWN else 0.70
+        confidence = 0.70 if query_type == QueryType.UNKNOWN else 0.75
 
         return EnhancedQuery(
             original_query=query,
@@ -1214,7 +1226,8 @@ class StrategicTierProcessor(TierProcessor):
         Returns:
             Tuple of (enhanced_response, critique_rounds_completed)
         """
-        assert self._orchestrator is not None  # Caller verifies this
+        if self._orchestrator is None:
+            raise RuntimeError("Orchestrator not initialized")
         orchestrator = self._orchestrator
         import asyncio as _asyncio
 
@@ -1393,8 +1406,8 @@ class PromptEngine:
             )
         elif "gemini" in model_lower or "google" in model_lower:
             model_instructions = (
-                "You excel at comprehensive, well-structured responses with practical applications. "
-                "Balance depth with clarity."
+                "You excel at comprehensive, well-structured responses with "
+                "practical applications. Balance depth with clarity."
             )
         else:  # general
             model_instructions = (
@@ -1605,33 +1618,24 @@ def get_prompt_engine() -> PromptEngine:
 # =============================================================================
 
 __all__ = [
-    # Enums
-    "ProcessingTier",
-    "QueryType",
+    "CLAUDE_CODE_AVAILABLE",
+    "EnhancedQuery",
+    "ModelType",
     "OfflineModel",
-    # Ollama offline client
+    "OfflineTierProcessor",
     "OllamaModelInfo",
     "OllamaOfflineClient",
-    "get_ollama_client",
-    # Data models
-    "SearchContext",
-    "EnhancedQuery",
-    # Abstract base
-    "TierProcessor",
-    # Tier processors
-    "OfflineTierProcessor",
-    "TacticalTierProcessor",
-    "StrategicTierProcessor",
-    # Main engine
+    "ProcessingTier",
     "PromptEngine",
-    # Singleton accessor
-    "get_prompt_engine",
-    # Constants
-    "CLAUDE_CODE_AVAILABLE",
-    # Re-exports from aipea.search
+    "QueryType",
+    "SearchContext",
+    "SearchOrchestrator",
     "SearchResult",
     "SearchStrategy",
-    "ModelType",
-    "SearchOrchestrator",
+    "StrategicTierProcessor",
+    "TacticalTierProcessor",
+    "TierProcessor",
     "create_empty_context",
+    "get_ollama_client",
+    "get_prompt_engine",
 ]

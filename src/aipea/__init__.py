@@ -18,38 +18,6 @@ __version__ = "1.0.0"
 # Core enums and types
 from aipea._types import ProcessingTier, QueryType, SearchStrategy
 
-# Data models
-from aipea.models import QueryAnalysis
-
-# Security
-from aipea.security import (
-    ComplianceHandler,
-    ComplianceMode,
-    ScanResult,
-    SecurityContext,
-    SecurityLevel,
-    SecurityScanner,
-)
-
-# Knowledge base
-from aipea.knowledge import (
-    KnowledgeDomain,
-    KnowledgeNode,
-    KnowledgeSearchResult,
-    OfflineKnowledgeBase,
-    StorageTier,
-)
-
-# Search
-from aipea.search import (
-    Context7Provider,
-    ExaSearchProvider,
-    FirecrawlProvider,
-    SearchOrchestrator,
-    SearchProvider,
-    SearchResult,
-)
-
 # Query analysis
 from aipea.analyzer import QueryAnalyzer
 
@@ -66,42 +34,66 @@ from aipea.enhancer import (
     reset_enhancer,
 )
 
+# Knowledge base
+from aipea.knowledge import (
+    KnowledgeDomain,
+    KnowledgeNode,
+    KnowledgeSearchResult,
+    OfflineKnowledgeBase,
+    StorageTier,
+)
+
+# Data models
+from aipea.models import QueryAnalysis
+
+# Search
+from aipea.search import (
+    Context7Provider,
+    ExaSearchProvider,
+    FirecrawlProvider,
+    SearchOrchestrator,
+    SearchProvider,
+    SearchResult,
+)
+
+# Security
+from aipea.security import (
+    ComplianceHandler,
+    ComplianceMode,
+    ScanResult,
+    SecurityContext,
+    SecurityLevel,
+    SecurityScanner,
+)
+
 __all__ = [
-    "__version__",
-    # Enums & types
-    "ProcessingTier",
-    "QueryType",
-    "SearchStrategy",
-    # Data models
-    "QueryAnalysis",
-    "EnhancementResult",
-    "EnhancedRequest",
-    # Security
-    "SecurityLevel",
-    "ComplianceMode",
-    "SecurityContext",
-    "SecurityScanner",
-    "ScanResult",
+    "AIPEAEnhancer",
     "ComplianceHandler",
-    # Knowledge
+    "ComplianceMode",
+    "Context7Provider",
+    "EnhancedRequest",
+    "EnhancementResult",
+    "ExaSearchProvider",
+    "FirecrawlProvider",
     "KnowledgeDomain",
     "KnowledgeNode",
     "KnowledgeSearchResult",
     "OfflineKnowledgeBase",
-    "StorageTier",
-    # Search
+    "ProcessingTier",
+    "PromptEngine",
+    "QueryAnalysis",
+    "QueryAnalyzer",
+    "QueryType",
+    "ScanResult",
+    "SearchOrchestrator",
     "SearchProvider",
     "SearchResult",
-    "SearchOrchestrator",
-    "ExaSearchProvider",
-    "FirecrawlProvider",
-    "Context7Provider",
-    # Analyzer
-    "QueryAnalyzer",
-    # Engine
-    "PromptEngine",
-    # Enhancer
-    "AIPEAEnhancer",
+    "SearchStrategy",
+    "SecurityContext",
+    "SecurityLevel",
+    "SecurityScanner",
+    "StorageTier",
+    "__version__",
     "enhance_prompt",
     "get_enhancer",
     "reset_enhancer",

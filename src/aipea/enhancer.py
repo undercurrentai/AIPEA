@@ -50,7 +50,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from aipea._types import ProcessingTier, QueryType, SearchStrategy
+from aipea.analyzer import QueryAnalyzer
+from aipea.engine import PromptEngine, SearchContext
 from aipea.knowledge import KnowledgeDomain, OfflineKnowledgeBase, StorageTier
+from aipea.models import QueryAnalysis
 from aipea.search import SearchContext as AIPEASearchContext
 from aipea.search import SearchOrchestrator, SearchResult, create_empty_context
 from aipea.security import (
@@ -61,9 +64,6 @@ from aipea.security import (
     SecurityLevel,
     SecurityScanner,
 )
-from aipea.engine import PromptEngine, SearchContext
-from aipea.analyzer import QueryAnalyzer
-from aipea.models import QueryAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -621,10 +621,7 @@ class AIPEAEnhancer:
         if security_level.value >= SecurityLevel.SECRET.value:
             return True
 
-        if compliance_mode == ComplianceMode.TACTICAL:
-            return True
-
-        return False
+        return compliance_mode == ComplianceMode.TACTICAL
 
     async def _gather_online_context(
         self,
@@ -977,22 +974,17 @@ async def enhance_prompt(
 
 
 __all__ = [
-    # Main class
     "AIPEAEnhancer",
-    # Data models
-    "EnhancementResult",
+    "ComplianceMode",
     "EnhancedRequest",
-    # Convenience functions
-    "get_enhancer",
-    "reset_enhancer",
+    "EnhancementResult",
+    "ProcessingTier",
+    "QueryType",
+    "SecurityLevel",
+    "StorageTier",
     "enhance_prompt",
-    # Utility functions
+    "get_enhancer",
     "get_model_family",
     "is_offline_model",
-    # Re-exports for convenience
-    "SecurityLevel",
-    "ComplianceMode",
-    "ProcessingTier",
-    "StorageTier",
-    "QueryType",
+    "reset_enhancer",
 ]

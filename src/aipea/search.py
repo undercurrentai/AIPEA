@@ -1051,21 +1051,15 @@ def parse_model_type(model_id: str) -> ModelType:
 
 
 __all__ = [
-    # Enums
-    "SearchStrategy",
-    "ModelType",
-    # Data models
-    "SearchResult",
-    "SearchContext",
-    # Abstract base
-    "SearchProvider",
-    # Provider implementations
+    "Context7Provider",
     "ExaSearchProvider",
     "FirecrawlProvider",
-    "Context7Provider",
-    # Orchestrator
+    "ModelType",
+    "SearchContext",
     "SearchOrchestrator",
-    # Convenience functions
+    "SearchProvider",
+    "SearchResult",
+    "SearchStrategy",
     "create_empty_context",
     "parse_model_type",
 ]
