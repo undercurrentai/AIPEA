@@ -423,12 +423,13 @@ The following items are documented for future implementation. They are not block
 
 | Aspect | Detail |
 |--------|--------|
-| **Status** | DEFERRED — package fully extracted, local install working, CI green |
-| **Package metadata** | `pyproject.toml` (hatchling build, MIT license, Python >=3.11) |
+| **Status** | DEFERRED — workflow created, one-time PyPI setup pending |
+| **Workflow** | `.github/workflows/publish.yml` (trusted publisher OIDC, no API tokens) |
+| **Build tool** | `hatch build` (hatchling backend) |
 | **Current install** | `pip install -e /Projects/AIPEA` (local editable) or vendored at `AgoraIV/vendor/aipea/` |
-| **Steps to publish** | (1) `python -m build`, (2) `python -m twine upload dist/*`, (3) Update README install instructions |
-| **Prerequisites** | PyPI account for undercurrentai, decide on public vs private PyPI |
-| **Priority** | After AIPEA is considered stable (post engine.py coverage improvement) |
+| **Steps to publish** | See CLAUDE.md Section 6.5 (Release to PyPI playbook) |
+| **One-time setup** | (1) Register on PyPI, (2) `hatch build && hatch publish` for initial upload, (3) Configure trusted publisher on PyPI, (4) Create GitHub `release` environment |
+| **Priority** | Ready when stable — workflow and playbook are in place |
 
 ### engine.py Test Coverage
 

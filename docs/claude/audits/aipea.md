@@ -56,7 +56,7 @@ parent: ../../CLAUDE.md
 | pyproject.toml | Tool config | ruff line-length=100, py312 target, S-rules for bandit, mypy strict |
 | Makefile | Build targets | 8 targets: install, fmt, lint, type, test, sec, all, ci |
 | CI workflow | Gate config | 3 jobs: lint, typecheck, test (matrix: py3.11 + py3.12) |
-| __init__.py | Public API | 28 exports in `__all__`, version = "1.0.0" |
+| __init__.py | Public API | 30 exports in `__all__`, version = "1.0.0" |
 | pyproject.toml | License | MIT license, >=3.11 required |
 | Exa search | PyPI publishing 2025/2026 | Trusted Publishers (OIDC) is standard; `pypa/gh-action-pypi-publish@release/v1` |
 | Context7 | hatch build docs | `hatch build` creates sdist + wheel; `hatch version` for version management |
@@ -189,7 +189,7 @@ parent: ../../CLAUDE.md
 | 2026-02-14 | Exa (plan phase) | "Python hatchling PyPI publish trusted publisher 2025 2026" | Trusted Publishers OIDC is standard; no API tokens needed | publish.yml + Section 6.5 |
 | 2026-02-14 | Context7 (plan phase) | hatch build docs | `hatch build` creates sdist + wheel in `dist/` | publish.yml build step |
 | 2026-02-14 | wc -l | Source LOC count | 6,088 lines in src/aipea/*.py | Section 0 Quick Reference |
-| 2026-02-14 | __init__.py read | Public API surface | 28 exports in `__all__` | Section 0 Quick Reference |
+| 2026-02-14 | __init__.py read | Public API surface | 30 exports in `__all__` | Section 0 Quick Reference |
 | 2026-02-14 | Root CLAUDE.md read | Parent policies | Secret handling, evidence requirements, reality-first | Section 1.4 inheritance |
 
 ---
