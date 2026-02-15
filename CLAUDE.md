@@ -1,18 +1,40 @@
 # CLAUDE.md - AIPEA
-> Version: 2.0.0 | Updated: 2026-02-14 | Owner: @joshuakirby
+> Version: 3.0.0 | Updated: 2026-02-14 | Owner: @joshuakirby
 
 ```yaml
-version: 2.0.0
+version: 3.0.0
 status: ACTIVE
+tier: 2  # Standard (~6K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
+inherits_from: ../../CLAUDE.md  # Undercurrent Holdings root
+maintainer: joshuakirby
 last_audit: 2026-02-14
+protocol: v4.0
+token_budget: 8000
 ```
+
+---
+
+## 0. Quick Reference
+
+| Dimension | Value |
+|-----------|-------|
+| **Project type** | Standalone Python library |
+| **Entry point** | `from aipea import enhance_prompt, AIPEAEnhancer` |
+| **Core deps** | stdlib + httpx (ONLY) |
+| **Python** | >=3.11 (target 3.12) |
+| **CI matrix** | Python 3.11 + 3.12 |
+| **Coverage floor** | 75% |
+| **License** | MIT |
+| **Source LOC** | ~6,088 |
+| **Exports** | 28 symbols in `__all__` |
+| **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
 ---
 
 ## 1. Purpose & Scope
 
-### What This Directory Is
+### 1.1 What This Directory Is
 
 - **Primary Function**: AIPEA (AI Prompt Engineer Agent) — a standalone Python library for prompt preprocessing, security screening, query analysis, and context enrichment
 - **Entry Points**:
@@ -21,12 +43,32 @@ last_audit: 2026-02-14
 - **Consumers**: Agora IV, AEGIS, future Undercurrent AI products
 - **License**: MIT
 
-### What This Directory Is NOT
+### 1.2 What This Directory Is NOT
 
 - An Agora-specific module (AIPEA is product-agnostic)
 - A standalone service (it's a library; service mode is future)
 - A replacement for LLM APIs (it preprocesses inputs TO LLMs)
 - An AI-governed system (no model cards or governance artifacts — those live in Libertas-Core)
+
+### 1.3 Out-of-Scope Operations
+
+| Operation | Reason | Where to Do It |
+|-----------|--------|----------------|
+| Deployment | Library, not a service | Consumer's CI/CD |
+| Infrastructure changes | No infra in this project | Libertas-Core |
+| AI governance artifacts | STANDARD tier, not AI-GOVERNED | Libertas-Core |
+
+### 1.4 Hierarchy Context
+
+This CLAUDE.md inherits from the Undercurrent Holdings root (`../../CLAUDE.md`).
+
+**Inherited policies** (do not duplicate — refer to parent):
+- Reality-First Principle (evidence-backed claims)
+- Secret handling (prohibited locations, detection action)
+- Evidence requirements (test output, file paths)
+- Cross-project coordination gates
+
+**AIPEA-specific overrides**: None. All parent policies apply as-is.
 
 ---
 
@@ -37,46 +79,36 @@ last_audit: 2026-02-14
 | Operation | Scope | Notes |
 |-----------|-------|-------|
 | Read any file | All directories | Normal operation |
-| Run tests | `make test` or `pytest tests/ -v` | Safe, read-only effect |
+| Run tests / lint / type check | `make test`, `make lint`, `make type` | Safe, read-only effect |
 | Run formatter | `make fmt` | Auto-fix safe |
-| Run linter | `make lint` | Read-only check |
-| Run type checker | `make type` | Read-only check |
 | Run security scan | `make sec` | Read-only check |
 | Modify source | `src/aipea/`, `tests/` | Core development |
+| Add tests | `tests/` | Always beneficial |
 | Update docs | `docs/` | Documentation updates |
 
-### 2.2 Out-of-Scope Operations
-
-| Operation | Reason | Where to Do It |
-|-----------|--------|----------------|
-| Deployment | Library, not a service | Consumer's CI/CD |
-| Infrastructure changes | No infra in this project | Libertas-Core |
-| AI governance artifacts | STANDARD tier, not AI-GOVERNED | Libertas-Core |
-| PyPI publishing | Requires release approval | Manual process |
-
-### 2.3 Ask-First Triggers
+### 2.2 Ask-First Triggers
 
 | Trigger | Reason |
 |---------|--------|
 | Public API changes (`__init__.py`, `__all__`) | Breaking change risk for consumers |
-| New external dependencies in `pyproject.toml` | Minimal-deps is a design principle |
+| New external dependencies in `pyproject.toml` | Minimal-deps design principle |
 | Security module changes (`security.py`) | Security audit required |
-| Compliance mode changes | Regulatory implications |
+| Compliance mode or CI workflow changes | Regulatory/gate integrity |
 | `pyproject.toml` tool config changes (ruff, mypy) | May break CI gates |
-| Modifying `CLAUDE.md` | Navigation integrity |
-| Changes to `SPECIFICATION.md` | Canonical architecture reference |
-| Modifying CI workflow (`.github/workflows/ci.yml`) | Gate integrity |
+| Modifying `CLAUDE.md` or `SPECIFICATION.md` | Navigation/canonical integrity |
+| PyPI release or version bump | Requires release approval |
+| Changes to `.github/workflows/publish.yml` | Release pipeline integrity |
 
-### 2.4 Hard Stops
+### 2.3 Hard Stops
+
+Inherited from parent: secrets in code, force push to main.
 
 | Action | Reason |
 |--------|--------|
-| Commit secrets or API keys | Security policy violation |
 | Add GPL/LGPL dependencies | License incompatibility (MIT project) |
-| Delete files without backup confirmation | Data loss prevention |
-| Force push to main | Destructive operation |
-| Bypass pre-commit gates (`--no-verify`) | Protocol integrity |
 | Add external deps to core modules (`security.py`, `knowledge.py`, `search.py`) | Zero-external-deps design principle |
+| Bypass pre-commit gates (`--no-verify`) | Protocol integrity |
+| Delete files without backup confirmation | Data loss prevention |
 
 ---
 
@@ -160,50 +192,24 @@ enhancer.py    <- imports ALL (facade)
 
 ### 5.3 Environment Variables
 
-**Implemented** (read by source code):
-
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `EXA_API_KEY` | (none) | Exa search provider API key |
 | `FIRECRAWL_API_KEY` | (none) | Firecrawl provider API key |
 | `AIPEA_HTTP_TIMEOUT` | `30.0` | HTTP timeout for search providers (seconds) |
 
-**Specified but not yet implemented** (defined in SPECIFICATION.md Section 8.1):
+### 5.4 Research & Documentation Tools
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AIPEA_DB_PATH` | `aipea_knowledge.db` | Path to offline knowledge SQLite database |
-| `AIPEA_STORAGE_TIER` | `standard` | Storage tier: ultra_compact, compact, standard, extended |
-| `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode |
-| `AIPEA_OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL for offline models |
+Before using or modifying code that depends on external libraries, verify current API patterns:
 
----
-
-## 5.5 Research & Documentation Tools (MANDATORY)
-
-### Library Documentation Freshness
-
-Before using or modifying code that depends on httpx, pytest, ruff, or mypy, verify current API patterns:
-
-```yaml
-context7_triggers:
-  - httpx client usage or configuration changes
-  - pytest fixture patterns or async test patterns
-  - ruff rule selection or configuration changes
-  - mypy strict mode configuration
-```
-
-### Research Protocol
-
-When investigating best practices, recent changes, or validating patterns:
-
-```yaml
-exa_triggers:
-  - Python library packaging best practices (2025/2026)
-  - Security scanning patterns for prompt injection
-  - LLM preprocessing library design patterns
-  - Dependency minimization strategies
-```
+| Trigger | Tool | Example Query |
+|---------|------|---------------|
+| httpx client usage or config changes | Context7 | `resolve-library-id: "encode/httpx"` |
+| pytest fixture or async test patterns | Context7 | `resolve-library-id: "pytest-dev/pytest"` |
+| ruff rule selection or config changes | Context7 | `resolve-library-id: "astral-sh/ruff"` |
+| Python packaging best practices (2025/2026) | Exa | `"Python hatchling PyPI trusted publisher"` |
+| Security scanning for prompt injection | Exa | `"LLM prompt injection detection patterns"` |
+| LLM preprocessing library design | Exa | `"prompt preprocessing library architecture"` |
 
 ---
 
@@ -211,49 +217,56 @@ exa_triggers:
 
 ### 6.1 Add/Modify Feature
 
-```yaml
-steps:
-  1. Read SPECIFICATION.md for architectural context
-  2. Identify affected modules using dependency graph (Section 4)
-  3. Write/update tests FIRST (test-driven)
-  4. Implement changes in source module
-  5. If public API changes -> ASK before modifying __init__.py
-  6. Run `make all` (fmt + lint + type + test)
-  7. Verify coverage >= 75%
-```
+1. Read SPECIFICATION.md for architectural context
+2. Identify affected modules using dependency graph (Section 4)
+3. Write/update tests FIRST (test-driven)
+4. Implement changes in source module
+5. If public API changes → **ASK** before modifying `__init__.py`
+6. Run `make all` (fmt + lint + type + test)
+7. Verify coverage >= 75%
 
 ### 6.2 Bug Fix
 
-```yaml
-steps:
-  1. Write a failing test that reproduces the bug
-  2. Fix the bug in the minimal scope
-  3. Run `make ci` to verify no regressions
-  4. If fix touches security.py -> ASK (security audit required)
-```
+1. Write a failing test that reproduces the bug
+2. Fix the bug in the minimal scope
+3. Run `make ci` to verify no regressions
+4. If fix touches `security.py` → **ASK** (security audit required)
 
 ### 6.3 Add/Extend Tests
 
-```yaml
-steps:
-  1. Place tests in tests/ matching source structure
-  2. Use appropriate markers (@pytest.mark.unit, .integration, .slow)
-  3. Use pytest-asyncio for async tests (asyncio_mode = auto)
-  4. Run `make test` to verify coverage floor
-  5. PROCEED without asking (tests are always beneficial)
-```
+1. Place tests in `tests/` matching source structure
+2. Use appropriate markers (`@pytest.mark.unit`, `.integration`, `.slow`)
+3. Use pytest-asyncio for async tests (asyncio_mode = auto)
+4. Run `make test` to verify coverage floor
+5. PROCEED without asking (tests are always beneficial)
 
 ### 6.4 Dependency Update
 
-```yaml
-steps:
-  1. ASK before adding ANY new dependency
-  2. Verify license compatibility (must be MIT-compatible, never GPL/LGPL)
-  3. Core modules (security, knowledge, search) must NOT gain new deps
-  4. Update pyproject.toml
-  5. Run `make ci` to verify compatibility
-  6. Update CLAUDE.md Section 3.3 if dep list changes
-```
+1. **ASK** before adding ANY new dependency
+2. Verify license compatibility (must be MIT-compatible, never GPL/LGPL)
+3. Core modules (`security`, `knowledge`, `search`) must NOT gain new deps
+4. Update `pyproject.toml`
+5. Run `make ci` to verify compatibility
+6. Update CLAUDE.md Section 3.3 if dep list changes
+
+### 6.5 Release to PyPI
+
+1. **ASK** user for version bump type (major/minor/patch)
+2. Verify all quality gates pass: `make ci`
+3. Update version in `pyproject.toml` and `src/aipea/__init__.py` (`__version__`)
+4. Update `CHANGELOG.md` with release notes (Keep a Changelog format)
+5. Commit: `chore(release): bump version to vX.Y.Z`
+6. Push to main, verify CI passes
+7. Create GitHub Release via UI or `gh release create vX.Y.Z --title "vX.Y.Z" --notes "..."`
+8. `.github/workflows/publish.yml` triggers automatically on release
+9. Verify: `pip install aipea==X.Y.Z` from PyPI
+
+**One-time setup** (not yet done):
+- Create PyPI account at pypi.org
+- Register package name with initial manual upload: `hatch build && hatch publish`
+- Configure Trusted Publisher on PyPI: Settings > Publishing > Add GitHub Actions
+  - Owner: `undercurrentai`, Repository: `AIPEA`, Workflow: `publish.yml`, Environment: `release`
+- Create GitHub Environment `release` with protection rules (optional: require approval)
 
 ---
 
@@ -261,20 +274,13 @@ steps:
 
 ### 7.1 Secret Handling
 
-```yaml
-secrets_policy:
-  prohibited_locations:
-    - ANY file in repository
-    - CLAUDE.md files
-    - Commit messages
-    - Code comments
-    - Test fixtures (use mock values only)
+Inherits parent policy (see root `CLAUDE.md` Section 6.1).
 
-  allowed_at_runtime:
-    - Environment variables (EXA_API_KEY, FIRECRAWL_API_KEY)
+**AIPEA-specific runtime secrets** (allowed via environment variables only):
+- `EXA_API_KEY` — Exa search provider
+- `FIRECRAWL_API_KEY` — Firecrawl provider
 
-  detection_action: "STOP immediately, notify user, do NOT commit"
-```
+**Additional prohibited location**: Test fixtures (use mock values only)
 
 ### 7.2 Compliance Modes
 
@@ -299,26 +305,15 @@ AIPEA supports 4 compliance modes. Changes to compliance behavior require ASK-fi
 
 ## 8. Quality Gates
 
-### 8.1 Pre-Commit (Local)
-
-All must pass before committing:
-
-| Gate | Command | Bypass? |
-|------|---------|---------|
-| Lint clean | `make lint` | User override only |
-| Format clean | (included in `make lint`) | User override only |
-| Type check clean | `make type` | User override only |
-| Tests pass | `make test` | User override only |
-| Coverage >= 75% | (included in `make test`) | User override only |
-| No secrets in diff | Manual review | NEVER |
-
-### 8.2 CI (GitHub Actions)
-
-| Gate | Matrix | Failure = Block? |
-|------|--------|-----------------|
-| Ruff lint + format | Python 3.12 | Yes |
-| Mypy strict | Python 3.12 | Yes |
-| Pytest + coverage | Python 3.11, 3.12 | Yes |
+| Gate | Stage | Command | Python | Bypass? |
+|------|-------|---------|--------|---------|
+| Lint clean | Local + CI | `make lint` / `ruff check` | 3.12 | User override only |
+| Format clean | Local + CI | (included in lint) | 3.12 | User override only |
+| Type check | Local + CI | `make type` / `mypy src/aipea/` | 3.12 | User override only |
+| Tests pass | Local + CI | `make test` / `pytest` | 3.11, 3.12 | User override only |
+| Coverage >= 75% | Local + CI | (included in test) | 3.11, 3.12 | User override only |
+| No secrets in diff | Local | Manual review | — | NEVER |
+| Quality gate (publish) | CI | Full lint + type + test matrix | 3.11, 3.12 | NEVER (blocks PyPI) |
 
 ---
 
@@ -336,9 +331,9 @@ All must pass before committing:
 | Modify `security.py` | **ASK** | Security audit required |
 | Modify compliance behavior | **ASK** | Regulatory implications |
 | Change `pyproject.toml` tool config | **ASK** | May break CI |
-| Modify CI workflow | **ASK** | Gate integrity |
-| Modify `CLAUDE.md` | **ASK** | Navigation integrity |
-| Modify `SPECIFICATION.md` | **ASK** | Canonical reference |
+| Modify CI/publish workflow | **ASK** | Gate/release integrity |
+| Modify `CLAUDE.md` or `SPECIFICATION.md` | **ASK** | Navigation/canonical integrity |
+| PyPI release or version bump | **ASK** | Requires release approval |
 | Commit secrets or API keys | **REFUSE** | Security policy |
 | Add GPL/LGPL dependency | **REFUSE** | License incompatibility |
 | Add deps to core modules | **REFUSE** | Zero-deps design principle |
@@ -349,44 +344,59 @@ All must pass before committing:
 
 ## 10. Context Management
 
-```yaml
-subagent_guidance:
-  use_explore_agent:
-    - Broad codebase searches across multiple modules
-    - Tracing data flow through analyzer -> engine -> enhancer
-  use_direct_tools:
-    - Single-file reads or targeted grep
-    - Running make targets
-  context_clearing:
-    - After completing a multi-file refactor
-    - When switching between unrelated modules
-```
+### Subagent Delegation
+
+| Scenario | Agent | Rationale |
+|----------|-------|-----------|
+| Broad search across multiple modules | Explore | Cross-module data flow tracing |
+| Single-file reads or targeted grep | Direct tools | Faster, lower overhead |
+| Running make targets | Bash | Direct execution |
+| Multi-file refactor verification | Explore | Post-refactor consistency check |
+
+### Token Budget Awareness
+
+- **Tier 2 ceiling**: 8,000 tokens for this CLAUDE.md
+- **Compression**: If context exceeds 70%, switch to concise mode (symbols: →, ✓, ✗)
+- **Context clearing**: After completing a multi-file refactor or when switching between unrelated modules
 
 ---
 
 ## 11. Change Management
 
-```yaml
-version: 2.0.0
-owners:
-  - joshuakirby
-update_triggers:
-  - New module added to src/aipea/
-  - Public API changes (__init__.py)
-  - CI workflow changes
-  - New compliance mode added
-  - Dependency changes
-  - Audit findings
+### Version Semantics
 
-change_process:
-  1. Document proposed change
-  2. Get user approval (ASK)
-  3. Apply change
-  4. Update version block
-  5. Update audit packet if scope warrants
+| Bump | When |
+|------|------|
+| Major (X.0.0) | Breaking public API change, new compliance mode, architecture restructure |
+| Minor (x.Y.0) | New module, new playbook, CI workflow additions |
+| Patch (x.y.Z) | Typo fixes, metric updates, audit-only changes |
 
-audit_schedule: Quarterly (next: 2026-05-14)
-```
+### Update Triggers
+
+- New module added to `src/aipea/`
+- Public API changes (`__init__.py`)
+- CI/publish workflow changes
+- New compliance mode added
+- Dependency changes
+- Audit findings
+
+### Change Process
+
+1. Document proposed change
+2. Get user approval (**ASK**)
+3. Apply change
+4. Update version block
+5. Update audit packet if scope warrants
+
+### Early Audit Triggers
+
+Audit before quarterly schedule if:
+- Security module (`security.py`) is modified
+- Compliance mode added or changed
+- Public API surface changes significantly (>3 exports)
+- New CI/CD workflow added
+
+**Audit schedule**: Quarterly (next: 2026-05-14)
 
 ---
 
@@ -394,13 +404,14 @@ audit_schedule: Quarterly (next: 2026-05-14)
 
 | Document | Purpose |
 |----------|---------|
+| `../../CLAUDE.md` | Parent CLAUDE.md (Undercurrent Holdings root) |
 | `SPECIFICATION.md` | Full AIPEA specification (canonical architecture) |
 | `docs/adr/ADR-001-extraction.md` | Extraction decision record |
 | `docs/design-reference/` | Original Agora V design files (9 files, ~7.6K LOC) |
 | `docs/integration/agora-adapter.md` | Agora integration guide |
 | `docs/integration/aegis-adapter.md` | AEGIS integration guide |
-| `docs/claude/audits/aipea.md` | Audit packet for this CLAUDE.md |
+| `docs/claude/audits/aipea.md` | Audit packet (v4.0 protocol) |
 
 ---
 
-*AIPEA Agent Contract v2.0.0*
+*AIPEA Agent Contract v3.0.0 | Protocol v4.0 | Tier 2 (Standard)*
