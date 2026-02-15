@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-02-14
 
 ### Added
-- Initial release — extracted from Agora IV production (v4.1.48)
+- Initial release — extracted from Agora IV production (v4.1.49)
 - **security**: PII/PHI detection, classification markers, injection prevention, HIPAA/Tactical compliance
 - **analyzer**: Query complexity scoring, domain detection, temporal awareness, tier routing
 - **search**: Multi-provider orchestration (Exa, Firecrawl, Context7) with strategy selection

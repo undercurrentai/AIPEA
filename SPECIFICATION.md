@@ -5,7 +5,7 @@
 status: ACCEPTED
 classification: INTERNAL
 maintainer: joshuakirby
-origin: AgoraIV production (v4.1.48) + Agora V design reference
+origin: AgoraIV production (v4.1.49) + Agora V design reference
 license: MIT
 ```
 

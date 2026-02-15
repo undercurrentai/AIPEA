@@ -5,7 +5,7 @@
 [![Tests](https://img.shields.io/badge/tests-337%20passing-brightgreen)]()
 [![Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen)]()
 
-A standalone Python library for prompt preprocessing, security screening, query analysis, and context enrichment for LLM systems. Extracted from [Agora IV](https://github.com/undercurrentai/agora-iv) production (v4.1.48+).
+A standalone Python library for prompt preprocessing, security screening, query analysis, and context enrichment for LLM systems. Extracted from [Agora IV](https://github.com/undercurrentai/agora-iv) production (v4.1.49).
 
 ## Architecture
 
