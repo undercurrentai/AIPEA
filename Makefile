@@ -1,4 +1,4 @@
-.PHONY: install fmt lint type test sec all ci clean
+.PHONY: install fmt lint type test sec all ci
 
 install:
 	pip install -e ".[dev]"

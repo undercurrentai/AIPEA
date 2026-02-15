@@ -16,7 +16,7 @@ compliance_tier: STANDARD
 | Metric | Value |
 |--------|-------|
 | Previous version | 1.0.0 (119 lines, ~3.7KB) |
-| New version | 2.0.0 (~245 lines, ~10KB) |
+| New version | 2.0.0 (~406 lines, ~14KB) |
 | Sections added | 6 (Playbooks, Quality Gates, Security Guardrails, Research Tools, Context Management, Change Management) |
 | Sections expanded | 3 (Agent Contract, Commands, Ask-First Matrix) |
 | Sections retained | 4 (Purpose, Standards, Architecture, References) |
@@ -32,9 +32,9 @@ compliance_tier: STANDARD
 | Source | Query | Finding |
 |--------|-------|---------|
 | pyproject.toml | Tool config | ruff line-length=100, py312 target, S-rules for bandit, mypy strict |
-| Makefile | Build targets | 8 targets: install, fmt, lint, type, test, sec, all, ci |
+| Makefile | Build targets | 8 targets: install, fmt, lint, type, test, sec, all, ci (clean removed — phantom .PHONY) |
 | CI workflow | Gate config | 3 jobs: lint, typecheck, test (matrix: py3.11 + py3.12) |
-| SPECIFICATION.md | Env vars | 7 environment variables documented (Section 8.1) |
+| SPECIFICATION.md | Env vars | 7 environment variables documented (Section 8.1); only 3 implemented in code |
 | __init__.py | Public API | 28 exports in __all__, entry point is `enhance_prompt` / `AIPEAEnhancer` |
 | pyproject.toml | License | MIT license |
 | pyproject.toml | Python req | >=3.11 (not 3.12+ as stated in old CLAUDE.md) |
@@ -44,6 +44,8 @@ compliance_tier: STANDARD
 | Issue | Old CLAUDE.md | Actual | Resolution |
 |-------|---------------|--------|------------|
 | Python version | "3.12+ required" | `requires-python = ">=3.11"`, CI tests 3.11+3.12 | Changed to "3.11+ (target 3.12)" |
+| Env vars | 7 listed as implemented | Only 3 read by code (EXA_API_KEY, FIRECRAWL_API_KEY, AIPEA_HTTP_TIMEOUT) | Split into implemented vs. specified-not-implemented |
+| Makefile .PHONY | `clean` in .PHONY | No `clean:` target body exists | Removed `clean` from .PHONY |
 | Public API entry | `from aipea import enhance` | `from aipea.enhancer import enhance_prompt` | Corrected to match __init__.py |
 | Owner | `@agora-team` | joshuakirby (standalone, not Agora-specific) | Changed to `@joshuakirby` |
 | mypy target | `mypy src/` | `mypy src/aipea/` (Makefile, CI) | Corrected |
@@ -113,7 +115,7 @@ compliance_tier: STANDARD
 
 - **Upgrade confidence**: HIGH. All data sourced from actual project files (pyproject.toml, Makefile, CI, __init__.py, SPECIFICATION.md).
 - **Risk of stale data**: LOW. AIPEA was extracted on 2026-02-14 (today). All files are current.
-- **Downstream impact**: NONE. CLAUDE.md is agent guidance only; no code changes.
+- **Downstream impact**: MINIMAL. CLAUDE.md is agent guidance only. Makefile .PHONY fix is cosmetic (removed phantom `clean` target).
 
 ---
 

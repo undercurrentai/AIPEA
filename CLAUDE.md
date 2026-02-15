@@ -121,7 +121,7 @@ knowledge.py   <- ZERO aipea imports (stdlib only)
 search.py      <- ZERO aipea imports (stdlib + httpx)
 _types.py      <- Shared enums (ProcessingTier, QueryType, SearchStrategy)
 models.py      <- Shared data models (QueryAnalysis)
-analyzer.py    <- imports security, _types
+analyzer.py    <- imports security, _types, models
 engine.py      <- imports search, _types
 enhancer.py    <- imports ALL (facade)
 ```
@@ -160,11 +160,18 @@ enhancer.py    <- imports ALL (facade)
 
 ### 5.3 Environment Variables
 
+**Implemented** (read by source code):
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `EXA_API_KEY` | (none) | Exa search provider API key |
 | `FIRECRAWL_API_KEY` | (none) | Firecrawl provider API key |
 | `AIPEA_HTTP_TIMEOUT` | `30.0` | HTTP timeout for search providers (seconds) |
+
+**Specified but not yet implemented** (defined in SPECIFICATION.md Section 8.1):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `AIPEA_DB_PATH` | `aipea_knowledge.db` | Path to offline knowledge SQLite database |
 | `AIPEA_STORAGE_TIER` | `standard` | Storage tier: ultra_compact, compact, standard, extended |
 | `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode |
