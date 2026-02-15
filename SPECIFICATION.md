@@ -2,7 +2,7 @@
 > **AI Prompt Engineer Agent** | Version 1.0.0 | 2026-02-14
 
 ```yaml
-status: DRAFT
+status: ACCEPTED
 classification: INTERNAL
 maintainer: joshuakirby
 origin: AgoraIV production (v4.1.48) + Agora V design reference
@@ -44,9 +44,9 @@ AIPEA ships as a **Python library** (`pip install aipea`). Consumer systems (Ago
 AEGIS, or any future product) import it and call a single function:
 
 ```python
-from aipea import enhance
+from aipea import enhance_prompt
 
-result = await enhance(
+result = await enhance_prompt(
     query="What are the latest advances in quantum error correction?",
     model_id="claude-opus-4-6",
     compliance_mode="general",
@@ -185,7 +185,7 @@ User Query
 
 ```
 aipea/                           # pip install aipea
-├── __init__.py                  # Public API: enhance(), AIPEAEnhancer, types
+├── __init__.py                  # Public API: enhance_prompt(), AIPEAEnhancer, types
 ├── security.py                  # SecurityScanner, ComplianceHandler, SecurityContext
 ├── knowledge.py                 # OfflineKnowledgeBase, KnowledgeNode, StorageTier
 ├── search.py                    # SearchOrchestrator, ExaProvider, FirecrawlProvider
@@ -650,9 +650,9 @@ The primary public API:
 
 ```python
 # Simple enhancement
-from aipea import enhance
+from aipea import enhance_prompt
 
-result = await enhance(
+result = await enhance_prompt(
     query="What are the latest advances in quantum error correction?",
     model_id="claude-opus-4-6",
     security_level="UNCLASSIFIED",        # Optional, default UNCLASSIFIED
@@ -727,13 +727,13 @@ Lives in **aegis-governance** repo. Maps AIPEA output to AEGIS gate evaluation i
 
 ```python
 # In aegis-governance repo
-from aipea import enhance, EnhancementResult
+from aipea import enhance_prompt, EnhancementResult
 
 class AIPEAGateAdapter:
     """Preprocesses claims through AIPEA before gate evaluation."""
 
     async def preprocess_claim(self, claim_text: str) -> dict:
-        result: EnhancementResult = await enhance(
+        result: EnhancementResult = await enhance_prompt(
             query=claim_text,
             model_id="claude-opus-4-6",
             compliance_mode="general",
@@ -751,11 +751,11 @@ class AIPEAGateAdapter:
 Any system can integrate AIPEA by implementing this minimal contract:
 
 ```python
-from aipea import enhance, EnhancementResult
+from aipea import enhance_prompt, EnhancementResult
 
 async def my_llm_call(query: str, model_id: str) -> str:
     # Step 1: Enhance
-    result: EnhancementResult = await enhance(query, model_id)
+    result: EnhancementResult = await enhance_prompt(query, model_id)
 
     # Step 2: Check security
     if not result.was_enhanced:
@@ -976,7 +976,7 @@ handles the deliberation BDI was designed for.
 participation, emergency protocols.
 
 **Why descoped**: AIPEA is a **library, not a service**. Consumers call
-`enhance()` directly — there's no need for message routing between components.
+`enhance_prompt()` directly — there's no need for message routing between components.
 The original design assumed AIPEA would be an autonomous agent participating in
 an Agora V agent swarm. In production, direct function calls are simpler, faster,
 and easier to debug.
@@ -1136,7 +1136,7 @@ AIPEA needs to:
 
 ```python
 # Main entry points
-from aipea.enhancer import AIPEAEnhancer, enhance, enhance_for_models
+from aipea.enhancer import AIPEAEnhancer, enhance_prompt, get_enhancer, reset_enhancer
 
 # Data models
 from aipea.models import EnhancementResult, EnhancedRequest

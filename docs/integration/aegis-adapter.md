@@ -9,7 +9,7 @@ repo, not in AIPEA.
 ## Integration Pattern
 
 ```python
-from aipea import enhance, EnhancementResult, ComplianceMode
+from aipea import enhance_prompt, EnhancementResult, ComplianceMode
 
 class AIPEAGateAdapter:
     """Preprocesses claims through AIPEA before gate evaluation."""
@@ -26,7 +26,7 @@ class AIPEAGateAdapter:
 
         Returns a dict suitable for feeding into AEGIS gate input.
         """
-        result: EnhancementResult = await enhance(
+        result: EnhancementResult = await enhance_prompt(
             query=claim_text,
             model_id=model_id,
             compliance_mode=self.compliance_mode,
