@@ -123,7 +123,7 @@ Copy the 3 enhancement-layer modules from AgoraIV, rename classes to remove Agor
 
 # Remove Agora-specific convenience:
 #   Remove: enhance_for_agora() (stays in AgoraIV adapter)
-#   Keep:   enhance_prompt() (renamed to module-level enhance())
+#   Keep:   enhance_prompt() (module-level entry point)
 
 # Update singleton:
 #   get_enhancer() → get_enhancer() (same pattern, new class name)
@@ -367,7 +367,7 @@ make all  # fmt, lint, type, test, sec
 ```
 
 ### Cross-Verification Checklist (verified 2026-02-14)
-- [x] `from aipea import enhance` works in a fresh Python session
+- [x] `from aipea import enhance_prompt` works in a fresh Python session
 - [x] `from aipea.security import SecurityScanner` works
 - [x] `from aipea.knowledge import OfflineKnowledgeBase` works
 - [x] `from aipea.search import SearchOrchestrator` works
@@ -399,6 +399,44 @@ Step 7 (verification)  ←── depends on Steps 3-5 all complete
 ```
 
 Steps 3 and 6 can be parallelized. Steps 4→5→7 are sequential.
+
+---
+
+---
+
+## DEFERRED: Future Work
+
+The following items are documented for future implementation. They are not blocking current functionality.
+
+### AEGIS Adapter Implementation
+
+| Aspect | Detail |
+|--------|--------|
+| **Status** | DEFERRED — specification complete, not yet implemented |
+| **Spec** | `docs/integration/aegis-adapter.md` (83 lines, complete integration pattern) |
+| **Also in** | `SPECIFICATION.md:725-747` (Section 5.3) |
+| **Includes** | Field mapping table (AIPEA → AEGIS), example code, installation instructions |
+| **Trigger** | Implement when AEGIS integration is scheduled |
+| **Dependencies** | AEGIS system must exist and have a stable API |
+
+### PyPI Publication
+
+| Aspect | Detail |
+|--------|--------|
+| **Status** | DEFERRED — package fully extracted, local install working, CI green |
+| **Package metadata** | `pyproject.toml` (hatchling build, MIT license, Python >=3.11) |
+| **Current install** | `pip install -e /Projects/AIPEA` (local editable) or vendored at `AgoraIV/vendor/aipea/` |
+| **Steps to publish** | (1) `python -m build`, (2) `python -m twine upload dist/*`, (3) Update README install instructions |
+| **Prerequisites** | PyPI account for undercurrentai, decide on public vs private PyPI |
+| **Priority** | After AIPEA is considered stable (post engine.py coverage improvement) |
+
+### engine.py Test Coverage
+
+| Aspect | Detail |
+|--------|--------|
+| **Status** | COMPLETE — coverage improved from 49% to 99% (73 new tests) |
+| **Overall AIPEA coverage** | 92.28% (337 passed, 15 skipped) |
+| **Date** | 2026-02-14 |
 
 ---
 
