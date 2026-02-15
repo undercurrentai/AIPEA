@@ -1,0 +1,20 @@
+# TEMPLATE — Custom semgrep rules from Engineering Standards Appendix F.
+# Add project-specific rules below. These complement the `p/ci` ruleset used in CI.
+rules:
+  - id: no-secrets-in-code
+    patterns:
+      - pattern-either:
+          - pattern: /AKIA[0-9A-Z]{16}/
+          - pattern: /AIza[0-9A-Za-z\-_]{35}/
+    message: Potential hardcoded secret
+    severity: ERROR
+
+  - id: requests-timeout-required
+    languages: [python]
+    message: requests.* calls must specify a timeout (S5 Reliability)
+    severity: ERROR
+    pattern: requests.$FUNC(...)
+    metavariable-regex:
+      metavariable: $FUNC
+      regex: (get|post|put|delete|patch|head)
+    pattern-not: requests.$FUNC(..., timeout=...)

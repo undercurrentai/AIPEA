@@ -1,0 +1,41 @@
+# Nightly compliance scans — adapted from Engineering Standards Appendix E.
+name: compliance-nightly
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Dependency scan (pip)
+        run: |
+          pip install safety
+          safety check --full-report || true
+
+      - name: Container scan (Trivy full)
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          scan-type: 'fs'
+          format: 'table'
+          exit-code: '1'
+          severity: 'HIGH,CRITICAL'
+
+      - name: IaC scan (Checkov)
+        run: |
+          pip install checkov
+          checkov -q -d .
+
+      - name: Full mutation testing
+        run: |
+          if [ -d tests ]; then pip install mutmut && mutmut run --paths-to-mutate src --simple-output; fi

@@ -1,0 +1,100 @@
+name: "Post-Market Monitoring Review"
+description: "EU AI Act Art. 72 / NIST AI RMF MANAGE — Monthly AI system monitoring review"
+title: "[Post-Market Monitoring] YYYY-MM"
+labels:
+  - "compliance/eu-ai-act"
+  - "cadence/monthly"
+  - "evidence/postmarket"
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Monthly Post-Market Monitoring Review
+        Complete this form to document the monthly review of AI system performance and safety.
+        Reference: `ai/postmarket-monitoring.md` for the full monitoring plan.
+
+        **Compliance mapping**: EU AI Act Art. 72 | ISO 42001 Improvement | NIST AI RMF MANAGE | FedRAMP CA-7
+
+  - type: input
+    id: review-period
+    attributes:
+      label: "Review Period"
+      description: "Month being reviewed"
+      placeholder: "YYYY-MM"
+    validations:
+      required: true
+
+  - type: input
+    id: reviewer
+    attributes:
+      label: "Reviewer Name"
+      description: "Person conducting this monitoring review"
+      placeholder: "Jane Smith"
+    validations:
+      required: true
+
+  - type: textarea
+    id: systems-monitored
+    attributes:
+      label: "AI Systems Monitored"
+      description: "List all AI systems reviewed, referencing ai/system-register.yaml"
+      placeholder: |
+        | System ID | Name | Risk Level | Status |
+        |-----------|------|------------|--------|
+        | AI-001    | PCW  | High       | Active |
+    validations:
+      required: true
+
+  - type: textarea
+    id: performance-metrics
+    attributes:
+      label: "Performance Metrics"
+      description: "Document key performance indicators for each AI system"
+      placeholder: |
+        - Accuracy / F1 score: X.XX (target: >= Y.YY)
+        - Latency P95: XXms (target: <= YYms)
+        - Error rate: X.X% (target: <= Y.Y%)
+        - Drift detected: Yes/No
+    validations:
+      required: true
+
+  - type: textarea
+    id: safety-incidents
+    attributes:
+      label: "Safety & Bias Incidents"
+      description: "Document any safety incidents, bias detections, or unexpected behaviors"
+      placeholder: |
+        - [ ] No safety incidents reported
+        - [ ] No bias drift detected in monitoring dashboards
+        - [ ] No user complaints related to AI system behavior
+        - [ ] Feedback mechanisms operational
+    validations:
+      required: true
+
+  - type: textarea
+    id: actions
+    attributes:
+      label: "Actions & Model Updates"
+      description: "Document any corrective actions, model retraining, or system updates"
+      placeholder: |
+        - Updated model weights to address detected drift (version X.Y.Z → X.Y.W)
+        - Added new monitoring alert for edge case scenario
+        - None required — all metrics within acceptable bounds
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: attestation
+    attributes:
+      label: "Reviewer Attestation"
+      description: "Confirm the following"
+      options:
+        - label: "All AI systems in the system register have been reviewed"
+          required: true
+        - label: "Performance metrics are within acceptable bounds or remediation is documented"
+          required: true
+        - label: "This review was completed in accordance with ai/postmarket-monitoring.md"
+          required: true
+        - label: "The risk register (ai/risk-register.yaml) has been updated if new risks were identified"
+          required: true

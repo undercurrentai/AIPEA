@@ -1,0 +1,87 @@
+name: "Quarterly Access Review"
+description: "SOC 2 CC6.x / FedRAMP AC-2,IA-5 — Review and certify user access rights"
+title: "[Access Review] Q_ YYYY"
+labels:
+  - "compliance/soc2"
+  - "cadence/quarterly"
+  - "evidence/access-review"
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Quarterly Access Review
+        Complete this form to document the periodic review of user access rights.
+        Reference: `docs/compliance/ACCESS-REVIEW.md` for full procedure.
+
+        **Compliance mapping**: SOC 2 CC6.1/CC6.2/CC6.3 | FedRAMP AC-2, IA-5 | ISO 42001 Support
+
+  - type: dropdown
+    id: quarter
+    attributes:
+      label: "Review Period"
+      description: "Which quarter does this review cover?"
+      options:
+        - "Q1 (Jan–Mar)"
+        - "Q2 (Apr–Jun)"
+        - "Q3 (Jul–Sep)"
+        - "Q4 (Oct–Dec)"
+    validations:
+      required: true
+
+  - type: input
+    id: reviewer
+    attributes:
+      label: "Reviewer Name"
+      description: "Person conducting this access review"
+      placeholder: "Jane Smith"
+    validations:
+      required: true
+
+  - type: textarea
+    id: systems-reviewed
+    attributes:
+      label: "Systems Reviewed"
+      description: "List all systems and platforms whose access was reviewed"
+      placeholder: |
+        - AWS IAM (production account)
+        - GitHub organization
+        - Database access (RDS)
+        - Secrets Manager
+    validations:
+      required: true
+
+  - type: textarea
+    id: findings
+    attributes:
+      label: "Findings"
+      description: "Document any access anomalies, orphaned accounts, or excessive privileges found"
+      placeholder: |
+        - [ ] All accounts have appropriate access levels
+        - [ ] No orphaned/inactive accounts found
+        - [ ] MFA enforced on all privileged accounts
+        - [ ] Service accounts have minimal required permissions
+    validations:
+      required: true
+
+  - type: textarea
+    id: remediation
+    attributes:
+      label: "Remediation Actions"
+      description: "Actions taken to resolve any findings (or 'None required' if clean)"
+      placeholder: "Revoked access for departed employee X. Reduced privileges for service account Y."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: attestation
+    attributes:
+      label: "Reviewer Attestation"
+      description: "Confirm the following"
+      options:
+        - label: "I have reviewed all user accounts for the systems listed above"
+          required: true
+        - label: "All identified issues have been remediated or have a documented remediation plan"
+          required: true
+        - label: "This review was completed in accordance with docs/compliance/ACCESS-REVIEW.md"
+          required: true

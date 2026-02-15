@@ -1,0 +1,112 @@
+name: "BCP/DRP Test"
+description: "SOC 2 A1.x / FedRAMP CP-9,CP-10 — Document annual business continuity and disaster recovery test"
+title: "[BCP/DRP Test] YYYY"
+labels:
+  - "compliance/soc2"
+  - "cadence/annual"
+  - "evidence/bcp-drp"
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Annual BCP/DRP Test
+        Complete this form to document the annual business continuity and disaster recovery test.
+        Reference: `docs/compliance/BCP-DRP.md` for the full Business Continuity / Disaster Recovery plan.
+
+        **Compliance mapping**: SOC 2 A1.2/A1.3 | FedRAMP CP-9, CP-10 | ISO 42001 Support
+
+  - type: input
+    id: test-date
+    attributes:
+      label: "Test Date"
+      description: "Date the BCP/DRP test was conducted"
+      placeholder: "YYYY-MM-DD"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: test-type
+    attributes:
+      label: "Test Type"
+      description: "What type of test was conducted?"
+      options:
+        - "Tabletop / walkthrough"
+        - "Partial failover (non-production)"
+        - "Full failover (production)"
+        - "Backup restoration test"
+    validations:
+      required: true
+
+  - type: input
+    id: facilitator
+    attributes:
+      label: "Test Lead"
+      description: "Person who led the BCP/DRP test"
+      placeholder: "Jane Smith"
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: "Test Scope"
+      description: "Which systems, services, and recovery procedures were tested?"
+      placeholder: |
+        - RDS failover to secondary region
+        - S3 cross-region replication validation
+        - Application deployment to DR environment
+        - DNS failover procedure
+    validations:
+      required: true
+
+  - type: textarea
+    id: rto-rpo
+    attributes:
+      label: "RTO/RPO Results"
+      description: "Document actual recovery times vs. targets"
+      placeholder: |
+        | System | Target RTO | Actual RTO | Target RPO | Actual RPO | Pass? |
+        |--------|-----------|------------|-----------|------------|-------|
+        | API    | 1 hour    | 45 min     | 15 min    | 10 min     | Yes   |
+        | DB     | 30 min    | 25 min     | 5 min     | 3 min      | Yes   |
+    validations:
+      required: true
+
+  - type: textarea
+    id: findings
+    attributes:
+      label: "Findings & Issues"
+      description: "Document any issues discovered during the test"
+      placeholder: |
+        - [ ] All systems recovered within RTO targets
+        - [ ] All data recovered within RPO targets
+        - [ ] Runbooks were accurate and current
+        - [ ] Contact lists were up to date
+        - [ ] Communication procedures worked as expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: improvements
+    attributes:
+      label: "Improvements & Action Items"
+      description: "Actions to improve BCP/DRP based on test results"
+      placeholder: |
+        - [ ] Update DNS failover TTL from 300s to 60s
+        - [ ] Add automated health check to DR environment
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: attestation
+    attributes:
+      label: "Test Lead Attestation"
+      description: "Confirm the following"
+      options:
+        - label: "The test was conducted in accordance with docs/compliance/BCP-DRP.md"
+          required: true
+        - label: "All RTO/RPO results have been documented accurately"
+          required: true
+        - label: "The BCP/DRP plan will be updated to reflect lessons learned"
+          required: true

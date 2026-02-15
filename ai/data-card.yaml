@@ -1,0 +1,30 @@
+# Data Card (Template)
+# EU AI Act Art. 10 | SOC 2 P, C1 | ISO 42001 Operation | NIST AI RMF MAP
+
+datasets:
+  - name: support-transcripts
+    owner: data-steward@example.com
+    lawful_basis: "contract | consent | legitimate interest | N/A"
+    personal_data: true
+    special_categories: false
+    license: "internal"
+    provenance: "Describe origin and rights-of-use"
+    minimization_measures:
+      - "Masking of PII fields"
+      - "Aggregation for analytics"
+    access_controls:
+      - "Role-based access; least privilege"
+    retention_policy: "Define retention + deletion cadence"
+    quality_checks:
+      - "Schema conformance"
+      - "Nulls/missing values thresholds"
+    statistical_properties:
+      balance_checks:
+        - "Locale"
+        - "Accent"
+      bias_probes:
+        - "Age"
+        - "Gender (where lawfully processed)"
+    dp_and_privacy_by_design:
+      - "Purpose limitation"
+      - "Default-deny egress from processing jobs"

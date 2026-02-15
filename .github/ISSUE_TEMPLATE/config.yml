@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "Security Incident"
+    url: "https://github.com/undercurrentai/AIPEA/blob/main/docs/compliance/IRP.md"
+    about: "Report security incidents via the Incident Response process (docs/compliance/IRP.md)"
+  - name: "Privacy / Data Subject Request"
+    url: "https://github.com/undercurrentai/AIPEA/blob/main/docs/compliance/DSR-PRIVACY-OPERATIONS.md"
+    about: "Submit data subject requests via the DSR portal (docs/compliance/DSR-PRIVACY-OPERATIONS.md)"

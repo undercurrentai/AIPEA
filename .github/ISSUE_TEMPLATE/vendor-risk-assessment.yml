@@ -1,0 +1,87 @@
+name: "Vendor Risk Assessment"
+description: "SOC 2 CC9.x / FedRAMP SA-12 — Assess third-party vendor risk posture"
+title: "[Vendor Risk] Q_ YYYY"
+labels:
+  - "compliance/soc2"
+  - "cadence/quarterly"
+  - "evidence/vendor-risk"
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Quarterly Vendor Risk Assessment
+        Complete this form to document the periodic review of third-party vendor risk.
+        Reference: `docs/compliance/VENDOR-RISK.md` for full procedure.
+
+        **Compliance mapping**: SOC 2 CC9.1/CC9.2 | FedRAMP SA-12 | ISO 42001 Support | NIST AI RMF GOVERN
+
+  - type: dropdown
+    id: quarter
+    attributes:
+      label: "Review Period"
+      description: "Which quarter does this review cover?"
+      options:
+        - "Q1 (Jan–Mar)"
+        - "Q2 (Apr–Jun)"
+        - "Q3 (Jul–Sep)"
+        - "Q4 (Oct–Dec)"
+    validations:
+      required: true
+
+  - type: input
+    id: reviewer
+    attributes:
+      label: "Reviewer Name"
+      description: "Person conducting this vendor review"
+      placeholder: "Jane Smith"
+    validations:
+      required: true
+
+  - type: textarea
+    id: vendors-reviewed
+    attributes:
+      label: "Vendors Reviewed"
+      description: "List all vendors assessed in this cycle with their risk tier"
+      placeholder: |
+        | Vendor | Service | Data Access | Risk Tier | SOC 2 Report? |
+        |--------|---------|-------------|-----------|---------------|
+        | AWS    | Cloud   | Yes         | Critical  | Yes (Type II) |
+        | Stripe | Payments| Yes (PCI)   | High      | Yes (Type II) |
+    validations:
+      required: true
+
+  - type: textarea
+    id: risk-findings
+    attributes:
+      label: "Risk Findings"
+      description: "Document any vendor risk concerns, SLA breaches, or compliance gaps"
+      placeholder: |
+        - [ ] All critical vendors have current SOC 2 / ISO 27001 reports
+        - [ ] No vendor SLA breaches in review period
+        - [ ] All vendor contracts include security/privacy clauses
+        - [ ] Subprocessor lists reviewed for changes
+    validations:
+      required: true
+
+  - type: textarea
+    id: remediation
+    attributes:
+      label: "Remediation Actions"
+      description: "Actions taken for any findings (or 'None required' if clean)"
+      placeholder: "Requested updated SOC 2 report from vendor X. Added DPA to contract with vendor Y."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: attestation
+    attributes:
+      label: "Reviewer Attestation"
+      description: "Confirm the following"
+      options:
+        - label: "I have reviewed all vendors at or above the designated risk tier"
+          required: true
+        - label: "All identified risks have mitigations documented or in progress"
+          required: true
+        - label: "This review was completed in accordance with docs/compliance/VENDOR-RISK.md"
+          required: true
