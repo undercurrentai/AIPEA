@@ -79,7 +79,7 @@ production Agora IV codebase:
 5. **Air-gap ready** — Tier 0 (Offline) operates with zero network connectivity,
    using SQLite + zlib compression + optional Ollama SLMs.
 6. **Production-proven** — Every class, method, and pattern in this spec has been
-   deployed and tested in AgoraIV (2,188 tests, 76.49% coverage, v4.1.48).
+   deployed and tested in AgoraIV (2,187 passed + 1 skipped, 77.99% coverage, v4.1.49).
 
 ### 1.4 Provenance
 

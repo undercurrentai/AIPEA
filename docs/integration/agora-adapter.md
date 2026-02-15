@@ -62,7 +62,7 @@ After migration, run:
 
 ```bash
 cd /Projects/AgoraIV
-make test  # All 2,188+ tests must pass
+make test  # All 2,187+ tests must pass
 ```
 
 Zero test changes expected — shims preserve all import paths.

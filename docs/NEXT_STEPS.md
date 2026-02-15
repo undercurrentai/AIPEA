@@ -168,7 +168,7 @@ pytest tests/ -v --cov=src/aipea --cov-report=term-missing
 ## Step 5: Write AgoraIV Adapter Shims (Effort: M) — COMPLETE
 
 ### What
-Replace AgoraIV's AIPEA modules with thin re-export shims that import from the `aipea` package. This preserves all existing import paths so AgoraIV's 2,188+ tests pass without changes.
+Replace AgoraIV's AIPEA modules with thin re-export shims that import from the `aipea` package. This preserves all existing import paths so AgoraIV's 2,187+ tests pass without changes.
 
 ### Prerequisite
 - AIPEA package installed in AgoraIV's venv: `pip install -e /Projects/AIPEA`
@@ -269,7 +269,7 @@ from aipea.enhancer import get_model_family, is_offline_model  # noqa: F401
 cd /Projects/AgoraIV
 source venv_agora/bin/activate
 pip install -e /Projects/AIPEA
-make test  # ALL 2,188+ tests must pass
+make test  # ALL 2,187+ tests must pass
 make lint  # Zero errors (noqa comments handle F401/F403)
 make type  # May need type: ignore for wildcard imports
 ```
@@ -359,7 +359,7 @@ source venv_agora/bin/activate
 make all  # fmt, lint, type, test, sec
 
 # Expected:
-# - 2,188+ tests pass (zero regressions)
+# - 2,187+ tests pass (zero regressions)
 # - Coverage >= 75%
 # - Zero lint errors
 # - Zero type errors
