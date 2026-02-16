@@ -65,7 +65,7 @@ async def main():
     )
     print(result.enhanced_prompt)
     print(f"Processing tier: {result.processing_tier}")
-    print(f"Security level: {result.security_level}")
+    print(f"Security context: {result.security_context.security_level}")
 
 asyncio.run(main())
 ```
@@ -73,22 +73,20 @@ asyncio.run(main())
 ### Security Scanning
 
 ```python
-from aipea import SecurityScanner, SecurityContext, SecurityLevel
+from aipea import SecurityScanner, SecurityContext, SecurityLevel, ComplianceMode
 
 scanner = SecurityScanner()
-
-# Scan for PII, PHI, classification markers, and injection attempts
-result = scanner.scan("Patient John Doe, SSN 123-45-6789, diagnosed with...")
-print(result.has_pii)        # True
-print(result.has_phi)        # True
-print(result.risk_level)     # SecurityLevel.CONFIDENTIAL
-print(result.findings)       # Detailed findings list
-
-# Create a security context for downstream processing
 context = SecurityContext(
     security_level=SecurityLevel.UNCLASSIFIED,
     compliance_mode=ComplianceMode.HIPAA,
 )
+
+# Scan for PII, PHI, classification markers, and injection attempts
+result = scanner.scan("Patient John Doe, SSN 123-45-6789, diagnosed with...", context)
+print(result.has_pii())       # True
+print(result.has_phi())       # True
+print(result.is_blocked)      # False (PII is flagged, not blocked)
+print(result.flags)           # ["pii_detected:ssn", "phi_detected:diagnosis", ...]
 ```
 
 ### Query Analysis
@@ -99,11 +97,11 @@ from aipea import QueryAnalyzer
 analyzer = QueryAnalyzer()
 analysis = analyzer.analyze("Compare CRISPR-Cas9 efficiency across cell types in 2026 studies")
 
-print(analysis.query_type)        # QueryType.RESEARCH
-print(analysis.processing_tier)   # ProcessingTier.STRATEGIC
-print(analysis.complexity_score)  # 0.85
-print(analysis.needs_current)     # True (detected temporal reference)
-print(analysis.detected_domains)  # ["biology", "genetics"]
+print(analysis.query_type)          # QueryType.RESEARCH
+print(analysis.suggested_tier)      # ProcessingTier.STRATEGIC
+print(analysis.complexity)          # 0.85
+print(analysis.needs_current_info)  # True (detected temporal reference)
+print(analysis.domain_indicators)   # ["biology", "genetics"]
 ```
 
 ### Offline Knowledge Base
@@ -114,7 +112,6 @@ from aipea import OfflineKnowledgeBase, StorageTier, KnowledgeDomain
 
 async def main():
     kb = OfflineKnowledgeBase("/path/to/knowledge.db", StorageTier.STANDARD)
-    await kb.initialize()
 
     # Add domain knowledge
     await kb.add_knowledge(
@@ -124,10 +121,10 @@ async def main():
 
     # Search knowledge base
     results = await kb.search("attention mechanism", limit=5)
-    for result in results:
-        print(f"[{result.relevance:.2f}] {result.content[:100]}")
+    for node in results:
+        print(f"[{node.relevance_score:.2f}] {node.content[:100]}")
 
-    await kb.close()
+    kb.close()
 
 asyncio.run(main())
 ```
@@ -135,19 +132,19 @@ asyncio.run(main())
 ### Search Orchestration
 
 ```python
-from aipea import SearchOrchestrator, SearchStrategy
+from aipea import SearchOrchestrator
 
 orchestrator = SearchOrchestrator()
 
-# Multi-provider search with automatic strategy selection
+# Multi-provider search with strategy selection
 results = await orchestrator.search(
     "quantum error correction 2026",
-    strategy=SearchStrategy.COMPREHENSIVE,
-    max_results=10,
+    strategy="multi_source",
+    num_results=10,
 )
 
-for result in results:
-    print(f"[{result.provider.value}] {result.title}: {result.url}")
+for result in results.results:
+    print(f"[{results.source}] {result.title}: {result.url}")
 ```
 
 ## Integration with Agora IV
@@ -179,6 +176,7 @@ make lint        # Ruff check + format check
 make type        # mypy strict mode
 make test        # pytest with coverage (75% minimum)
 make sec         # Security-focused lint rules
+make ci          # CI parity (lint + type + test, no autofix)
 ```
 
 ## Testing

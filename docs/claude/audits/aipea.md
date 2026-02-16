@@ -54,13 +54,14 @@ parent: ../../CLAUDE.md
 |--------|-------|---------|
 | pyproject.toml | Build system | hatchling build backend — supports `hatch build` for PyPI |
 | pyproject.toml | Tool config | ruff line-length=100, py312 target, S-rules for bandit, mypy strict |
-| Makefile | Build targets | 8 targets: install, fmt, lint, type, test, sec, all, ci |
-| CI workflow | Gate config | 3 jobs: lint, typecheck, test (matrix: py3.11 + py3.12) |
+| Makefile | Build targets | 13 targets: install, fmt, lint, type, test, sec, all, ci, mut, sbom, score, deps, perf |
+| pytest | Test suite | 357 passed, 15 skipped, 90.43% coverage (updated 2026-02-15) |
+| CI workflow | Gate config | 3 jobs: lint, typecheck, test (matrix: py3.11 + py3.12); also scaffold-checks, compliance-nightly, compliance-evidence-scheduler workflows |
 | __init__.py | Public API | 30 exports in `__all__`, version = "1.0.0" |
 | pyproject.toml | License | MIT license, >=3.11 required |
 | Exa search | PyPI publishing 2025/2026 | Trusted Publishers (OIDC) is standard; `pypa/gh-action-pypi-publish@release/v1` |
 | Context7 | hatch build docs | `hatch build` creates sdist + wheel; `hatch version` for version management |
-| wc -l src/aipea/*.py | Source LOC | 6,212 lines across all source modules (updated 2026-02-15) |
+| wc -l src/aipea/*.py | Source LOC | 6,219 lines across all source modules (updated 2026-02-15) |
 
 ### 2.2 Discrepancies Found
 
@@ -78,7 +79,7 @@ parent: ../../CLAUDE.md
 |------|----------|----------|
 | Standard | YES | Default baseline, scaffold-adopted governance artifacts |
 | AI-Governed | PARTIAL | ai/ directory added via scaffold adoption (2026-02-14); model-card.yaml, risk-register.yaml, data-card.yaml present |
-| Security-First | NO | No SAST/DAST workflows (ruff S-rules only) |
+| Security-First | PARTIAL | Ruff S-rules in CI; Trivy + safety in compliance-nightly workflow |
 | Regulated | PARTIAL | Compliance procedures in docs/compliance/ via scaffold adoption |
 | Agentic Safety | NO | No multi-agent patterns |
 
@@ -188,7 +189,7 @@ parent: ../../CLAUDE.md
 | 2026-02-14 | CI workflow read | Action versions | checkout@v4, setup-python@v5 | publish.yml consistency |
 | 2026-02-14 | Exa (plan phase) | "Python hatchling PyPI publish trusted publisher 2025 2026" | Trusted Publishers OIDC is standard; no API tokens needed | publish.yml + Section 6.5 |
 | 2026-02-14 | Context7 (plan phase) | hatch build docs | `hatch build` creates sdist + wheel in `dist/` | publish.yml build step |
-| 2026-02-14 | wc -l | Source LOC count | 6,088 lines in src/aipea/*.py | Section 0 Quick Reference |
+| 2026-02-14 | wc -l | Source LOC count | 6,088 lines in src/aipea/*.py (initial); updated to 6,219 on 2026-02-15 | Section 0 Quick Reference |
 | 2026-02-14 | __init__.py read | Public API surface | 30 exports in `__all__` | Section 0 Quick Reference |
 | 2026-02-14 | Root CLAUDE.md read | Parent policies | Secret handling, evidence requirements, reality-first | Section 1.4 inheritance |
 
