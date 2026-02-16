@@ -1,5 +1,5 @@
 # CLAUDE.md - AIPEA
-> Version: 3.0.0 | Updated: 2026-02-14 | Owner: @joshuakirby
+> Version: 3.0.0 | Updated: 2026-02-16 | Owner: @joshuakirby
 
 ```yaml
 version: 3.0.0
@@ -8,7 +8,7 @@ tier: 2  # Standard (~6K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
 inherits_from: ../../CLAUDE.md  # Undercurrent Holdings root
 maintainer: joshuakirby
-last_audit: 2026-02-14
+last_audit: 2026-02-16
 protocol: v4.0
 token_budget: 8000
 ```
@@ -396,7 +396,7 @@ Audit before quarterly schedule if:
 - Public API surface changes significantly (>3 exports)
 - New CI/CD workflow added
 
-**Audit schedule**: Quarterly (next: 2026-05-14)
+**Audit schedule**: Quarterly (next: 2026-05-16)
 
 ---
 

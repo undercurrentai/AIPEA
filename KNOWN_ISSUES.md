@@ -22,14 +22,14 @@ Issues found during hybrid bug hunts but deferred (low priority or design decisi
 ## Wave 4 Deferred Findings (2026-02-15)
 
 ### 17. Blocked/passthrough paths skip compliance_distribution stats update
-- **File**: `src/aipea/enhancer.py:843-894`
+- **File**: `src/aipea/enhancer.py:410-458` (early returns in `enhance()`)
 - **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Stats are best-effort (see #1). When enhance() returns early due to security block or passthrough, the compliance_distribution counter is not incremented. Fix: move stats update before early return.
+- **Reason deferred**: Stats are best-effort (see #1). When enhance() returns early due to security block or passthrough, the compliance_distribution counter is not incremented (stats update is at line 530, after the early returns). Fix: move stats update before early return.
 
 ### 18. Unreachable temporal suggestion branch in `suggest_enhancements`
 - **File**: `src/aipea/analyzer.py:761`
 - **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: The temporal enhancement suggestion for `QueryType.TEMPORAL` queries is unreachable because the preceding `RESEARCH` branch always matches first (both share similar confidence thresholds). Not harmful — just dead code. Fix: reorder branches or add explicit temporal check.
+- **Reason deferred**: The condition `analysis.needs_current_info and not analysis.temporal_markers` is always False because `needs_current_info` is only set True when temporal markers ARE found (in `_detect_temporal_needs`). Not harmful — just dead code. Fix: change condition or remove the branch.
 
 ### 19. `_is_regex_safe` rejects possessive quantifiers valid in Python 3.11+
 - **File**: `src/aipea/security.py:297-310`
@@ -37,9 +37,9 @@ Issues found during hybrid bug hunts but deferred (low priority or design decisi
 - **Reason deferred**: Python 3.11+ (PEP 679) supports possessive quantifiers (`a++`, `a*+`) which are actually ReDoS-safe. The safety checker incorrectly flags them because it detects adjacent quantifiers. Fix: add possessive quantifier exception to the checker. Not urgent since no current patterns use possessive quantifiers.
 
 ### 20. Unvalidated `search_context` type in `EnhancedQuery`
-- **File**: `src/aipea/enhancer.py:76-78`
+- **File**: `src/aipea/engine.py:1020-1078` (`TacticalTierProcessor.process()`)
 - **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: `TacticalTierProcessor.process()` passes `search_context` to `EnhancementResult` without type validation. If a non-SearchContext object is passed, it will fail at attribute access time rather than at construction. Fix: add isinstance check or type annotation enforcement.
+- **Reason deferred**: `TacticalTierProcessor.process()` extracts `search_context` from context dict (line 1020) and passes it to `EnhancedQuery` (line 1078) without type validation at construction time. The isinstance check at line 1034 only guards formatting, not construction. Fix: add isinstance check or type annotation enforcement.
 
 ## Wave 3 Deferred Findings (2026-02-15)
 
@@ -93,7 +93,7 @@ Issues found during hybrid bug hunts but deferred (low priority or design decisi
 ## Wave 1 Deferred Findings
 
 ### 1. `_stats` dict not thread-safe on AIPEAEnhancer singleton
-- **File**: `src/aipea/enhancer.py:348-355, 843-894`
+- **File**: `src/aipea/enhancer.py:349-357` (init), `528-530` (update)
 - **Severity**: MEDIUM | **Confidence**: MEDIUM
 - **Reason deferred**: Stats are approximate by nature; adding locks would add overhead to every enhance() call. Document that stats are best-effort.
 

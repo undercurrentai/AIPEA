@@ -189,7 +189,7 @@ parent: ../../CLAUDE.md
 | 2026-02-14 | CI workflow read | Action versions | checkout@v4, setup-python@v5 | publish.yml consistency |
 | 2026-02-14 | Exa (plan phase) | "Python hatchling PyPI publish trusted publisher 2025 2026" | Trusted Publishers OIDC is standard; no API tokens needed | publish.yml + Section 6.5 |
 | 2026-02-14 | Context7 (plan phase) | hatch build docs | `hatch build` creates sdist + wheel in `dist/` | publish.yml build step |
-| 2026-02-14 | wc -l | Source LOC count | 6,088 lines in src/aipea/*.py (initial); updated to 6,249 on 2026-02-15 | Section 0 Quick Reference |
+| 2026-02-14 | wc -l | Source LOC count | 6,088 lines in src/aipea/*.py (initial); 6,249 on 2026-02-15; 6,289 on 2026-02-16 | Section 0 Quick Reference |
 | 2026-02-14 | __init__.py read | Public API surface | 30 exports in `__all__` | Section 0 Quick Reference |
 | 2026-02-14 | Root CLAUDE.md read | Parent policies | Secret handling, evidence requirements, reality-first | Section 1.4 inheritance |
 
@@ -204,4 +204,14 @@ parent: ../../CLAUDE.md
 
 ---
 
+## 9. Post-Audit Amendments
+
+| Date | Change | Detail |
+|------|--------|--------|
+| 2026-02-15 | Metrics update | Bug hunt waves 1-4: 357→375 tests, 90.43%→91.62% coverage, 6,249→6,279 LOC |
+| 2026-02-16 | Metrics update | Bug hunt wave 5: 375→378 tests, 91.62%→91.59% coverage, 6,279→6,289 LOC |
+| 2026-02-16 | CLAUDE.md date fields | Updated `Updated:` to 2026-02-16, `last_audit:` to 2026-02-16 |
+| 2026-02-16 | KNOWN_ISSUES.md | 23 items across waves 1-5 (was 0 at audit time) |
+
 *Audit completed: 2026-02-14 | Auditor: Claude Code (Opus 4.6) | Protocol: v4.0*
+*Last amended: 2026-02-16*
