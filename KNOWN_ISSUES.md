@@ -22,7 +22,7 @@ Issues found during hybrid bug hunts but deferred (low priority or design decisi
 ### 20. Unvalidated `search_context` type in `EnhancedQuery`
 - **File**: `src/aipea/enhancer.py:76-78`
 - **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: `TacticalTierProcessor.process()` passes `search_context` to `EnhancedQuery` without type validation. If a non-SearchContext object is passed, it will fail at attribute access time rather than at construction. Fix: add isinstance check or type annotation enforcement.
+- **Reason deferred**: `TacticalTierProcessor.process()` passes `search_context` to `EnhancementResult` without type validation. If a non-SearchContext object is passed, it will fail at attribute access time rather than at construction. Fix: add isinstance check or type annotation enforcement.
 
 ## Wave 3 Deferred Findings (2026-02-15)
 

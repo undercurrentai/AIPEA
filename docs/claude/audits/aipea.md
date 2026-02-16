@@ -61,7 +61,7 @@ parent: ../../CLAUDE.md
 | pyproject.toml | License | MIT license, >=3.11 required |
 | Exa search | PyPI publishing 2025/2026 | Trusted Publishers (OIDC) is standard; `pypa/gh-action-pypi-publish@release/v1` |
 | Context7 | hatch build docs | `hatch build` creates sdist + wheel; `hatch version` for version management |
-| wc -l src/aipea/*.py | Source LOC | 6,266 lines across all source modules (updated 2026-02-15) |
+| wc -l src/aipea/*.py | Source LOC | 6,279 lines across all source modules (updated 2026-02-16) |
 
 ### 2.2 Discrepancies Found
 
