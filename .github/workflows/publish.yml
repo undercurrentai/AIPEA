@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   quality-gate:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
@@ -31,7 +31,7 @@ jobs:
 
   publish:
     needs: quality-gate
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: release
     permissions:
       id-token: write

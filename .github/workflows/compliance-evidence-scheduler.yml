@@ -55,7 +55,7 @@ env:
 
 jobs:
   determine-schedule:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       is_quarterly: ${{ steps.check.outputs.is_quarterly }}
       is_monthly: ${{ steps.check.outputs.is_monthly }}
@@ -111,7 +111,7 @@ jobs:
   quarterly-access-review:
     needs: determine-schedule
     if: needs.determine-schedule.outputs.is_quarterly == 'true' && (github.event.inputs.evidence_type == '' || github.event.inputs.evidence_type == 'access-review')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Check for existing access review issue
         id: check_existing
@@ -171,7 +171,7 @@ jobs:
   quarterly-vendor-risk:
     needs: determine-schedule
     if: needs.determine-schedule.outputs.is_quarterly == 'true' && (github.event.inputs.evidence_type == '' || github.event.inputs.evidence_type == 'vendor-risk')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Check for existing vendor risk issue
         id: check_existing
@@ -231,7 +231,7 @@ jobs:
   quarterly-incident-drill:
     needs: determine-schedule
     if: needs.determine-schedule.outputs.is_quarterly == 'true' && (github.event.inputs.evidence_type == '' || github.event.inputs.evidence_type == 'incident-drill')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Check for existing incident drill issue
         id: check_existing
@@ -292,7 +292,7 @@ jobs:
   quarterly-fsi-emergency-test:
     needs: determine-schedule
     if: needs.determine-schedule.outputs.is_quarterly == 'true' && (github.event.inputs.evidence_type == '' || github.event.inputs.evidence_type == 'fsi-emergency-test')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Check for existing FSI test issue
         id: check_existing
@@ -353,7 +353,7 @@ jobs:
   monthly-postmarket-monitoring:
     needs: determine-schedule
     if: needs.determine-schedule.outputs.is_monthly == 'true' && (github.event.inputs.evidence_type == '' || github.event.inputs.evidence_type == 'postmarket-monitoring')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Check for existing post-market monitoring issue
         id: check_existing
@@ -414,7 +414,7 @@ jobs:
   annual-bcp-drp-test:
     needs: determine-schedule
     if: needs.determine-schedule.outputs.is_annual == 'true' && (github.event.inputs.evidence_type == '' || github.event.inputs.evidence_type == 'bcp-drp-test')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Check for existing BCP/DRP test issue
         id: check_existing
@@ -482,19 +482,25 @@ jobs:
       - monthly-postmarket-monitoring
       - annual-bcp-drp-test
     if: always() && contains(needs.*.result, 'failure')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Create failure notification issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           FAILED_JOBS=""
-          if [ "${{ needs.quarterly-access-review.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-access-review\n"; fi
-          if [ "${{ needs.quarterly-vendor-risk.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-vendor-risk\n"; fi
-          if [ "${{ needs.quarterly-incident-drill.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-incident-drill\n"; fi
-          if [ "${{ needs.quarterly-fsi-emergency-test.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-fsi-emergency-test\n"; fi
-          if [ "${{ needs.monthly-postmarket-monitoring.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- monthly-postmarket-monitoring\n"; fi
-          if [ "${{ needs.annual-bcp-drp-test.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- annual-bcp-drp-test\n"; fi
+          if [ "${{ needs.quarterly-access-review.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-access-review
+"; fi
+          if [ "${{ needs.quarterly-vendor-risk.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-vendor-risk
+"; fi
+          if [ "${{ needs.quarterly-incident-drill.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-incident-drill
+"; fi
+          if [ "${{ needs.quarterly-fsi-emergency-test.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-fsi-emergency-test
+"; fi
+          if [ "${{ needs.monthly-postmarket-monitoring.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- monthly-postmarket-monitoring
+"; fi
+          if [ "${{ needs.annual-bcp-drp-test.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- annual-bcp-drp-test
+"; fi
           created=false
           for attempt in 1 2 3; do
             if gh issue create \
