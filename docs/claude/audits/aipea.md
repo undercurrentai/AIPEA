@@ -55,7 +55,7 @@ parent: ../../CLAUDE.md
 | pyproject.toml | Build system | hatchling build backend — supports `hatch build` for PyPI |
 | pyproject.toml | Tool config | ruff line-length=100, py312 target, S-rules for bandit, mypy strict |
 | Makefile | Build targets | 13 targets: install, fmt, lint, type, test, sec, all, ci, mut, sbom, score, deps, perf |
-| pytest | Test suite | 366 passed, 15 skipped, 90.71% coverage (updated 2026-02-15) |
+| pytest | Test suite | 375 passed, 15 skipped, 91.62% coverage (updated 2026-02-15) |
 | CI workflow | Gate config | 3 jobs: lint, typecheck, test (matrix: py3.11 + py3.12); also scaffold-checks, compliance-nightly, compliance-evidence-scheduler workflows |
 | __init__.py | Public API | 30 exports in `__all__`, version = "1.0.0" |
 | pyproject.toml | License | MIT license, >=3.11 required |
