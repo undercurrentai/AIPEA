@@ -31,6 +31,8 @@ from aipea.enhancer import (
     reset_enhancer,
 )
 from aipea.models import QueryAnalysis
+from aipea.search import SearchContext as AIPEASearchContext
+from aipea.search import SearchResult
 from aipea.security import ComplianceMode, ScanResult, SecurityContext, SecurityLevel
 
 # =============================================================================
@@ -470,6 +472,60 @@ class TestAIPEAEnhancerEnhance:
         assert enhancer._is_offline_required(
             SecurityLevel.UNCLASSIFIED, ComplianceMode.TACTICAL, False
         )
+
+
+class TestAIPEAEnhancerEnhanceForModels:
+    """Tests for AIPEAEnhancer.enhance_for_models()."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_search_context_not_duplicated_in_model_prompt(
+        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    ) -> None:
+        """Model-specific prompt generation should not re-inject existing context."""
+        enhancer = AIPEAEnhancer()
+        shared_url = "https://example.com/doc"
+
+        base_result = EnhancementResult(
+            original_query="test query",
+            enhanced_prompt=(
+                "Base prompt with existing context.\n\n"
+                "Relevant Search Context:\n"
+                "1. Doc\n"
+                f"   URL: {shared_url}\n"
+                "   details"
+            ),
+            processing_tier=ProcessingTier.TACTICAL,
+            security_context=SecurityContext(),
+            query_analysis=QueryAnalysis(
+                query="test query",
+                query_type=QueryType.TECHNICAL,
+                complexity=0.5,
+                confidence=0.8,
+                needs_current_info=False,
+                suggested_tier=ProcessingTier.TACTICAL,
+            ),
+            search_context=AIPEASearchContext(
+                query="test query",
+                results=[
+                    SearchResult(
+                        title="Doc",
+                        url=shared_url,
+                        snippet="details",
+                        score=0.9,
+                    )
+                ],
+                source="exa",
+                confidence=0.9,
+            ),
+        )
+
+        with patch.object(enhancer, "enhance", new_callable=AsyncMock, return_value=base_result):
+            requests = await enhancer.enhance_for_models("test query", ["gpt-4"])
+
+        assert requests["gpt-4"].enhanced_prompt.count(shared_url) == 1
 
 
 # =============================================================================

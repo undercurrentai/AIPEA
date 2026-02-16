@@ -571,11 +571,9 @@ class AIPEAEnhancer:
             model_prompt = await self._prompt_engine.create_model_specific_prompt(
                 base_prompt=base_result.enhanced_prompt,
                 model_type=model_family,
-                search_context=(
-                    SearchContext.from_aipea_context(base_result.search_context)
-                    if base_result.search_context
-                    else None
-                ),
+                # base_result.enhanced_prompt already contains any gathered
+                # search context from enhance(); avoid injecting it twice.
+                search_context=None,
             )
 
             results[model_id] = EnhancedRequest(
