@@ -159,6 +159,7 @@ class OllamaOfflineClient:
             )
             if result.returncode != 0:
                 logger.warning(f"Ollama list failed: {result.stderr}")
+                self._available_models = []
                 return []
 
             models: list[OllamaModelInfo] = []

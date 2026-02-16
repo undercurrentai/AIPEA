@@ -1670,6 +1670,21 @@ class TestOllamaGetModelsErrorCaching:
         assert result == []
         assert client._available_models == [], "_available_models should be cached as [] on error"
 
+    @pytest.mark.asyncio
+    async def test_nonzero_returncode_caches_empty_list(self):
+        """Non-zero returncode from 'ollama list' should cache _available_models = []."""
+        client = OllamaOfflineClient()
+        assert client._available_models is None
+
+        mock_result = SimpleNamespace(returncode=1, stdout="", stderr="daemon not running")
+        with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
+            result = await client.get_available_models()
+
+        assert result == []
+        assert client._available_models == [], (
+            "_available_models should be cached on non-zero returncode"
+        )
+
 
 class TestOllamaGenerateErrorNotDoubleWrapped:
     """Regression: RuntimeError from failed ollama run must not be double-wrapped."""
