@@ -408,6 +408,7 @@ class AIPEAEnhancer:
         # If enhancement is disabled, pass through
         if not self._enable_enhancement:
             self._stats["queries_passthrough"] += 1
+            self._stats["compliance_distribution"][compliance_mode.value] += 1
             return self._create_passthrough_result(
                 query, model_id, security_level, compliance_mode, start_time
             )
@@ -422,6 +423,7 @@ class AIPEAEnhancer:
         # Enforce compliance-mode model restrictions and global forbidden list
         if not compliance_handler.validate_model(model_id):
             self._stats["queries_blocked"] += 1
+            self._stats["compliance_distribution"][compliance_mode.value] += 1
             enhancement_notes.append(
                 f"Model '{model_id}' is not allowed in compliance mode '{compliance_mode.value}'"
             )
@@ -443,6 +445,7 @@ class AIPEAEnhancer:
 
         if scan_result.is_blocked:
             self._stats["queries_blocked"] += 1
+            self._stats["compliance_distribution"][compliance_mode.value] += 1
             enhancement_notes.append(
                 f"Query blocked due to security scan: {', '.join(scan_result.flags)}"
             )

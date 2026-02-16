@@ -362,7 +362,8 @@ class TestExaSearchProvider:
             result = await provider.search("test query", num_results=0)
 
         assert len(result.results) == 1
-        assert result.confidence == 0.0
+        # num_results=0 is clamped to 1, so confidence = 1/1 = 1.0
+        assert result.confidence == 1.0
 
 
 # =============================================================================
@@ -439,7 +440,8 @@ class TestFirecrawlProvider:
             result = await provider.search("test query", num_results=0)
 
         assert len(result.results) == 1
-        assert result.confidence == 0.0
+        # num_results=0 is clamped to 1, so confidence = 1/1 = 1.0
+        assert result.confidence == 1.0
 
     @pytest.mark.asyncio
     async def test_deep_research_enabled(self) -> None:
@@ -898,6 +900,125 @@ class TestHTTPTimeoutEnvVar:
 
         assert isinstance(HTTP_TIMEOUT, float)
         assert HTTP_TIMEOUT > 0
+
+
+# =============================================================================
+# WAVE 6 BUG-FIX REGRESSION TESTS
+# =============================================================================
+
+
+class TestNaNBypassSearchResult:
+    """Regression #8: NaN values must be caught before clamping."""
+
+    def test_nan_score_defaults_to_zero(self) -> None:
+        """SearchResult with NaN score should default to 0.0."""
+        result = SearchResult(
+            title="Test", url="http://example.com", snippet="test", score=float("nan")
+        )
+        assert result.score == 0.0
+
+    def test_nan_confidence_defaults_to_zero(self) -> None:
+        """SearchContext with NaN confidence should default to 0.0."""
+        ctx = SearchContext(query="test", confidence=float("nan"))
+        assert ctx.confidence == 0.0
+
+
+class TestMultiSourceConcurrency:
+    """Regression #4: _multi_source_search should use asyncio.gather."""
+
+    @pytest.mark.asyncio
+    async def test_multi_source_calls_both_providers(self) -> None:
+        """Both Exa and Firecrawl should be called in multi_source strategy."""
+        orchestrator = SearchOrchestrator(
+            exa_enabled=True,
+            firecrawl_enabled=True,
+            exa_api_key="test-key",
+            firecrawl_api_key="test-key",
+        )
+
+        exa_called = False
+        firecrawl_called = False
+
+        async def mock_exa_search(query: str, num_results: int = 5) -> SearchContext:
+            nonlocal exa_called
+            exa_called = True
+            return SearchContext(
+                query=query,
+                results=[SearchResult(title="Exa", url="http://exa.ai", snippet="exa result")],
+                source="exa",
+                confidence=0.8,
+            )
+
+        async def mock_firecrawl_search(query: str, num_results: int = 5) -> SearchContext:
+            nonlocal firecrawl_called
+            firecrawl_called = True
+            return SearchContext(
+                query=query,
+                results=[SearchResult(title="FC", url="http://firecrawl.dev", snippet="fc result")],
+                source="firecrawl",
+                confidence=0.7,
+            )
+
+        orchestrator.exa_provider.search = mock_exa_search  # type: ignore[assignment]
+        orchestrator.firecrawl_provider.search = mock_firecrawl_search  # type: ignore[assignment]
+
+        result = await orchestrator.search("test query", strategy="multi_source")
+        assert exa_called
+        assert firecrawl_called
+        assert len(result.results) == 2
+
+
+class TestNumResultsZeroConfidence:
+    """Regression #15: num_results=0 should not produce confidence 0.0 when results exist."""
+
+    @pytest.mark.asyncio
+    async def test_exa_num_results_zero_clamped(self) -> None:
+        """ExaSearchProvider should clamp num_results=0 to 1."""
+        provider = ExaSearchProvider(enabled=True, api_key="test-key")
+
+        class DummyResponse:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict:
+                return {
+                    "results": [
+                        {"title": "Test", "url": "http://test.com", "text": "content", "score": 0.8}
+                    ]
+                }
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = DummyResponse()
+
+        with patch("aipea.search.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value = mock_client_instance
+            result = await provider.search("test", num_results=0)
+
+        # With num_results clamped to 1, confidence should be 1.0 (1/1)
+        assert result.confidence == 1.0
+
+    @pytest.mark.asyncio
+    async def test_firecrawl_num_results_zero_clamped(self) -> None:
+        """FirecrawlProvider should clamp num_results=0 to 1."""
+        provider = FirecrawlProvider(enabled=True, api_key="test-key")
+
+        class DummyResponse:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict:
+                return {
+                    "data": [{"title": "Test", "url": "http://test.com", "markdown": "content"}]
+                }
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = DummyResponse()
+
+        with patch("aipea.search.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value = mock_client_instance
+            result = await provider.search("test", num_results=0)
+
+        assert result.confidence == 1.0
 
 
 if __name__ == "__main__":

@@ -1706,5 +1706,42 @@ class TestOllamaGenerateErrorNotDoubleWrapped:
             await client.generate("test", OfflineModel.PHI3_MINI)
 
 
+# =============================================================================
+# WAVE 6 BUG-FIX REGRESSION TESTS
+# =============================================================================
+
+
+class TestOllamaRaceCondition:
+    """Regression #9: Concurrent _check_ollama_availability must not race."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_check_ollama_only_probes_once(self):
+        """Multiple concurrent calls to _check_ollama_availability should probe Ollama once."""
+        processor = OfflineTierProcessor(use_ollama=True)
+
+        probe_count = 0
+
+        async def counting_get_best(_self_client):  # type: ignore[override]
+            nonlocal probe_count
+            probe_count += 1
+            # Simulate a slow probe
+            await asyncio.sleep(0.05)
+            return None
+
+        with patch.object(OllamaOfflineClient, "get_best_available_model", counting_get_best):
+            # Launch 5 concurrent availability checks
+            await asyncio.gather(
+                processor._check_ollama_availability(),
+                processor._check_ollama_availability(),
+                processor._check_ollama_availability(),
+                processor._check_ollama_availability(),
+                processor._check_ollama_availability(),
+            )
+
+        # With proper locking, only one probe should run
+        assert probe_count == 1
+        assert processor._ollama_checked is True
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

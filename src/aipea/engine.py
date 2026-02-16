@@ -749,6 +749,7 @@ class OfflineTierProcessor(TierProcessor):
         self._ollama_client: OllamaOfflineClient | None = None
         self._ollama_model: OfflineModel | None = None
         self._ollama_checked = False
+        self._ollama_lock = asyncio.Lock()
 
         logger.debug(
             "OfflineTierProcessor initialized with %d query types, ollama=%s",
@@ -791,29 +792,36 @@ class OfflineTierProcessor(TierProcessor):
         """Check if Ollama is available and select best model.
 
         This is called once on first process() call to avoid
-        repeated checks. The result is cached.
+        repeated checks. The result is cached. Uses asyncio.Lock
+        for double-checked locking to prevent concurrent first-call races.
         """
         if self._ollama_checked:
             return
 
-        self._ollama_checked = True
+        async with self._ollama_lock:
+            # Double-check after acquiring lock (concurrent callers may have finished)
+            if self._ollama_checked:  # pragma: no branch
+                return  # type: ignore[unreachable]
 
-        if not self._use_ollama:
-            logger.debug("Ollama disabled, using templates only")
-            return
+            if not self._use_ollama:
+                logger.debug("Ollama disabled, using templates only")
+                self._ollama_checked = True
+                return
 
-        try:
-            self._ollama_client = get_ollama_client()
-            self._ollama_model = await self._ollama_client.get_best_available_model()
+            try:
+                self._ollama_client = get_ollama_client()
+                self._ollama_model = await self._ollama_client.get_best_available_model()
 
-            if self._ollama_model:
-                logger.info(f"Offline mode using Ollama model: {self._ollama_model.value}")
-            else:
-                logger.info("No Ollama models available, using templates only")
-        except Exception as e:
-            logger.warning(f"Ollama check failed: {e}, using templates only")
-            self._ollama_client = None
-            self._ollama_model = None
+                if self._ollama_model:
+                    logger.info(f"Offline mode using Ollama model: {self._ollama_model.value}")
+                else:
+                    logger.info("No Ollama models available, using templates only")
+            except Exception as e:
+                logger.warning(f"Ollama check failed: {e}, using templates only")
+                self._ollama_client = None
+                self._ollama_model = None
+
+            self._ollama_checked = True
 
     async def process(
         self,

@@ -658,5 +658,37 @@ class TestWave4InvalidDomainRecovery:
         kb.close()
 
 
+class TestSearchLimitValidation:
+    """Regression tests for search() limit parameter validation."""
+
+    @pytest.fixture
+    def temp_db(self) -> Generator[str, None, None]:
+        """Create a temporary database file."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        yield db_path
+        if os.path.exists(db_path):
+            os.remove(db_path)
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_negative_limit_clamped_to_one(self, temp_db: str) -> None:
+        """Negative limit must not return all rows via SQLite LIMIT -1."""
+        with OfflineKnowledgeBase(temp_db, StorageTier.COMPACT) as kb:
+            await kb.add_knowledge("node one", KnowledgeDomain.GENERAL, relevance_score=0.8)
+            await kb.add_knowledge("node two", KnowledgeDomain.GENERAL, relevance_score=0.5)
+            results = await kb.search("test", limit=-1)
+            assert len(results) == 1, "limit=-1 should be clamped to 1, not return all rows"
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_zero_limit_clamped_to_one(self, temp_db: str) -> None:
+        """Zero limit must return at least 1 result."""
+        with OfflineKnowledgeBase(temp_db, StorageTier.COMPACT) as kb:
+            await kb.add_knowledge("node one", KnowledgeDomain.GENERAL, relevance_score=0.8)
+            results = await kb.search("test", limit=0)
+            assert len(results) == 1, "limit=0 should be clamped to 1"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

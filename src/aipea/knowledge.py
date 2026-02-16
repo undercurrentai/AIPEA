@@ -179,11 +179,12 @@ class OfflineKnowledgeBase:
         Should be called when the knowledge base is no longer needed,
         especially in test environments to avoid ResourceWarning.
         """
-        if self._conn is not None:
-            with contextlib.suppress(Exception):
-                self._conn.close()
-            self._conn = None
-            logger.debug("Database connection closed")
+        with self._db_lock:
+            if self._conn is not None:
+                with contextlib.suppress(Exception):
+                    self._conn.close()
+                self._conn = None
+                logger.debug("Database connection closed")
 
     def __enter__(self) -> OfflineKnowledgeBase:
         """Context manager entry."""
@@ -306,6 +307,7 @@ class OfflineKnowledgeBase:
         Returns:
             List of KnowledgeNode objects ordered by relevance
         """
+        limit = max(1, limit)
         logger.debug(
             f"Searching knowledge base: query_len={len(query)}, domain={domain}, limit={limit}"
         )

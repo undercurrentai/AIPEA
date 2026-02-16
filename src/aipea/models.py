@@ -7,6 +7,7 @@ between components and back to consumers.
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -37,6 +38,17 @@ class QueryAnalysis:
 
     def __post_init__(self) -> None:
         """Validate and clamp scores to valid ranges."""
+        # Replace NaN with 0.0 before clamping (NaN bypasses comparison operators)
+        if math.isnan(self.complexity):
+            logger.warning("QueryAnalysis complexity is NaN, defaulting to 0.0")
+            self.complexity = 0.0
+        if math.isnan(self.confidence):
+            logger.warning("QueryAnalysis confidence is NaN, defaulting to 0.0")
+            self.confidence = 0.0
+        if math.isnan(self.ambiguity_score):
+            logger.warning("QueryAnalysis ambiguity_score is NaN, defaulting to 0.0")
+            self.ambiguity_score = 0.0
+
         # Clamp complexity
         if not 0.0 <= self.complexity <= 1.0:
             logger.warning(

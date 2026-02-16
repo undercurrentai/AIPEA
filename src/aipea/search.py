@@ -22,8 +22,10 @@ Note: For offline/air-gapped environments, use OfflineKnowledgeBase instead.
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
+import math
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -38,7 +40,8 @@ logger = logging.getLogger(__name__)
 EXA_API_URL = "https://api.exa.ai/search"
 FIRECRAWL_API_URL = "https://api.firecrawl.dev/v1/search"
 try:
-    HTTP_TIMEOUT = float(os.environ.get("AIPEA_HTTP_TIMEOUT", "30.0"))
+    _raw_timeout = float(os.environ.get("AIPEA_HTTP_TIMEOUT", "30.0"))
+    HTTP_TIMEOUT = _raw_timeout if 0 < _raw_timeout < float("inf") else 30.0
 except (ValueError, TypeError):
     HTTP_TIMEOUT = 30.0
 
@@ -99,6 +102,9 @@ class SearchResult:
 
     def __post_init__(self) -> None:
         """Validate score is within valid range."""
+        if math.isnan(self.score):
+            logger.warning("SearchResult score is NaN, defaulting to 0.0")
+            self.score = 0.0
         if not 0.0 <= self.score <= 1.0:
             logger.warning(f"SearchResult score {self.score} outside [0, 1] range, clamping")
             self.score = max(0.0, min(1.0, self.score))
@@ -127,6 +133,9 @@ class SearchContext:
 
     def __post_init__(self) -> None:
         """Validate confidence is within valid range."""
+        if math.isnan(self.confidence):
+            logger.warning("SearchContext confidence is NaN, defaulting to 0.0")
+            self.confidence = 0.0
         if not 0.0 <= self.confidence <= 1.0:
             logger.warning(
                 f"SearchContext confidence {self.confidence} outside [0, 1] range, clamping"
@@ -390,6 +399,8 @@ class ExaSearchProvider(SearchProvider):
                 confidence=0.0,
             )
 
+        # Clamp num_results to at least 1 to avoid division-by-zero in confidence calc
+        num_results = max(1, num_results)
         logger.info(f"Exa search: query_len={len(query)}, num_results={num_results}")
 
         try:
@@ -513,6 +524,8 @@ class FirecrawlProvider(SearchProvider):
                 confidence=0.0,
             )
 
+        # Clamp num_results to at least 1 to avoid division-by-zero in confidence calc
+        num_results = max(1, num_results)
         logger.info(f"Firecrawl search: query_len={len(query)}, num_results={num_results}")
 
         try:
@@ -964,9 +977,11 @@ class SearchOrchestrator:
         """
         logger.debug("Executing multi_source strategy with Exa + Firecrawl")
 
-        # Get results from both providers
-        exa_context = await self.exa_provider.search(query, num_results)
-        firecrawl_context = await self.firecrawl_provider.search(query, num_results)
+        # Get results from both providers concurrently
+        exa_context, firecrawl_context = await asyncio.gather(
+            self.exa_provider.search(query, num_results),
+            self.firecrawl_provider.search(query, num_results),
+        )
 
         # Merge results
         if exa_context.is_empty() and firecrawl_context.is_empty():

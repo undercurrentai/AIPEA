@@ -353,40 +353,6 @@ class QueryRouter:
         else:
             return ProcessingTier.STRATEGIC  # Already at highest
 
-    def _should_escalate(
-        self,
-        analysis: QueryAnalysis,
-        current_tier: ProcessingTier,
-    ) -> bool:
-        """Determine if escalation to a higher tier is needed.
-
-        Escalation triggers:
-            - Confidence < 0.5
-            - Multiple domains detected
-            - High ambiguity score
-
-        Args:
-            analysis: The query analysis
-            current_tier: Current processing tier
-
-        Returns:
-            True if escalation is recommended
-        """
-        # Already at highest tier
-        if current_tier == ProcessingTier.STRATEGIC:
-            return False
-
-        # Low confidence triggers escalation
-        if analysis.confidence < 0.5:
-            return True
-
-        # Multiple domains suggest complex cross-domain query
-        if len(analysis.domain_indicators) > 2:
-            return True
-
-        # High ambiguity
-        return analysis.ambiguity_score > 0.7
-
 
 # =============================================================================
 # MAIN ANALYZER
@@ -452,6 +418,15 @@ class QueryAnalyzer:
         self._compiled_query_types: dict[QueryType, list[re.Pattern[str]]] = {}
         for qtype, patterns in self.QUERY_TYPE_PATTERNS.items():
             self._compiled_query_types[qtype] = [re.compile(p, re.IGNORECASE) for p in patterns]
+
+        # Pre-compile entity detection patterns (avoid recompilation per call)
+        self._cap_pattern = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b")
+        self._tech_pattern = re.compile(
+            r"\b(Python|JavaScript|TypeScript|React|Angular|Vue|Django|"
+            r"FastAPI|PostgreSQL|MongoDB|Redis|Docker|Kubernetes|AWS|"
+            r"Azure|GCP|OpenAI|Anthropic|Google|Microsoft|Apple)\b",
+            re.IGNORECASE,
+        )
 
         logger.debug(
             "QueryAnalyzer initialized with %d query types", len(self._compiled_query_types)
@@ -577,18 +552,11 @@ class QueryAnalyzer:
         entities: list[str] = []
 
         # Detect capitalized phrases (potential proper nouns)
-        cap_pattern = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b")
-        matches = cap_pattern.findall(query)
+        matches = self._cap_pattern.findall(query)
         entities.extend(matches)
 
         # Detect known technology patterns
-        tech_pattern = re.compile(
-            r"\b(Python|JavaScript|TypeScript|React|Angular|Vue|Django|"
-            r"FastAPI|PostgreSQL|MongoDB|Redis|Docker|Kubernetes|AWS|"
-            r"Azure|GCP|OpenAI|Anthropic|Google|Microsoft|Apple)\b",
-            re.IGNORECASE,
-        )
-        tech_matches = tech_pattern.findall(query)
+        tech_matches = self._tech_pattern.findall(query)
         entities.extend(tech_matches)
 
         # Deduplicate while preserving order
@@ -756,12 +724,6 @@ class QueryAnalyzer:
         word_count = len(query.split())
         if word_count < 5:
             suggestions.append("Adding more context would help provide a more accurate response.")
-
-        # Temporal suggestions
-        if analysis.needs_current_info and not analysis.temporal_markers:
-            suggestions.append(
-                "Specify the time frame if you need information from a particular period."
-            )
 
         # Domain-specific suggestions
         if len(analysis.domain_indicators) > 1:
