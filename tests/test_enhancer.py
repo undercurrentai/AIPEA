@@ -495,6 +495,38 @@ class TestAIPEAEnhancerEnhance:
             SecurityLevel.UNCLASSIFIED, ComplianceMode.TACTICAL, False
         )
 
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_scan_result_force_offline_propagated(
+        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    ) -> None:
+        """Scanner's force_offline recommendation is propagated to offline check."""
+        enhancer = AIPEAEnhancer()
+        analysis = self._make_analysis()
+        scan_with_force = ScanResult(flags=["classified_marker"], force_offline=True)
+
+        with (
+            patch.object(enhancer._security_scanner, "scan", return_value=scan_with_force),
+            patch.object(enhancer._query_analyzer, "analyze", return_value=analysis),
+            patch.object(
+                enhancer,
+                "_gather_offline_context",
+                new_callable=AsyncMock,
+                return_value=None,
+            ) as mock_offline,
+            patch.object(
+                enhancer._prompt_engine,
+                "formulate_search_aware_prompt",
+                new_callable=AsyncMock,
+                return_value="offline enhanced",
+            ),
+        ):
+            result = await enhancer.enhance("test", "gpt-4")
+            mock_offline.assert_awaited_once()
+            assert any("offline" in n.lower() for n in result.enhancement_notes)
+
 
 class TestAIPEAEnhancerEnhanceForModels:
     """Tests for AIPEAEnhancer.enhance_for_models()."""
@@ -548,6 +580,35 @@ class TestAIPEAEnhancerEnhanceForModels:
             requests = await enhancer.enhance_for_models("test query", ["gpt-4"])
 
         assert requests["gpt-4"].enhanced_prompt.count(shared_url) == 1
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_forbidden_model_skipped_in_enhance_for_models(
+        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    ) -> None:
+        """Forbidden models are excluded from enhance_for_models results."""
+        enhancer = AIPEAEnhancer()
+        base_result = EnhancementResult(
+            original_query="q",
+            enhanced_prompt="enhanced",
+            processing_tier=ProcessingTier.TACTICAL,
+            security_context=SecurityContext(),
+            query_analysis=QueryAnalysis(
+                query="q",
+                query_type=QueryType.TECHNICAL,
+                complexity=0.5,
+                confidence=0.8,
+                needs_current_info=False,
+            ),
+        )
+
+        with patch.object(enhancer, "enhance", new_callable=AsyncMock, return_value=base_result):
+            requests = await enhancer.enhance_for_models("q", ["gpt-4", "gpt-4o"])
+
+        assert "gpt-4" in requests
+        assert "gpt-4o" not in requests
 
 
 # =============================================================================

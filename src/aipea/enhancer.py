@@ -458,6 +458,10 @@ class AIPEAEnhancer:
         if scan_result.has_flags():
             enhancement_notes.append(f"Security flags detected: {', '.join(scan_result.flags)}")
 
+        # Propagate scanner's force_offline recommendation (e.g. classified markers)
+        if scan_result.force_offline:
+            force_offline = True
+
         # Step 3: Analyze query
         analysis = self._query_analyzer.analyze(query, security_context)
 
@@ -582,7 +586,14 @@ class AIPEAEnhancer:
             security_level=security_level,
         )
 
+        # Validate each model against compliance policy before formatting
+        compliance_handler = ComplianceHandler(self._default_compliance)
+
         for model_id in model_ids:
+            if not compliance_handler.validate_model(model_id):
+                logger.warning("Skipping forbidden model in enhance_for_models: %s", model_id)
+                continue
+
             # Get model-specific formatting
             model_family = get_model_family(model_id)
 

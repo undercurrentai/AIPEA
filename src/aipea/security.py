@@ -276,7 +276,7 @@ class SecurityScanner:
     _DANGEROUS_PATTERNS: ClassVar[list[str]] = [
         r"\(\.\*\)\+",  # Nested .* with quantifier
         r"\(\.\+\)\+",  # Nested .+ with quantifier
-        r"\(\[.*\]\)\+.*\1",  # Backreference with quantifier
+        r"\\[1-9].*[+*]|[+*].*\\[1-9]",  # Backreference with quantifier
         r"\(\.\*\?\)\+",  # Nested .*? with quantifier
         r"\+\+",  # Possessive-like patterns that cause issues
         r"\*\*",  # Double quantifier

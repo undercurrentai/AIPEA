@@ -466,5 +466,22 @@ class TestInjectionNewlineDetection:
         assert not result.is_blocked
 
 
+class TestReDoSBackreferenceDetection:
+    """Tests for ReDoS backreference pattern detection in _is_regex_safe."""
+
+    @pytest.mark.unit
+    def test_backreference_with_quantifier_rejected(self) -> None:
+        """Pattern with backreference + quantifier is detected as unsafe."""
+        scanner = SecurityScanner()
+        # This pattern has a backreference (\1) combined with a quantifier (+)
+        assert scanner._is_regex_safe(r"([a-z]+)\1+") is False
+
+    @pytest.mark.unit
+    def test_safe_pattern_without_backreference_allowed(self) -> None:
+        """A normal pattern without backreferences passes safety check."""
+        scanner = SecurityScanner()
+        assert scanner._is_regex_safe(r"[a-z]+\d{3}") is True
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
