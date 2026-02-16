@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 from collections.abc import Generator
 from datetime import UTC, datetime
 
@@ -506,6 +507,51 @@ class TestAddKnowledgePreservesAccessCount:
 
             assert row is not None
             assert row[0] == 5, f"access_count should be preserved (5), got {row[0]}"
+
+            kb.close()
+        finally:
+            if os.path.exists(db_path):
+                os.remove(db_path)
+
+
+class TestAddKnowledgeLastAccessedPreservation:
+    """Regression: re-inserting same content must not bump last_accessed."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_readd_does_not_update_last_accessed(self) -> None:
+        """ON CONFLICT should preserve the original last_accessed timestamp."""
+        db_path = os.path.join(tempfile.mkdtemp(), "test_last_accessed.db")
+        try:
+            kb = OfflineKnowledgeBase(db_path=db_path, tier=StorageTier.STANDARD)
+
+            # Insert content
+            node_id = await kb.add_knowledge("reusable fact", KnowledgeDomain.GENERAL)
+
+            # Record last_accessed
+            with kb._with_db_lock() as conn:
+                row = conn.execute(
+                    "SELECT last_accessed FROM knowledge_nodes WHERE id = ?",
+                    (node_id,),
+                ).fetchone()
+            original_last_accessed = row[0]
+
+            # Re-insert same content (triggers ON CONFLICT)
+            time.sleep(0.05)  # ensure clock moves forward
+            node_id2 = await kb.add_knowledge("reusable fact", KnowledgeDomain.GENERAL)
+            assert node_id2 == node_id  # same hash -> same ID
+
+            # Verify last_accessed was NOT bumped
+            with kb._with_db_lock() as conn:
+                row = conn.execute(
+                    "SELECT last_accessed FROM knowledge_nodes WHERE id = ?",
+                    (node_id,),
+                ).fetchone()
+
+            assert row[0] == original_last_accessed, (
+                f"last_accessed should not change on re-insert: "
+                f"was {original_last_accessed}, now {row[0]}"
+            )
 
             kb.close()
         finally:

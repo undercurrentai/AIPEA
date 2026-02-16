@@ -580,11 +580,22 @@ class AIPEAEnhancer:
         # Perform base enhancement once using a generic model ID so the base
         # prompt is model-neutral.  Per-model formatting is applied below via
         # create_model_specific_prompt, preventing double model-specific wrapping.
+        # Use GENERAL compliance for the base call because "generic" is not on any
+        # restricted allowlist.  Per-model compliance validation happens in the loop.
         base_result = await self.enhance(
             query=query,
             model_id="generic",
             security_level=security_level,
+            compliance_mode=ComplianceMode.GENERAL,
         )
+
+        # If the base enhancement was blocked (e.g. injection detected),
+        # do not wrap the block message in model-specific formatting.
+        if not base_result.was_enhanced:
+            logger.warning(
+                "Base enhancement blocked in enhance_for_models; returning empty results"
+            )
+            return results
 
         # Validate each model against compliance policy before formatting
         compliance_handler = ComplianceHandler(self._default_compliance)

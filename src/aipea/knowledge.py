@@ -450,8 +450,7 @@ class OfflineKnowledgeBase:
                     content_hash = excluded.content_hash,
                     compressed_content = excluded.compressed_content,
                     relevance_score = excluded.relevance_score,
-                    security_classification = excluded.security_classification,
-                    last_accessed = excluded.last_accessed
+                    security_classification = excluded.security_classification
                 """,
                 (
                     node_id,

@@ -1,6 +1,33 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Wave 1: 2026-02-15, Wave 2: 2026-02-15)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Wave 1-3: 2026-02-15)
 
 Issues found during hybrid bug hunts but deferred (low priority or design decisions).
+
+## Wave 3 Deferred Findings (2026-02-15)
+
+### 12. Duplicate `SearchStrategy` enum in `_types.py` and `search.py` creates silent type mismatch
+- **File**: `src/aipea/_types.py:46-52`, `src/aipea/search.py:51-60`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Reason deferred**: Architectural issue requiring coordinated rename. `_types.SearchStrategy` (auto() int values, has NONE) vs `search.SearchStrategy` (string values, no NONE). `engine.py` re-exports the wrong one. Fix: unify into single enum or rename the `search.py` version to `_OrchestratorStrategy`.
+
+### 13. `engine.py` re-exports `SearchStrategy` from `search.py` instead of `_types.py`
+- **File**: `src/aipea/engine.py:43, 1692`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Reason deferred**: Consequence of #12. `from aipea.engine import SearchStrategy` gives wrong enum. Fix: remove from engine.py `__all__` or import from `_types`.
+
+### 14. No test for publicly-exported `SearchStrategy` from `_types`
+- **File**: `tests/test_search.py:40-51`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Reason deferred**: Test coverage gap, not a code bug. Tests verify search.SearchStrategy but not the public _types.SearchStrategy (4 members including NONE).
+
+### 15. `num_results=0` produces confidence `0.0` despite returned results
+- **File**: `src/aipea/search.py:426-428, 550-552`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Reason deferred**: Edge case requiring `num_results=0` as input, which is not a normal API usage pattern. Fix: clamp `num_results` to `max(1, num_results)`.
+
+### 16. OpenAI/Generic formatters lack markdown escaping vs Anthropic formatter
+- **File**: `src/aipea/search.py:175-258`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Reason deferred**: Cosmetic inconsistency. Anthropic formatter HTML-escapes content in XML tags; OpenAI/Generic formatters embed raw content in markdown. Could cause structural ambiguity if search result titles contain markdown control characters.
 
 ## Wave 2 Deferred Findings (2026-02-15)
 

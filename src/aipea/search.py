@@ -859,7 +859,13 @@ class SearchOrchestrator:
         self.firecrawl_provider = FirecrawlProvider(enabled=firecrawl_enabled)
         self.context7_provider = Context7Provider(enabled=context7_enabled)
 
-        enabled_count = sum([exa_enabled, firecrawl_enabled, context7_enabled])
+        enabled_count = sum(
+            [
+                self.exa_provider.enabled,
+                self.firecrawl_provider.enabled,
+                self.context7_provider.enabled,
+            ]
+        )
         logger.info(f"SearchOrchestrator initialized with {enabled_count}/3 providers enabled")
 
     async def search(

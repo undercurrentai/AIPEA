@@ -612,7 +612,8 @@ class ComplianceHandler:
             compliance_mode=self.mode,
             security_level=SecurityLevel.UNCLASSIFIED,
             has_connectivity=has_connectivity and not self.force_offline,
-            audit_required=self.mode in [ComplianceMode.HIPAA, ComplianceMode.TACTICAL],
+            audit_required=self.mode
+            in [ComplianceMode.HIPAA, ComplianceMode.TACTICAL, ComplianceMode.FEDRAMP],
             data_residency=data_residency,
             allowed_models=self.allowed_models.copy(),
             blocked_patterns=[],

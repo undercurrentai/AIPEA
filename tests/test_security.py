@@ -411,6 +411,14 @@ class TestComplianceHandler:
         assert handler.phi_redaction_enabled is False
         assert handler.force_offline is False
 
+    def test_fedramp_mode_sets_audit_required(self) -> None:
+        """FedRAMP SecurityContext must have audit_required=True (NIST SP 800-53 AU)."""
+        handler = ComplianceHandler(ComplianceMode.FEDRAMP)
+        ctx = handler.create_security_context()
+        assert ctx.audit_required is True, (
+            "FedRAMP requires audit logging; audit_required must be True"
+        )
+
     def test_validate_model_blocks_forbidden_models(self) -> None:
         """Ensure globally forbidden models are rejected in all modes."""
         general = ComplianceHandler(ComplianceMode.GENERAL)

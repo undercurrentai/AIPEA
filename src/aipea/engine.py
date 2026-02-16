@@ -1426,11 +1426,11 @@ class PromptEngine:
         Returns:
             Prompt template string with placeholders
         """
-        current_date = datetime.now(UTC).strftime("%Y-%m-%d")
+        now = datetime.now(UTC)
+        current_date = now.strftime("%Y-%m-%d")
 
         # Base template parts
-        # Compute year dynamically to avoid stale singleton cache
-        base_intro = f"Today's date is {current_date} (year {datetime.now(UTC).year})."
+        base_intro = f"Today's date is {current_date} (year {now.year})."
 
         # Complexity-specific instructions
         complexity_lower = complexity.lower()
