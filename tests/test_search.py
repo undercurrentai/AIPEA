@@ -884,5 +884,21 @@ class TestMultiSourceEdgeCases:
             assert result.confidence == 0.8  # Average of 0.9 and 0.7
 
 
+# =============================================================================
+# BUG-HUNT REGRESSION TESTS
+# =============================================================================
+
+
+class TestHTTPTimeoutEnvVar:
+    """Regression: invalid AIPEA_HTTP_TIMEOUT must not crash module import."""
+
+    def test_timeout_default_value(self) -> None:
+        """HTTP_TIMEOUT should have a valid default."""
+        from aipea.search import HTTP_TIMEOUT
+
+        assert isinstance(HTTP_TIMEOUT, float)
+        assert HTTP_TIMEOUT > 0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

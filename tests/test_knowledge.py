@@ -458,5 +458,60 @@ class TestOfflineKnowledgeBase:
             kb.close()
 
 
+# =============================================================================
+# BUG-HUNT REGRESSION TESTS
+# =============================================================================
+
+
+class TestAddKnowledgePreservesAccessCount:
+    """Regression: re-adding same content must not reset access_count to 0."""
+
+    @pytest.mark.asyncio
+    async def test_upsert_preserves_access_count(self) -> None:
+        """Adding the same content twice should preserve access_count from first insert."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            kb = OfflineKnowledgeBase(db_path, StorageTier.COMPACT)
+
+            # Add initial content
+            node_id = await kb.add_knowledge(
+                content="Test content for upsert",
+                domain=KnowledgeDomain.GENERAL,
+            )
+
+            # Simulate access_count being incremented (manually set to 5)
+            with kb._with_db_lock() as conn:
+                conn.execute(
+                    "UPDATE knowledge_nodes SET access_count = 5 WHERE id = ?",
+                    (node_id,),
+                )
+                conn.commit()
+
+            # Re-add the same content (same hash -> same id)
+            node_id_2 = await kb.add_knowledge(
+                content="Test content for upsert",
+                domain=KnowledgeDomain.GENERAL,
+            )
+
+            assert node_id == node_id_2, "Same content should produce same node ID"
+
+            # Verify access_count is preserved (not reset to 0)
+            with kb._with_db_lock() as conn:
+                cursor = conn.execute(
+                    "SELECT access_count FROM knowledge_nodes WHERE id = ?",
+                    (node_id,),
+                )
+                row = cursor.fetchone()
+
+            assert row is not None
+            assert row[0] == 5, f"access_count should be preserved (5), got {row[0]}"
+
+            kb.close()
+        finally:
+            if os.path.exists(db_path):
+                os.remove(db_path)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

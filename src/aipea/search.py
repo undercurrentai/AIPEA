@@ -37,7 +37,10 @@ logger = logging.getLogger(__name__)
 # API Configuration
 EXA_API_URL = "https://api.exa.ai/search"
 FIRECRAWL_API_URL = "https://api.firecrawl.dev/v1/search"
-HTTP_TIMEOUT = float(os.environ.get("AIPEA_HTTP_TIMEOUT", "30.0"))
+try:
+    HTTP_TIMEOUT = float(os.environ.get("AIPEA_HTTP_TIMEOUT", "30.0"))
+except (ValueError, TypeError):
+    HTTP_TIMEOUT = 30.0
 
 
 # =============================================================================

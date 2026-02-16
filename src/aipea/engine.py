@@ -202,9 +202,11 @@ class OllamaOfflineClient:
 
         except subprocess.TimeoutExpired:
             logger.warning("Ollama list timed out")
+            self._available_models = []
             return []
         except FileNotFoundError:
             logger.warning("Ollama not found in PATH")
+            self._available_models = []
             return []
         except Exception as e:
             # Log full exception info including type for better debugging
@@ -214,6 +216,7 @@ class OllamaOfflineClient:
                 e,
                 exc_info=True,  # Include traceback in debug mode
             )
+            self._available_models = []
             return []
 
     async def is_model_available(self, model: OfflineModel) -> bool:
@@ -266,8 +269,8 @@ class OllamaOfflineClient:
         self,
         prompt: str,
         model: OfflineModel,
-        max_tokens: int = 512,
-        temperature: float = 0.7,
+        max_tokens: int = 512,  # reserved for future REST API migration
+        temperature: float = 0.7,  # reserved for future REST API migration
     ) -> str:
         """Generate a response using an offline Ollama model.
 
@@ -302,19 +305,12 @@ class OllamaOfflineClient:
         try:
             # Use ollama run for simple generation
             # Pass prompt via stdin to prevent command injection (security fix)
-            # Include options for max_tokens (num_predict) and temperature
+            # Note: ollama run does not support --num-predict/--temperature flags;
+            # those are REST API options. We rely on Ollama defaults here.
             # Run blocking subprocess in thread to avoid blocking event loop
             result = await asyncio.to_thread(
                 subprocess.run,
-                [
-                    "ollama",
-                    "run",
-                    model.value,
-                    "--num-predict",
-                    str(max_tokens),
-                    "--temperature",
-                    str(temperature),
-                ],
+                ["ollama", "run", model.value],
                 input=prompt,
                 capture_output=True,
                 text=True,
@@ -333,6 +329,8 @@ class OllamaOfflineClient:
             raise RuntimeError(f"Ollama generation timed out for {model.value}") from None
         except FileNotFoundError:
             raise RuntimeError("Ollama not found. Install from https://ollama.ai") from None
+        except RuntimeError:
+            raise
         except Exception as e:
             raise RuntimeError(f"Ollama generation error: {e}") from e
 

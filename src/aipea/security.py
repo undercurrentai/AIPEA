@@ -249,7 +249,7 @@ class SecurityScanner:
         r"ignore\s+(previous|all)\s+instructions",
         r"</?(system|user|assistant)>",
         r"\[/?(system|user|assistant|human)\]",  # Bracket-style role tags
-        r"\\n(?:Human|Assistant|System)\s*:",  # Conversation separator injection
+        r"\n(?:Human|Assistant|System)\s*:",  # Conversation separator injection
         r"DROP\s+TABLE",
         r"UNION\s+SELECT",
         r"\{\{.*\}\}",  # Template injection

@@ -441,10 +441,17 @@ class OfflineKnowledgeBase:
         with self._with_db_lock() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO knowledge_nodes
+                INSERT INTO knowledge_nodes
                 (id, domain, content_hash, compressed_content, relevance_score,
                  security_classification, last_accessed, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    domain = excluded.domain,
+                    content_hash = excluded.content_hash,
+                    compressed_content = excluded.compressed_content,
+                    relevance_score = excluded.relevance_score,
+                    security_classification = excluded.security_classification,
+                    last_accessed = excluded.last_accessed
                 """,
                 (
                     node_id,

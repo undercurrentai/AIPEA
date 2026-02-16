@@ -1648,5 +1648,48 @@ class TestOfflineTierProcessorWithOllamaMocked:
         assert result.query_type == QueryType.OPERATIONAL
 
 
+# =============================================================================
+# BUG-HUNT REGRESSION TESTS
+# =============================================================================
+
+
+class TestOllamaGetModelsErrorCaching:
+    """Regression: get_available_models must cache empty list on failure."""
+
+    @pytest.mark.asyncio
+    async def test_error_path_caches_empty_list(self):
+        """After a failure, _available_models should be [] (not None) to prevent re-spawning."""
+        client = OllamaOfflineClient()
+        assert client._available_models is None
+
+        # Simulate FileNotFoundError (Ollama not installed)
+        mock_result = FileNotFoundError("ollama not found")
+        with patch("asyncio.to_thread", new_callable=AsyncMock, side_effect=mock_result):
+            result = await client.get_available_models()
+
+        assert result == []
+        assert client._available_models == [], "_available_models should be cached as [] on error"
+
+
+class TestOllamaGenerateErrorNotDoubleWrapped:
+    """Regression: RuntimeError from failed ollama run must not be double-wrapped."""
+
+    @pytest.mark.asyncio
+    async def test_runtime_error_not_double_wrapped(self):
+        """RuntimeError raised inside generate should propagate without re-wrapping."""
+        client = OllamaOfflineClient()
+        client._available_models = [
+            OllamaModelInfo(name="phi3:mini", size_bytes=2_200_000_000, modified=""),
+        ]
+
+        # Simulate non-zero exit code
+        mock_result = SimpleNamespace(returncode=1, stdout="", stderr="model not found")
+        with (
+            patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result),
+            pytest.raises(RuntimeError, match=r"^Ollama generation failed:"),
+        ):
+            await client.generate("test", OfflineModel.PHI3_MINI)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
