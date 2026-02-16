@@ -359,6 +359,28 @@ class TestAIPEAEnhancerEnhance:
     @pytest.mark.asyncio
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_forbidden_model_blocked_before_security_scan(
+        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    ) -> None:
+        """Globally forbidden models should be blocked by enhancer compliance checks."""
+        enhancer = AIPEAEnhancer()
+
+        with patch.object(enhancer._security_scanner, "scan") as mock_scan:
+            result = await enhancer.enhance("safe query", "gpt-4o")
+
+        assert result.was_enhanced is False
+        assert "blocked" in result.enhanced_prompt.lower()
+        assert any(
+            "model" in note.lower() and "not allowed" in note.lower()
+            for note in result.enhancement_notes
+        )
+        assert enhancer._stats["queries_blocked"] == 1
+        mock_scan.assert_not_called()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
     async def test_blocked_by_security_scan(
         self, mock_search_orch: MagicMock, mock_kb: MagicMock
     ) -> None:

@@ -417,6 +417,25 @@ class AIPEAEnhancer:
         )
         security_context.security_level = security_level
 
+        # Enforce compliance-mode model restrictions and global forbidden list
+        if not compliance_handler.validate_model(model_id):
+            self._stats["queries_blocked"] += 1
+            enhancement_notes.append(
+                f"Model '{model_id}' is not allowed in compliance mode '{compliance_mode.value}'"
+            )
+            return self._create_blocked_result(
+                query=query,
+                model_id=model_id,
+                security_context=security_context,
+                scan_result=ScanResult(
+                    flags=[f"model_not_allowed:{model_id}"],
+                    is_blocked=True,
+                ),
+                compliance_mode=compliance_mode,
+                start_time=start_time,
+                enhancement_notes=enhancement_notes,
+            )
+
         # Step 2: Security scan
         scan_result = self._security_scanner.scan(query, security_context)
 
