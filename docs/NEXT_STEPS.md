@@ -435,9 +435,9 @@ The following items are documented for future implementation. They are not block
 
 | Aspect | Detail |
 |--------|--------|
-| **Status** | COMPLETE — coverage improved from 49% to 99% (73 new tests) |
-| **Overall AIPEA coverage** | 92.28% (337 passed, 15 skipped) |
-| **Date** | 2026-02-14 |
+| **Status** | COMPLETE — coverage improved from 49% to 99% (73 new tests + 10 mock-based Ollama tests) |
+| **Overall AIPEA coverage** | 90.07% (347 passed, 15 skipped) |
+| **Date** | 2026-02-15 |
 
 ---
 

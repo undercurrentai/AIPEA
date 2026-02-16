@@ -60,7 +60,7 @@ parent: ../../CLAUDE.md
 | pyproject.toml | License | MIT license, >=3.11 required |
 | Exa search | PyPI publishing 2025/2026 | Trusted Publishers (OIDC) is standard; `pypa/gh-action-pypi-publish@release/v1` |
 | Context7 | hatch build docs | `hatch build` creates sdist + wheel; `hatch version` for version management |
-| wc -l src/aipea/*.py | Source LOC | 6,088 lines across all source modules |
+| wc -l src/aipea/*.py | Source LOC | 6,212 lines across all source modules (updated 2026-02-15) |
 
 ### 2.2 Discrepancies Found
 
@@ -76,10 +76,10 @@ parent: ../../CLAUDE.md
 
 | Tier | Detected | Evidence |
 |------|----------|----------|
-| Standard | YES | Default baseline, no AI governance artifacts |
-| AI-Governed | NO | No model-card.yaml, no ai/ directory |
+| Standard | YES | Default baseline, scaffold-adopted governance artifacts |
+| AI-Governed | PARTIAL | ai/ directory added via scaffold adoption (2026-02-14); model-card.yaml, risk-register.yaml, data-card.yaml present |
 | Security-First | NO | No SAST/DAST workflows (ruff S-rules only) |
-| Regulated | NO | No compliance documents |
+| Regulated | PARTIAL | Compliance procedures in docs/compliance/ via scaffold adoption |
 | Agentic Safety | NO | No multi-agent patterns |
 
 **Result**: STANDARD tier (Tier 2) confirmed. No conditional addenda required.

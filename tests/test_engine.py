@@ -1466,5 +1466,187 @@ class TestPromptEngineClassifyAndEnhance:
             await engine.enhance_query("test", fake_tier)
 
 
+# ---------------------------------------------------------------------------
+# Mock-based tests for Ollama code paths (covers skipped integration tests)
+# These tests exercise the same code paths as the 15 skipped tests in
+# test_ollama.py without requiring a real Ollama installation.
+# ---------------------------------------------------------------------------
+
+
+class TestOllamaClientMocked:
+    """Mock-based tests for OllamaOfflineClient methods.
+
+    Covers the same code paths as the skipped integration tests in
+    TestOllamaClientIntegration, TestOllamaGeneration, and TestOllamaPerformance.
+    """
+
+    @pytest.mark.asyncio
+    async def test_is_model_available_found_via_fetch(self):
+        """is_model_available returns True after fetching models (mock)."""
+        client = OllamaOfflineClient()
+        mock_result = SimpleNamespace(
+            returncode=0,
+            stdout=(
+                "NAME   ID   SIZE   MODIFIED\n"
+                "gemma3:270m  x  291 MB  now\n"
+                "phi3:mini  y  2.2 GB  now\n"
+            ),
+            stderr="",
+        )
+        with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
+            assert await client.is_model_available(OfflineModel.GEMMA3_270M) is True
+            assert await client.is_model_available(OfflineModel.PHI3_MINI) is True
+
+    @pytest.mark.asyncio
+    async def test_is_model_available_not_found_via_fetch(self):
+        """is_model_available returns False for model not in list (mock)."""
+        client = OllamaOfflineClient()
+        mock_result = SimpleNamespace(
+            returncode=0,
+            stdout="NAME   ID   SIZE   MODIFIED\ngemma3:270m  x  291 MB  now\n",
+            stderr="",
+        )
+        with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
+            assert await client.is_model_available(OfflineModel.GPT_OSS_20B) is False
+
+    @pytest.mark.asyncio
+    async def test_get_best_available_model_prefers_phi3_mock(self):
+        """get_best_available_model returns phi3 when both available (mock)."""
+        client = OllamaOfflineClient()
+        mock_result = SimpleNamespace(
+            returncode=0,
+            stdout=(
+                "NAME   ID   SIZE   MODIFIED\n"
+                "gemma3:270m  x  291 MB  now\n"
+                "phi3:mini  y  2.2 GB  now\n"
+            ),
+            stderr="",
+        )
+        with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
+            best = await client.get_best_available_model()
+        assert best == OfflineModel.PHI3_MINI
+
+    @pytest.mark.asyncio
+    async def test_get_best_available_model_fallback_gemma_mock(self):
+        """get_best_available_model falls back to gemma when only gemma available (mock)."""
+        client = OllamaOfflineClient()
+        mock_result = SimpleNamespace(
+            returncode=0,
+            stdout="NAME   ID   SIZE   MODIFIED\ngemma3:270m  x  291 MB  now\n",
+            stderr="",
+        )
+        with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
+            best = await client.get_best_available_model()
+        assert best == OfflineModel.GEMMA3_270M
+
+    @pytest.mark.asyncio
+    async def test_get_best_available_model_none_mock(self):
+        """get_best_available_model returns None when no tier1 models (mock)."""
+        client = OllamaOfflineClient()
+        mock_result = SimpleNamespace(
+            returncode=0,
+            stdout="NAME   ID   SIZE   MODIFIED\nllama3:8b  x  5 GB  now\n",
+            stderr="",
+        )
+        with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
+            best = await client.get_best_available_model()
+        assert best is None
+
+    @pytest.mark.asyncio
+    async def test_generate_success_mock(self):
+        """generate returns response text on success (mock)."""
+        client = OllamaOfflineClient()
+        client._available_models = [
+            OllamaModelInfo(name="phi3:mini", size_bytes=2_200_000_000, modified=""),
+        ]
+        gen_result = SimpleNamespace(returncode=0, stdout="The answer is 42.", stderr="")
+        with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=gen_result):
+            response = await client.generate("What is the answer?", OfflineModel.PHI3_MINI)
+        assert response == "The answer is 42."
+
+    @pytest.mark.asyncio
+    async def test_generate_unavailable_model_raises_mock(self):
+        """generate raises RuntimeError when model not in available list (mock)."""
+        client = OllamaOfflineClient()
+        client._available_models = [
+            OllamaModelInfo(name="gemma3:270m", size_bytes=291_000_000, modified=""),
+        ]
+        with pytest.raises(RuntimeError, match="not available"):
+            await client.generate("Hello", OfflineModel.GPT_OSS_20B)
+
+
+class TestSingletonCachesModelsMocked:
+    """Mock-based test for singleton model caching (covers skipped test_singleton_caches_models)."""
+
+    @pytest.mark.asyncio
+    async def test_singleton_caches_models_mocked(self):
+        """is_model_available uses cached _available_models after first fetch (mock)."""
+        import aipea.engine as mod
+
+        original = mod._ollama_client
+        try:
+            mod._ollama_client = None
+            client = get_ollama_client()
+
+            mock_result = SimpleNamespace(
+                returncode=0,
+                stdout="NAME   ID   SIZE   MODIFIED\ngemma3:270m  x  291 MB  now\n",
+                stderr="",
+            )
+            with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
+                models1 = await client.get_available_models()
+
+            assert len(models1) == 1
+            # After fetching, _available_models is set — is_model_available
+            # uses this cached list without re-fetching
+            assert client._available_models is not None
+            result = await client.is_model_available(OfflineModel.GEMMA3_270M)
+            assert result is True
+        finally:
+            mod._ollama_client = original
+
+
+class TestOfflineTierProcessorWithOllamaMocked:
+    """Mock-based tests for OfflineTierProcessor Ollama integration.
+
+    Covers the same code paths as the skipped TestOfflineTierProcessorWithOllama.
+    """
+
+    @pytest.mark.asyncio
+    async def test_processor_uses_ollama_mock(self):
+        """Processor with use_ollama=True delegates to Ollama when models available (mock)."""
+        proc = OfflineTierProcessor(use_ollama=True)
+
+        mock_client = MagicMock(spec=OllamaOfflineClient)
+        mock_client.get_best_available_model = AsyncMock(return_value=OfflineModel.PHI3_MINI)
+        mock_client.generate = AsyncMock(return_value="Mocked LLM response about unit testing")
+
+        with patch("aipea.engine.get_ollama_client", return_value=mock_client):
+            result = await proc.process("What are three benefits of unit testing?")
+
+        assert isinstance(result, EnhancedQuery)
+        assert result.tier_used == ProcessingTier.OFFLINE
+        assert result.enhancement_metadata.get("llm_enhanced") is True
+        assert result.enhancement_metadata.get("ollama_model") == "phi3:mini"
+        assert result.confidence >= 0.80
+
+    @pytest.mark.asyncio
+    async def test_processor_classifies_query_type_mock(self):
+        """Processor correctly classifies query types without Ollama (mock)."""
+        proc = OfflineTierProcessor(use_ollama=False)
+
+        # Technical query
+        result = await proc.process("Debug this Python code error")
+        assert result.query_type == QueryType.TECHNICAL
+
+        # Research query
+        result = await proc.process("Research the latest AI findings")
+        assert result.query_type == QueryType.RESEARCH
+
+        # Operational query
+        result = await proc.process("How to install Docker on Ubuntu")
+        assert result.query_type == QueryType.OPERATIONAL
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

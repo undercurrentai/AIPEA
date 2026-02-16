@@ -337,59 +337,87 @@ class SecurityScanner:
 
         return True
 
-    def scan(self, query: str, context: SecurityContext) -> ScanResult:
-        """Scan query for security issues based on compliance mode.
+    def _check_pii(self, query: str) -> list[str]:
+        """Check for PII patterns. Always runs.
 
         Args:
             query: The query text to scan
-            context: Security context determining which patterns to check
 
         Returns:
-            ScanResult with detected flags and blocking decision
-
-        Note:
-            The context object may be modified if classified markers are
-            detected in TACTICAL mode (has_connectivity set to False).
+            List of PII flags detected
         """
         flags: list[str] = []
-        is_blocked = False
-
-        # Always check PII patterns
         for name, pattern in self._compiled_pii.items():
             if pattern.search(query):
                 flags.append(f"pii_detected:{name}")
                 logger.warning("PII detected in query: %s", name)
+        return flags
 
-        # Check PHI patterns only in HIPAA mode
-        if context.compliance_mode == ComplianceMode.HIPAA:
-            for name, pattern in self._compiled_phi.items():
-                if pattern.search(query):
-                    flags.append(f"phi_detected:{name}")
-                    logger.warning("PHI detected in HIPAA mode: %s", name)
+    def _check_phi(self, query: str) -> list[str]:
+        """Check PHI patterns (HIPAA mode only).
 
-        # Check classified markers only in TACTICAL mode
+        Args:
+            query: The query text to scan
+
+        Returns:
+            List of PHI flags detected
+        """
+        flags: list[str] = []
+        for name, pattern in self._compiled_phi.items():
+            if pattern.search(query):
+                flags.append(f"phi_detected:{name}")
+                logger.warning("PHI detected in HIPAA mode: %s", name)
+        return flags
+
+    def _check_classified_markers(self, query: str) -> tuple[list[str], bool]:
+        """Check classified markers (TACTICAL mode).
+
+        Args:
+            query: The query text to scan
+
+        Returns:
+            Tuple of (flags, force_offline)
+        """
+        flags: list[str] = []
         force_offline = False
-        if context.compliance_mode == ComplianceMode.TACTICAL:
-            query_upper = query.upper()
-            for marker in self.CLASSIFIED_MARKERS:
-                if re.search(rf"\b{re.escape(marker)}\b", query_upper):
-                    flags.append(f"classified_marker:{marker}")
-                    # Signal offline processing for classified content
-                    # Note: We no longer mutate the input context
-                    force_offline = True
-                    logger.warning("Classified marker detected, forcing offline: %s", marker)
+        query_upper = query.upper()
+        for marker in self.CLASSIFIED_MARKERS:
+            if re.search(rf"\b{re.escape(marker)}\b", query_upper):
+                flags.append(f"classified_marker:{marker}")
+                force_offline = True
+                logger.warning("Classified marker detected, forcing offline: %s", marker)
+        return flags, force_offline
 
-        # Always check injection patterns - these are always blocked
+    def _check_injection(self, query: str) -> tuple[list[str], bool]:
+        """Check injection patterns. Always runs.
+
+        Args:
+            query: The query text to scan
+
+        Returns:
+            Tuple of (flags, is_blocked)
+        """
         for pattern in self._compiled_injection:
             if pattern.search(query):
-                flags.append("injection_attempt")
-                is_blocked = True
                 logger.error("Injection attempt detected and blocked")
-                break  # One injection detection is enough to block
+                return ["injection_attempt"], True
+        return [], False
 
-        # Check custom blocked patterns from context
-        for custom_pattern in context.blocked_patterns:
-            # Validate pattern safety before execution to prevent ReDoS attacks
+    def _check_custom_patterns(
+        self, query: str, blocked_patterns: list[str]
+    ) -> tuple[list[str], bool]:
+        """Check custom blocked patterns.
+
+        Args:
+            query: The query text to scan
+            blocked_patterns: List of custom regex patterns to check
+
+        Returns:
+            Tuple of (flags, is_blocked)
+        """
+        flags: list[str] = []
+        is_blocked = False
+        for custom_pattern in blocked_patterns:
             if not self._is_regex_safe(custom_pattern):
                 logger.warning(
                     "Rejected potentially unsafe custom pattern: %s", custom_pattern[:20]
@@ -402,6 +430,43 @@ class SecurityScanner:
                     logger.warning("Custom blocked pattern matched: %s", custom_pattern[:20])
             except re.error as e:
                 logger.error("Invalid custom pattern '%s': %s", custom_pattern[:20], e)
+        return flags, is_blocked
+
+    def scan(self, query: str, context: SecurityContext) -> ScanResult:
+        """Scan query for security issues based on compliance mode.
+
+        Args:
+            query: The query text to scan
+            context: Security context determining which patterns to check
+
+        Returns:
+            ScanResult with detected flags and blocking decision
+        """
+        flags: list[str] = []
+        is_blocked = False
+        force_offline = False
+
+        # Always check PII patterns
+        flags.extend(self._check_pii(query))
+
+        # Check PHI patterns only in HIPAA mode
+        if context.compliance_mode == ComplianceMode.HIPAA:
+            flags.extend(self._check_phi(query))
+
+        # Check classified markers only in TACTICAL mode
+        if context.compliance_mode == ComplianceMode.TACTICAL:
+            classified_flags, force_offline = self._check_classified_markers(query)
+            flags.extend(classified_flags)
+
+        # Always check injection patterns - these are always blocked
+        injection_flags, injection_blocked = self._check_injection(query)
+        flags.extend(injection_flags)
+        is_blocked = is_blocked or injection_blocked
+
+        # Check custom blocked patterns from context
+        custom_flags, custom_blocked = self._check_custom_patterns(query, context.blocked_patterns)
+        flags.extend(custom_flags)
+        is_blocked = is_blocked or custom_blocked
 
         result = ScanResult(flags=flags, is_blocked=is_blocked, force_offline=force_offline)
 

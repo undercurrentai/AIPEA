@@ -1215,23 +1215,23 @@ class StrategicTierProcessor(TierProcessor):
             },
         )
 
-    async def _run_strategic_reasoning(
+    async def _decompose_query(
         self,
         query: str,
-        tactical_context: str,
         models: list[tuple[Any, str]],
-    ) -> tuple[str, int]:
-        """Run multi-step strategic reasoning via LLM.
+    ) -> list[str]:
+        """Decompose a complex query into sub-questions via LLM.
+
+        Args:
+            query: The original query to decompose
+            models: Available model tuples for LLM calls
 
         Returns:
-            Tuple of (enhanced_response, critique_rounds_completed)
+            List of sub-questions (falls back to [query] on failure)
         """
         if self._orchestrator is None:
             raise RuntimeError("Orchestrator not initialized")
-        orchestrator = self._orchestrator
-        import asyncio as _asyncio
 
-        # Step 1: Decomposition — ask LLM to break query into sub-questions
         decompose_prompt = (
             f"Break the following complex query into 2-4 independent sub-questions "
             f"that together cover all aspects. Return one sub-question per line.\n\n"
@@ -1240,29 +1240,32 @@ class StrategicTierProcessor(TierProcessor):
         decompose_responses = await self._orchestrator.consult(
             prompt=decompose_prompt, models=models, parallel=False
         )
-        sub_questions = [query]  # fallback
         for resp in decompose_responses:
             if hasattr(resp, "content") and resp.content:
                 lines = [ln.strip() for ln in resp.content.strip().split("\n") if ln.strip()]
                 if lines:
-                    sub_questions = lines[:4]
-                break
+                    return lines[:4]
+        return [query]
 
-        # Step 2: Parallel sub-question analysis
-        async def analyze_sub(sq: str) -> str:
-            responses = await orchestrator.consult(
-                prompt=f"Provide a concise analysis:\n\n{sq}\n\nContext:\n{tactical_context}",
-                models=models,
-                parallel=False,
-            )
-            for r in responses:
-                if hasattr(r, "content") and r.content:
-                    return str(r.content)
-            return sq
+    async def _synthesize_analyses(
+        self,
+        query: str,
+        analyses: list[str],
+        models: list[tuple[Any, str]],
+    ) -> str:
+        """Synthesize sub-question analyses into a comprehensive response.
 
-        analyses = await _asyncio.gather(*[analyze_sub(sq) for sq in sub_questions])
+        Args:
+            query: The original query
+            analyses: List of analysis strings from sub-questions
+            models: Available model tuples for LLM calls
 
-        # Step 3: Synthesis
+        Returns:
+            Synthesized response text
+        """
+        if self._orchestrator is None:
+            raise RuntimeError("Orchestrator not initialized")
+
         synthesis_prompt = (
             f"Synthesize the following analyses into a comprehensive response to: {query}\n\n"
             + "\n\n---\n\n".join(analyses)
@@ -1270,13 +1273,30 @@ class StrategicTierProcessor(TierProcessor):
         synthesis_responses = await self._orchestrator.consult(
             prompt=synthesis_prompt, models=models, parallel=False
         )
-        synthesis = "\n\n".join(analyses)  # fallback
         for resp in synthesis_responses:
             if hasattr(resp, "content") and resp.content:
-                synthesis = resp.content
-                break
+                return str(resp.content)
+        return "\n\n".join(analyses)
 
-        # Step 4: Critique loop
+    async def _critique_and_refine(
+        self,
+        query: str,
+        synthesis: str,
+        models: list[tuple[Any, str]],
+    ) -> tuple[str, int]:
+        """Run critique loop to refine synthesis.
+
+        Args:
+            query: The original query
+            synthesis: Current synthesized response
+            models: Available model tuples for LLM calls
+
+        Returns:
+            Tuple of (refined_text, critique_rounds_completed)
+        """
+        if self._orchestrator is None:
+            raise RuntimeError("Orchestrator not initialized")
+
         critique_rounds = 0
         for _ in range(self._max_critique_rounds):
             critique_prompt = (
@@ -1299,7 +1319,6 @@ class StrategicTierProcessor(TierProcessor):
             if "APPROVED" in critique_text.upper():
                 break
 
-            # Refine based on critique
             refine_prompt = (
                 f"Improve this response based on the critique:\n\n"
                 f"Critique: {critique_text}\n\nCurrent response:\n{synthesis}"
@@ -1313,6 +1332,46 @@ class StrategicTierProcessor(TierProcessor):
                     break
 
         return synthesis, critique_rounds
+
+    async def _run_strategic_reasoning(
+        self,
+        query: str,
+        tactical_context: str,
+        models: list[tuple[Any, str]],
+    ) -> tuple[str, int]:
+        """Run multi-step strategic reasoning via LLM.
+
+        Pipeline: decompose -> parallel analyze -> synthesize -> critique.
+
+        Returns:
+            Tuple of (enhanced_response, critique_rounds_completed)
+        """
+        if self._orchestrator is None:
+            raise RuntimeError("Orchestrator not initialized")
+        orchestrator = self._orchestrator
+
+        # Step 1: Decompose query into sub-questions
+        sub_questions = await self._decompose_query(query, models)
+
+        # Step 2: Parallel sub-question analysis
+        async def analyze_sub(sq: str) -> str:
+            responses = await orchestrator.consult(
+                prompt=f"Provide a concise analysis:\n\n{sq}\n\nContext:\n{tactical_context}",
+                models=models,
+                parallel=False,
+            )
+            for r in responses:
+                if hasattr(r, "content") and r.content:
+                    return str(r.content)
+            return sq
+
+        analyses = await asyncio.gather(*[analyze_sub(sq) for sq in sub_questions])
+
+        # Step 3: Synthesize analyses
+        synthesis = await self._synthesize_analyses(query, list(analyses), models)
+
+        # Step 4: Critique and refine
+        return await self._critique_and_refine(query, synthesis, models)
 
     def _get_available_models(self) -> list[tuple[Any, str]]:
         """Get list of available model tuples from orchestrator providers."""
