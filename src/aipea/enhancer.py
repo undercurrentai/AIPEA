@@ -579,17 +579,22 @@ class AIPEAEnhancer:
         """
         results: dict[str, EnhancedRequest] = {}
 
-        # Perform base enhancement once using a generic model ID so the base
-        # prompt is model-neutral.  Per-model formatting is applied below via
-        # create_model_specific_prompt, preventing double model-specific wrapping.
-        # Use GENERAL compliance for the base call because "generic" is not on any
-        # restricted allowlist.  Per-model compliance validation happens in the loop.
+        # Perform base enhancement once.  Per-model formatting is applied below
+        # via create_model_specific_prompt, preventing double model-specific wrapping.
+        # We use the actual compliance mode (not GENERAL) so PHI/classified scans run.
+        # Pick the first compliant model from model_ids for the base call so that
+        # the model passes the restricted allowlist check.
         compliance_handler = ComplianceHandler(self._default_compliance)
+        base_model = "generic"
+        for mid in model_ids:
+            if compliance_handler.validate_model(mid):
+                base_model = mid
+                break
         base_result = await self.enhance(
             query=query,
-            model_id="generic",
+            model_id=base_model,
             security_level=security_level,
-            compliance_mode=ComplianceMode.GENERAL,
+            compliance_mode=self._default_compliance,
             force_offline=compliance_handler.force_offline,
         )
 
@@ -976,10 +981,13 @@ def reset_enhancer() -> None:
     """Reset the default enhancer singleton.
 
     Thread-safe via the same lock used in get_enhancer().
+    Closes the knowledge base connection before discarding.
     Useful for testing or when configuration needs to change.
     """
     global _default_enhancer
     with _default_enhancer_lock:
+        if _default_enhancer is not None and _default_enhancer._offline_kb is not None:
+            _default_enhancer._offline_kb.close()
         _default_enhancer = None
     logger.info("Default enhancer reset")
 

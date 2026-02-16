@@ -620,6 +620,8 @@ class OfflineKnowledgeBase:
         """
         if not 0.0 <= threshold <= 1.0:
             raise ValueError("threshold must be between 0.0 and 1.0")
+        if max_delete <= 0:
+            raise ValueError("max_delete must be greater than 0")
 
         with self._with_db_lock() as conn:
             cursor = conn.execute(

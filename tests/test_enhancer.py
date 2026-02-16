@@ -858,3 +858,63 @@ class TestEnhanceForModelsHIPAABase:
         # The base enhance call must include force_offline=True
         assert len(calls) >= 1
         assert calls[0].get("force_offline") is True
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_enhance_for_models_hipaa_passes_compliance_to_base(
+        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    ) -> None:
+        """enhance_for_models must pass HIPAA compliance_mode to base enhance() call.
+
+        Regression: Previously hardcoded ComplianceMode.GENERAL, which skipped PHI scanning.
+        """
+        enhancer = AIPEAEnhancer(default_compliance=ComplianceMode.HIPAA)
+
+        calls: list[dict] = []
+        original_enhance = enhancer.enhance
+
+        async def capture_enhance(**kwargs):  # type: ignore[no-untyped-def]
+            calls.append(kwargs)
+            return await original_enhance(**kwargs)
+
+        with patch.object(enhancer, "enhance", side_effect=capture_enhance):
+            await enhancer.enhance_for_models(
+                "What is diabetes?",
+                model_ids=["claude-opus-4-6"],
+            )
+
+        # The base enhance call must use HIPAA compliance, not GENERAL
+        assert len(calls) >= 1
+        assert calls[0].get("compliance_mode") == ComplianceMode.HIPAA
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_enhance_for_models_uses_first_valid_model_for_base(
+        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    ) -> None:
+        """enhance_for_models must use a compliant model_id for the base enhance() call.
+
+        Regression: Previously used "generic" which fails restricted allowlists.
+        """
+        enhancer = AIPEAEnhancer(default_compliance=ComplianceMode.HIPAA)
+
+        calls: list[dict] = []
+        original_enhance = enhancer.enhance
+
+        async def capture_enhance(**kwargs):  # type: ignore[no-untyped-def]
+            calls.append(kwargs)
+            return await original_enhance(**kwargs)
+
+        with patch.object(enhancer, "enhance", side_effect=capture_enhance):
+            await enhancer.enhance_for_models(
+                "What is diabetes?",
+                model_ids=["claude-opus-4-6", "gpt-5.2"],
+            )
+
+        # The base enhance call must use the first valid model, not "generic"
+        assert len(calls) >= 1
+        assert calls[0].get("model_id") == "claude-opus-4-6"

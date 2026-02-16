@@ -347,6 +347,17 @@ class TestOfflineKnowledgeBase:
             await kb.prune_low_relevance(threshold=1.5)
 
     @pytest.mark.asyncio
+    async def test_prune_non_positive_max_delete_raises(self, kb: OfflineKnowledgeBase) -> None:
+        """Test that non-positive max_delete raises ValueError and preserves data."""
+        await kb.add_knowledge("Low relevance A", KnowledgeDomain.GENERAL, relevance_score=0.05)
+        await kb.add_knowledge("Low relevance B", KnowledgeDomain.GENERAL, relevance_score=0.04)
+
+        before_count = await kb.get_node_count()
+        with pytest.raises(ValueError, match="max_delete must be greater than 0"):
+            await kb.prune_low_relevance(threshold=0.1, max_delete=-1)
+        assert await kb.get_node_count() == before_count
+
+    @pytest.mark.asyncio
     async def test_access_count_increments_on_search(self, kb: OfflineKnowledgeBase) -> None:
         """Test that access count is incremented on search."""
         node_id = await kb.add_knowledge("Searchable", KnowledgeDomain.GENERAL, relevance_score=0.9)

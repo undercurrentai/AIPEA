@@ -1,6 +1,23 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Wave 1-4: 2026-02-15)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Wave 1-5: 2026-02-16)
 
 Issues found during hybrid bug hunts but deferred (low priority or design decisions).
+
+## Wave 5 Deferred Findings (2026-02-16)
+
+### 21. Dead method `_should_escalate` in QueryRouter never called
+- **File**: `src/aipea/analyzer.py:356-388`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Reason deferred**: The method defines escalation triggers (domain count > 2, ambiguity > 0.7) that `route()` does not use — only confidence < 0.5 triggers escalation inline. The method appears to be preparation for a feature not yet wired up. Fix: either integrate into `route()` or remove dead code.
+
+### 22. `QueryAnalysis.to_dict()` serialization inconsistency for search_strategy
+- **File**: `src/aipea/models.py:75`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Reason deferred**: Uses `.name` (uppercase: `"NONE"`, `"QUICK_FACTS"`) while all other enums use `.value` (lowercase strings). Related to KNOWN_ISSUES #12 (SearchStrategy uses `auto()` int values). Fix: change SearchStrategy to string values or document the inconsistency.
+
+### 23. `_detect_entities` recompiles regex on every call
+- **File**: `src/aipea/analyzer.py:580-591`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Reason deferred**: Performance optimization, not correctness. Other patterns in the module are precompiled in `__init__`; these two are recreated per call. Fix: move to instance attributes in `QueryAnalyzer.__init__`.
 
 ## Wave 4 Deferred Findings (2026-02-15)
 
