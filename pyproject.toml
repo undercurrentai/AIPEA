@@ -24,6 +24,11 @@ dependencies = [
     "httpx>=0.27.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/undercurrentai/AIPEA"
+Repository = "https://github.com/undercurrentai/AIPEA"
+Issues = "https://github.com/undercurrentai/AIPEA/issues"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
