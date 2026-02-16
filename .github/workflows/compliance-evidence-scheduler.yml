@@ -489,18 +489,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           FAILED_JOBS=""
-          if [ "${{ needs.quarterly-access-review.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-access-review
-"; fi
-          if [ "${{ needs.quarterly-vendor-risk.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-vendor-risk
-"; fi
-          if [ "${{ needs.quarterly-incident-drill.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-incident-drill
-"; fi
-          if [ "${{ needs.quarterly-fsi-emergency-test.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-fsi-emergency-test
-"; fi
-          if [ "${{ needs.monthly-postmarket-monitoring.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- monthly-postmarket-monitoring
-"; fi
-          if [ "${{ needs.annual-bcp-drp-test.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- annual-bcp-drp-test
-"; fi
+          if [ "${{ needs.quarterly-access-review.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-access-review\n"; fi
+          if [ "${{ needs.quarterly-vendor-risk.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-vendor-risk\n"; fi
+          if [ "${{ needs.quarterly-incident-drill.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-incident-drill\n"; fi
+          if [ "${{ needs.quarterly-fsi-emergency-test.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- quarterly-fsi-emergency-test\n"; fi
+          if [ "${{ needs.monthly-postmarket-monitoring.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- monthly-postmarket-monitoring\n"; fi
+          if [ "${{ needs.annual-bcp-drp-test.result }}" = "failure" ]; then FAILED_JOBS="${FAILED_JOBS}- annual-bcp-drp-test\n"; fi
           created=false
           for attempt in 1 2 3; do
             if gh issue create \
