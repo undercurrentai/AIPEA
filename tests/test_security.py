@@ -491,6 +491,62 @@ class TestReDoSBackreferenceDetection:
         assert scanner._is_regex_safe(r"[a-z]+\d{3}") is True
 
 
+class TestCharClassNestedQuantifierReDoS:
+    """Regression tests for character class nested quantifier ReDoS bypass."""
+
+    @pytest.mark.unit
+    def test_negated_char_class_quantified_group_rejected(self) -> None:
+        """([^)]+)+ must be rejected — confirmed catastrophic backtracking."""
+        scanner = SecurityScanner()
+        ctx = SecurityContext(blocked_patterns=[r"([^)]+)+"])
+        result = scanner.scan("a" * 30 + ")", ctx)
+        assert not any("custom_blocked:" in f for f in result.flags), (
+            "([^)]+)+ should be rejected as unsafe"
+        )
+
+    @pytest.mark.unit
+    def test_negated_char_class_star_quantified_rejected(self) -> None:
+        """([^a-z]*)* must be rejected."""
+        scanner = SecurityScanner()
+        ctx = SecurityContext(blocked_patterns=[r"([^a-z]*)*"])
+        result = scanner.scan("1" * 30, ctx)
+        assert not any("custom_blocked:" in f for f in result.flags)
+
+    @pytest.mark.unit
+    def test_whitespace_negation_quantified_rejected(self) -> None:
+        r"""([^\s]+)+ must be rejected."""
+        scanner = SecurityScanner()
+        ctx = SecurityContext(blocked_patterns=[r"([^\s]+)+"])
+        result = scanner.scan("a" * 30, ctx)
+        assert not any("custom_blocked:" in f for f in result.flags)
+
+    @pytest.mark.unit
+    def test_positive_char_class_quantified_rejected(self) -> None:
+        """([abc]+)+ must also be rejected (not just negated)."""
+        scanner = SecurityScanner()
+        ctx = SecurityContext(blocked_patterns=[r"([abc]+)+"])
+        result = scanner.scan("a" * 30 + "d", ctx)
+        assert not any("custom_blocked:" in f for f in result.flags)
+
+    @pytest.mark.unit
+    def test_char_class_with_brace_quantifier_rejected(self) -> None:
+        """([^x]{1,})+ must be rejected."""
+        scanner = SecurityScanner()
+        ctx = SecurityContext(blocked_patterns=[r"([^x]{1,})+"])
+        result = scanner.scan("a" * 30, ctx)
+        assert not any("custom_blocked:" in f for f in result.flags)
+
+    @pytest.mark.unit
+    def test_safe_char_class_without_nesting_allowed(self) -> None:
+        """[^x]+ without outer group quantifier must be allowed."""
+        scanner = SecurityScanner()
+        ctx = SecurityContext(blocked_patterns=[r"[^x]+match"])
+        result = scanner.scan("aaaamatch", ctx)
+        assert any("custom_blocked:" in f for f in result.flags), (
+            "Safe char class pattern should work"
+        )
+
+
 # =============================================================================
 # WAVE 4 REGRESSION TESTS
 # =============================================================================

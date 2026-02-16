@@ -282,6 +282,7 @@ class SecurityScanner:
         r"\+\+",  # Possessive-like patterns that cause issues
         r"\*\*",  # Double quantifier
         r"\{\d+,\}\{\d+,\}",  # Multiple unbounded quantifiers
+        r"\(\[\^[^\]]*\][+*]\)\+",  # ([^x]+)+ — char class in quantified group
     ]
 
     def _is_regex_safe(self, pattern: str) -> bool:
@@ -320,6 +321,13 @@ class SecurityScanner:
         nested_quantifier_pattern = r"\([^)]*[+*?][^)]*\)[+*?]|\([^)]*[+*?][^)]*\)\{[^}]+\}"
         if re.search(nested_quantifier_pattern, pattern):
             logger.debug("Pattern rejected: contains nested quantifiers")
+            return False
+
+        # Check for character class with quantifier inside a quantified group
+        # E.g., ([^x]+)+, ([^a-z]*)+, ([^\s]{1,})+ — all cause catastrophic backtracking
+        char_class_quantifier = r"\(\[.*?\](?:[+*]|\{[^}]+\})\)(?:[+*?]|\{[^}]+\})"
+        if re.search(char_class_quantifier, pattern):
+            logger.debug("Pattern rejected: character class with quantifier in quantified group")
             return False
 
         # Check for overlapping alternatives with quantifiers

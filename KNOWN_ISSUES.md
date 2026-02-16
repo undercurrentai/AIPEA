@@ -52,6 +52,11 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **File**: `src/aipea/search.py:43-44`
 - **Fix**: Added validation `0 < _raw_timeout < float("inf")`, defaults to 30.0 on invalid.
 
+### 27. `_is_regex_safe` fails to detect character class nested quantifier ReDoS — FIXED
+- **File**: `src/aipea/security.py`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Fix**: Added char-class-in-quantified-group detection to `_is_regex_safe()` and `_DANGEROUS_PATTERNS`. Patterns like `([^)]+)+` are now rejected before compilation. See also #19 (possessive quantifier false positives remain deferred).
+
 ## Intentional Design Decisions (documented, not bugs)
 
 ### 1. `_stats` dict not thread-safe on AIPEAEnhancer singleton — INTENTIONAL
@@ -71,7 +76,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Rationale**: TACTICAL mode is for military/defense contexts where these words have specific meaning. Conservative by design.
 
 ### 6. Classified marker check only runs in TACTICAL mode — INTENTIONAL
-- **File**: `src/aipea/security.py:457-459`
+- **File**: `src/aipea/security.py:465-468`
 - **Rationale**: Intentional scoping per compliance mode. Running classified checks in all modes would generate noise in GENERAL usage.
 
 ### 11. Exa API scores may not be in [0, 1] range causing log noise — INTENTIONAL
@@ -106,9 +111,9 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Reason deferred**: Cosmetic inconsistency, low impact.
 
 ### 19. `_is_regex_safe` rejects possessive quantifiers valid in Python 3.11+
-- **File**: `src/aipea/security.py:297-310`
+- **File**: `src/aipea/security.py:277-286`
 - **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: No current patterns use possessive quantifiers. Security-sensitive change.
+- **Reason deferred**: No current patterns use possessive quantifiers. Security-sensitive change. Note: the related false *negative* (char class patterns bypassing detection) was fixed in #27.
 
 ### 20. Unvalidated `search_context` type in `EnhancedQuery`
 - **File**: `src/aipea/engine.py:1020-1078`
