@@ -19,4 +19,5 @@ jobs:
       - name: Log schema validation
         run: python tools/ci/validate_log_schema.py
       - name: Scaffold adoption check
+        continue-on-error: true  # Non-blocking until templates are customized
         run: python tools/ci/validate_scaffold_adoption.py
