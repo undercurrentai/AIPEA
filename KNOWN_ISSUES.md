@@ -1,6 +1,28 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Wave 1-3: 2026-02-15)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Wave 1-4: 2026-02-15)
 
 Issues found during hybrid bug hunts but deferred (low priority or design decisions).
+
+## Wave 4 Deferred Findings (2026-02-15)
+
+### 17. Blocked/passthrough paths skip compliance_distribution stats update
+- **File**: `src/aipea/enhancer.py:843-894`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Reason deferred**: Stats are best-effort (see #1). When enhance() returns early due to security block or passthrough, the compliance_distribution counter is not incremented. Fix: move stats update before early return.
+
+### 18. Unreachable temporal suggestion branch in `suggest_enhancements`
+- **File**: `src/aipea/analyzer.py:761`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Reason deferred**: The temporal enhancement suggestion for `QueryType.TEMPORAL` queries is unreachable because the preceding `RESEARCH` branch always matches first (both share similar confidence thresholds). Not harmful — just dead code. Fix: reorder branches or add explicit temporal check.
+
+### 19. `_is_regex_safe` rejects possessive quantifiers valid in Python 3.11+
+- **File**: `src/aipea/security.py:297-310`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Reason deferred**: Python 3.11+ (PEP 679) supports possessive quantifiers (`a++`, `a*+`) which are actually ReDoS-safe. The safety checker incorrectly flags them because it detects adjacent quantifiers. Fix: add possessive quantifier exception to the checker. Not urgent since no current patterns use possessive quantifiers.
+
+### 20. Unvalidated `search_context` type in `EnhancedQuery`
+- **File**: `src/aipea/enhancer.py:76-78`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Reason deferred**: `TacticalTierProcessor.process()` passes `search_context` to `EnhancedQuery` without type validation. If a non-SearchContext object is passed, it will fail at attribute access time rather than at construction. Fix: add isinstance check or type annotation enforcement.
 
 ## Wave 3 Deferred Findings (2026-02-15)
 

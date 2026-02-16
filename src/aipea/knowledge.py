@@ -368,8 +368,8 @@ class OfflineKnowledgeBase:
                     # AFTER successful decompression and node creation
                     node_ids.append(row["id"])
 
-                except (zlib.error, UnicodeDecodeError) as e:
-                    logger.warning(f"Failed to decompress node {row['id']}: {e}")
+                except (zlib.error, UnicodeDecodeError, ValueError) as e:
+                    logger.warning(f"Failed to reconstruct node {row['id']}: {e}")
                     continue
 
             # Update access counts and timestamps for retrieved nodes
@@ -512,8 +512,8 @@ class OfflineKnowledgeBase:
                     created_at=created_at,
                     access_count=row["access_count"],
                 )
-            except (zlib.error, UnicodeDecodeError) as e:
-                logger.warning(f"Failed to decompress node {node_id}: {e}")
+            except (zlib.error, UnicodeDecodeError, ValueError) as e:
+                logger.warning(f"Failed to reconstruct node {node_id}: {e}")
                 return None
 
     async def update_relevance(self, node_id: str, new_score: float) -> bool:

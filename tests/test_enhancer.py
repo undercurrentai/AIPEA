@@ -15,6 +15,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -292,6 +293,20 @@ class TestAIPEAEnhancerInit:
         enhancer = AIPEAEnhancer()
         assert enhancer._offline_kb is None
         assert enhancer._search_orchestrator is not None
+
+    @pytest.mark.unit
+    @patch.dict(os.environ, {"EXA_API_KEY": "", "FIRECRAWL_API_KEY": ""}, clear=False)
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    def test_explicit_api_keys_enable_providers_without_env(self, mock_kb: MagicMock) -> None:
+        """Constructor API key parameters should be used even when env vars are unset."""
+        enhancer = AIPEAEnhancer(
+            exa_api_key="explicit-exa-key",
+            firecrawl_api_key="explicit-firecrawl-key",
+        )
+        assert enhancer._search_orchestrator is not None
+        status = enhancer._search_orchestrator.get_provider_status()
+        assert status["exa"] is True
+        assert status["firecrawl"] is True
 
 
 # =============================================================================
@@ -816,3 +831,30 @@ class TestEnhanceForModelsHIPAABase:
             )
 
         assert requests == {}
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_enhance_for_models_propagates_tactical_force_offline(
+        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    ) -> None:
+        """enhance_for_models must propagate force_offline for TACTICAL compliance."""
+        enhancer = AIPEAEnhancer(default_compliance=ComplianceMode.TACTICAL)
+
+        calls: list[dict] = []
+        original_enhance = enhancer.enhance
+
+        async def capture_enhance(**kwargs):  # type: ignore[no-untyped-def]
+            calls.append(kwargs)
+            return await original_enhance(**kwargs)
+
+        with patch.object(enhancer, "enhance", side_effect=capture_enhance):
+            await enhancer.enhance_for_models(
+                "sensitive tactical query",
+                model_ids=["llama-3.3-70b"],
+            )
+
+        # The base enhance call must include force_offline=True
+        assert len(calls) >= 1
+        assert calls[0].get("force_offline") is True

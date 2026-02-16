@@ -16,6 +16,7 @@ import tempfile
 import time
 from collections.abc import Generator
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -557,6 +558,93 @@ class TestAddKnowledgeLastAccessedPreservation:
         finally:
             if os.path.exists(db_path):
                 os.remove(db_path)
+
+
+# =============================================================================
+# WAVE 4 REGRESSION TESTS
+# =============================================================================
+
+
+class TestWave4InvalidDomainRecovery:
+    """Regression tests for ValueError recovery on invalid domain strings."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_get_by_id_handles_invalid_domain(self, tmp_path: Any) -> None:
+        """get_by_id should return None for rows with invalid domain values."""
+        import sqlite3
+        import zlib
+
+        db_path = tmp_path / "test_invalid_domain.db"
+        kb = OfflineKnowledgeBase(db_path=db_path)
+
+        # Insert a row with an invalid domain directly into SQLite
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        compressed = zlib.compress(b"test content")
+        now = datetime.now(UTC).isoformat()
+        conn.execute(
+            """INSERT INTO knowledge_nodes
+               (id, domain, content_hash, compressed_content, relevance_score,
+                security_classification, created_at, last_accessed, access_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                "invalid-1",
+                "nonexistent_domain",
+                "abc123",
+                compressed,
+                0.5,
+                "unclassified",
+                now,
+                now,
+                0,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        # get_by_id should handle ValueError gracefully, not crash
+        result = await kb.get_by_id("invalid-1")
+        assert result is None
+
+        kb.close()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_search_handles_invalid_domain_in_results(self, tmp_path: Any) -> None:
+        """search should skip rows with invalid domain values."""
+        import sqlite3
+        import zlib
+
+        db_path = tmp_path / "test_invalid_domain_search.db"
+        kb = OfflineKnowledgeBase(db_path=db_path)
+
+        # Insert a valid row and an invalid-domain row
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        now = datetime.now(UTC).isoformat()
+        for node_id, domain, content in [
+            ("valid-1", "general", "valid content about AI"),
+            ("invalid-1", "bad_domain", "some content about AI"),
+        ]:
+            compressed = zlib.compress(content.encode())
+            content_hash = node_id
+            conn.execute(
+                """INSERT INTO knowledge_nodes
+                   (id, domain, content_hash, compressed_content, relevance_score,
+                    security_classification, created_at, last_accessed, access_count)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (node_id, domain, content_hash, compressed, 0.5, "unclassified", now, now, 0),
+            )
+        conn.commit()
+        conn.close()
+
+        # search should not crash; it may return the valid row
+        results = await kb.search("AI")
+        # Should not raise ValueError
+        assert isinstance(results, list)
+
+        kb.close()
 
 
 if __name__ == "__main__":

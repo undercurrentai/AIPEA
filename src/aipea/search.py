@@ -342,13 +342,14 @@ class ExaSearchProvider(SearchProvider):
         api_key: Exa API key from environment
     """
 
-    def __init__(self, enabled: bool = True) -> None:
+    def __init__(self, enabled: bool = True, api_key: str | None = None) -> None:
         """Initialize the Exa search provider.
 
         Args:
             enabled: Whether to enable this provider (disabled returns empty results)
+            api_key: Optional API key override (falls back to EXA_API_KEY env var)
         """
-        self.api_key = os.environ.get("EXA_API_KEY", "")
+        self.api_key = api_key if api_key is not None else os.environ.get("EXA_API_KEY", "")
         self.enabled = enabled and bool(self.api_key)
 
         if not self.api_key:
@@ -464,13 +465,14 @@ class FirecrawlProvider(SearchProvider):
         api_key: Firecrawl API key from environment
     """
 
-    def __init__(self, enabled: bool = True) -> None:
+    def __init__(self, enabled: bool = True, api_key: str | None = None) -> None:
         """Initialize the Firecrawl provider.
 
         Args:
             enabled: Whether to enable this provider (disabled returns empty results)
+            api_key: Optional API key override (falls back to FIRECRAWL_API_KEY env var)
         """
-        self.api_key = os.environ.get("FIRECRAWL_API_KEY", "")
+        self.api_key = api_key if api_key is not None else os.environ.get("FIRECRAWL_API_KEY", "")
         self.enabled = enabled and bool(self.api_key)
 
         if not self.api_key:
@@ -847,6 +849,8 @@ class SearchOrchestrator:
         exa_enabled: bool = True,
         firecrawl_enabled: bool = True,
         context7_enabled: bool = True,
+        exa_api_key: str | None = None,
+        firecrawl_api_key: str | None = None,
     ) -> None:
         """Initialize the search orchestrator with configured providers.
 
@@ -854,9 +858,13 @@ class SearchOrchestrator:
             exa_enabled: Whether to enable Exa provider
             firecrawl_enabled: Whether to enable Firecrawl provider
             context7_enabled: Whether to enable Context7 provider
+            exa_api_key: Optional Exa API key override
+            firecrawl_api_key: Optional Firecrawl API key override
         """
-        self.exa_provider = ExaSearchProvider(enabled=exa_enabled)
-        self.firecrawl_provider = FirecrawlProvider(enabled=firecrawl_enabled)
+        self.exa_provider = ExaSearchProvider(enabled=exa_enabled, api_key=exa_api_key)
+        self.firecrawl_provider = FirecrawlProvider(
+            enabled=firecrawl_enabled, api_key=firecrawl_api_key
+        )
         self.context7_provider = Context7Provider(enabled=context7_enabled)
 
         enabled_count = sum(

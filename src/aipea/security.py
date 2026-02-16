@@ -195,6 +195,7 @@ class ScanResult:
         return {
             "flags": self.flags,
             "is_blocked": self.is_blocked,
+            "force_offline": self.force_offline,
             "has_pii": self.has_pii(),
             "has_phi": self.has_phi(),
             "has_classified": self.has_classified_content(),
@@ -249,7 +250,7 @@ class SecurityScanner:
         r"ignore\s+(previous|all)\s+instructions",
         r"</?(system|user|assistant)>",
         r"\[/?(system|user|assistant|human)\]",  # Bracket-style role tags
-        r"\n(?:Human|Assistant|System)\s*:",  # Conversation separator injection
+        r"(?:^|\n)(?:Human|Assistant|System)\s*:",  # Conversation separator injection
         r"DROP\s+TABLE",
         r"UNION\s+SELECT",
         r"\{\{.*\}\}",  # Template injection

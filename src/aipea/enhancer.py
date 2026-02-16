@@ -330,6 +330,8 @@ class AIPEAEnhancer:
                 exa_enabled=True,
                 firecrawl_enabled=True,
                 context7_enabled=True,
+                exa_api_key=exa_api_key,
+                firecrawl_api_key=firecrawl_api_key,
             )
 
         # Initialize offline knowledge base
@@ -582,11 +584,13 @@ class AIPEAEnhancer:
         # create_model_specific_prompt, preventing double model-specific wrapping.
         # Use GENERAL compliance for the base call because "generic" is not on any
         # restricted allowlist.  Per-model compliance validation happens in the loop.
+        compliance_handler = ComplianceHandler(self._default_compliance)
         base_result = await self.enhance(
             query=query,
             model_id="generic",
             security_level=security_level,
             compliance_mode=ComplianceMode.GENERAL,
+            force_offline=compliance_handler.force_offline,
         )
 
         # If the base enhancement was blocked (e.g. injection detected),
