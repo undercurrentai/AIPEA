@@ -1,47 +1,89 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Wave 1-5: 2026-02-16)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-6 + Quality Gate: 2026-02-16)
 
-Issues found during hybrid bug hunts but deferred (low priority or design decisions).
+Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 
-## Wave 5 Deferred Findings (2026-02-16)
+## Wave 6 Fixes (2026-02-16) — 12 issues resolved
 
-### 21. Dead method `_should_escalate` in QueryRouter never called
-- **File**: `src/aipea/analyzer.py:356-388`
-- **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: The method defines escalation triggers (domain count > 2, ambiguity > 0.7) that `route()` does not use — only confidence < 0.5 triggers escalation inline. The method appears to be preparation for a feature not yet wired up. Fix: either integrate into `route()` or remove dead code.
+### 4. `_multi_source_search` runs providers sequentially instead of concurrently — FIXED
+- **File**: `src/aipea/search.py`
+- **Fix**: Replaced sequential `await` calls with `asyncio.gather()` for concurrent execution.
 
-### 22. `QueryAnalysis.to_dict()` serialization inconsistency for search_strategy
-- **File**: `src/aipea/models.py:75`
-- **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Uses `.name` (uppercase: `"NONE"`, `"QUICK_FACTS"`) while all other enums use `.value` (lowercase strings). Related to KNOWN_ISSUES #12 (SearchStrategy uses `auto()` int values). Fix: change SearchStrategy to string values or document the inconsistency.
+### 8. NaN values bypass `__post_init__` clamping — FIXED
+- **Files**: `src/aipea/models.py`, `src/aipea/search.py`
+- **Fix**: Added `math.isnan()` checks before clamping in `QueryAnalysis`, `SearchResult`, and `SearchContext`.
 
-### 23. `_detect_entities` recompiles regex on every call
-- **File**: `src/aipea/analyzer.py:580-591`
-- **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Performance optimization, not correctness. Other patterns in the module are precompiled in `__init__`; these two are recreated per call. Fix: move to instance attributes in `QueryAnalyzer.__init__`.
+### 9. `_check_ollama_availability` async race condition — FIXED
+- **File**: `src/aipea/engine.py`
+- **Fix**: Added `asyncio.Lock()` with double-checked locking to prevent concurrent first-call races.
 
-## Wave 4 Deferred Findings (2026-02-15)
+### 10. `close()` does not acquire `_db_lock` — FIXED
+- **File**: `src/aipea/knowledge.py`
+- **Fix**: Wrapped `close()` body with `self._db_lock` acquisition.
 
-### 17. Blocked/passthrough paths skip compliance_distribution stats update
-- **File**: `src/aipea/enhancer.py:410-458` (early returns in `enhance()`)
-- **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Stats are best-effort (see #1). When enhance() returns early due to security block or passthrough, the compliance_distribution counter is not incremented (stats update is at line 530, after the early returns). Fix: move stats update before early return.
+### 15. `num_results=0` produces confidence `0.0` despite returned results — FIXED
+- **File**: `src/aipea/search.py`
+- **Fix**: Clamped `num_results = max(1, num_results)` at start of both `ExaSearchProvider.search` and `FirecrawlProvider.search`.
 
-### 18. Unreachable temporal suggestion branch in `suggest_enhancements`
-- **File**: `src/aipea/analyzer.py:761`
-- **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: The condition `analysis.needs_current_info and not analysis.temporal_markers` is always False because `needs_current_info` is only set True when temporal markers ARE found (in `_detect_temporal_needs`). Not harmful — just dead code. Fix: change condition or remove the branch.
+### 17. Blocked/passthrough paths skip `compliance_distribution` stats update — FIXED
+- **File**: `src/aipea/enhancer.py`
+- **Fix**: Added `compliance_distribution` increment before each early return (passthrough, model-blocked, security-blocked).
 
-### 19. `_is_regex_safe` rejects possessive quantifiers valid in Python 3.11+
-- **File**: `src/aipea/security.py:297-310`
-- **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: Python 3.11+ (PEP 679) supports possessive quantifiers (`a++`, `a*+`) which are actually ReDoS-safe. The safety checker incorrectly flags them because it detects adjacent quantifiers. Fix: add possessive quantifier exception to the checker. Not urgent since no current patterns use possessive quantifiers.
+### 18. Unreachable temporal suggestion branch — FIXED
+- **File**: `src/aipea/analyzer.py`
+- **Fix**: Removed the dead `if analysis.needs_current_info and not analysis.temporal_markers:` block from `suggest_enhancements`.
 
-### 20. Unvalidated `search_context` type in `EnhancedQuery`
-- **File**: `src/aipea/engine.py:1020-1078` (`TacticalTierProcessor.process()`)
-- **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: `TacticalTierProcessor.process()` extracts `search_context` from context dict (line 1020) and passes it to `EnhancedQuery` (line 1078) without type validation at construction time. The isinstance check at line 1034 only guards formatting, not construction. Fix: add isinstance check or type annotation enforcement.
+### 21. Dead `_should_escalate` method never called — FIXED
+- **File**: `src/aipea/analyzer.py`
+- **Fix**: Deleted the entire `_should_escalate` method (~35 lines of dead code).
 
-## Wave 3 Deferred Findings (2026-02-15)
+### 23. `_detect_entities` recompiles regex per call — FIXED
+- **File**: `src/aipea/analyzer.py`
+- **Fix**: Moved `cap_pattern` and `tech_pattern` compilation to `QueryAnalyzer.__init__` as instance attributes.
+
+### 24. `\r` carriage return bypasses conversation separator injection detection — FIXED
+- **File**: `src/aipea/security.py:253`
+- **Fix**: Changed `\n` to `[\r\n]` in injection pattern to detect carriage return bypasses.
+
+### 25. `search()` limit parameter allows negative values (LIMIT -1 returns all rows) — FIXED
+- **File**: `src/aipea/knowledge.py:310`
+- **Fix**: Added `limit = max(1, limit)` clamp before SQL query.
+
+### 26. `HTTP_TIMEOUT` accepts `inf`, `nan`, negative, and zero values — FIXED
+- **File**: `src/aipea/search.py:43-44`
+- **Fix**: Added validation `0 < _raw_timeout < float("inf")`, defaults to 30.0 on invalid.
+
+## Intentional Design Decisions (documented, not bugs)
+
+### 1. `_stats` dict not thread-safe on AIPEAEnhancer singleton — INTENTIONAL
+- **File**: `src/aipea/enhancer.py:349-357`
+- **Rationale**: Async model is single-threaded; stats are best-effort. Adding locks would add overhead to every enhance() call.
+
+### 2. MODEL_FAMILY_MAP returns "gpt" instead of "openai" for GPT-5.x models — INTENTIONAL
+- **File**: `src/aipea/enhancer.py:187-189`
+- **Rationale**: Downstream code uses substring matching (`"gpt" in model_lower`), so `"gpt"` still matches correctly.
+
+### 3. `merge_with` produces non-zero confidence with zero results — INTENTIONAL
+- **File**: `src/aipea/search.py:272-280`
+- **Rationale**: Only triggered by constructing SearchContext with non-zero confidence but empty results, which doesn't happen in normal usage.
+
+### 5. Classified markers "SECRET"/"CONFIDENTIAL" may cause false positives — INTENTIONAL
+- **File**: `src/aipea/security.py:239-245`
+- **Rationale**: TACTICAL mode is for military/defense contexts where these words have specific meaning. Conservative by design.
+
+### 6. Classified marker check only runs in TACTICAL mode — INTENTIONAL
+- **File**: `src/aipea/security.py:457-459`
+- **Rationale**: Intentional scoping per compliance mode. Running classified checks in all modes would generate noise in GENERAL usage.
+
+### 11. Exa API scores may not be in [0, 1] range causing log noise — INTENTIONAL
+- **File**: `src/aipea/search.py:422`
+- **Rationale**: Clamping already handles this; log noise is minor and useful for monitoring.
+
+## Deferred Findings (8 remaining)
+
+### 7. OfflineKnowledgeBase async methods block the event loop on SQLite I/O
+- **File**: `src/aipea/knowledge.py:285-644`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Reason deferred**: Architectural concern requiring significant refactor (wrap all methods with asyncio.to_thread or migrate to aiosqlite). The current approach works for low-concurrency use cases.
 
 ### 12. Duplicate `SearchStrategy` enum in `_types.py` and `search.py` creates silent type mismatch
 - **File**: `src/aipea/_types.py:46-52`, `src/aipea/search.py:51-60`
@@ -51,78 +93,29 @@ Issues found during hybrid bug hunts but deferred (low priority or design decisi
 ### 13. `engine.py` re-exports `SearchStrategy` from `search.py` instead of `_types.py`
 - **File**: `src/aipea/engine.py:43, 1692`
 - **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Consequence of #12. `from aipea.engine import SearchStrategy` gives wrong enum. Fix: remove from engine.py `__all__` or import from `_types`.
+- **Reason deferred**: Consequence of #12. Blocked until enum unification.
 
 ### 14. No test for publicly-exported `SearchStrategy` from `_types`
 - **File**: `tests/test_search.py:40-51`
 - **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Test coverage gap, not a code bug. Tests verify search.SearchStrategy but not the public _types.SearchStrategy (4 members including NONE).
-
-### 15. `num_results=0` produces confidence `0.0` despite returned results
-- **File**: `src/aipea/search.py:426-428, 550-552`
-- **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: Edge case requiring `num_results=0` as input, which is not a normal API usage pattern. Fix: clamp `num_results` to `max(1, num_results)`.
+- **Reason deferred**: Blocked by #12 (enum unification).
 
 ### 16. OpenAI/Generic formatters lack markdown escaping vs Anthropic formatter
 - **File**: `src/aipea/search.py:175-258`
 - **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: Cosmetic inconsistency. Anthropic formatter HTML-escapes content in XML tags; OpenAI/Generic formatters embed raw content in markdown. Could cause structural ambiguity if search result titles contain markdown control characters.
+- **Reason deferred**: Cosmetic inconsistency, low impact.
 
-## Wave 2 Deferred Findings (2026-02-15)
-
-### 8. NaN values bypass `__post_init__` clamping in QueryAnalysis and SearchResult/SearchContext
-- **File**: `src/aipea/models.py:41-60`, `src/aipea/search.py:100-134`
-- **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Requires `float('nan')` to enter the system via direct construction or malformed API response. `max(0.0, min(1.0, nan))` returns `nan` in Python, so clamping is a no-op. Downstream NaN comparisons silently return False, causing unpredictable routing. Fix: add `math.isnan()` check before clamping.
-
-### 9. `_check_ollama_availability` async race condition on concurrent first calls
-- **File**: `src/aipea/engine.py:790-816`
-- **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Sets `_ollama_checked = True` before first `await`, so concurrent callers skip initialization while first caller is still probing. Second caller falls back to templates. Fix: use `asyncio.Lock()` for double-checked locking.
-
-### 10. `close()` does not acquire `_db_lock` during connection closure
-- **File**: `src/aipea/knowledge.py:176-186`
+### 19. `_is_regex_safe` rejects possessive quantifiers valid in Python 3.11+
+- **File**: `src/aipea/security.py:297-310`
 - **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: Only exploitable in multi-threaded access where shutdown races with active operations. `contextlib.suppress(Exception)` partially mitigates. Fix: acquire `_db_lock` in `close()`.
+- **Reason deferred**: No current patterns use possessive quantifiers. Security-sensitive change.
 
-### 11. Exa API scores may not be in [0, 1] range causing log noise
-- **File**: `src/aipea/search.py:422`
+### 20. Unvalidated `search_context` type in `EnhancedQuery`
+- **File**: `src/aipea/engine.py:1020-1078`
 - **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: Exa neural search scores are not guaranteed [0, 1]. `SearchResult.__post_init__` clamps but emits warning per result, creating log noise. Fix: normalize score before constructing SearchResult.
+- **Reason deferred**: Low confidence, edge case.
 
-## Wave 1 Deferred Findings
-
-### 1. `_stats` dict not thread-safe on AIPEAEnhancer singleton
-- **File**: `src/aipea/enhancer.py:349-357` (init), `528-530` (update)
-- **Severity**: MEDIUM | **Confidence**: MEDIUM
-- **Reason deferred**: Stats are approximate by nature; adding locks would add overhead to every enhance() call. Document that stats are best-effort.
-
-### 2. MODEL_FAMILY_MAP returns "gpt" instead of "openai" for GPT-5.x models
-- **File**: `src/aipea/enhancer.py:187-189`
+### 22. `QueryAnalysis.to_dict()` serialization inconsistency for search_strategy
+- **File**: `src/aipea/models.py:75`
 - **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Benign in practice — downstream code uses substring matching (`"gpt" in model_lower`), so `"gpt"` still matches. Would only matter if exact equality (`== "openai"`) were used.
-
-### 3. `merge_with` produces non-zero confidence with zero results
-- **File**: `src/aipea/search.py:272-280`
-- **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Only triggered by constructing SearchContext with non-zero confidence but empty results, which doesn't happen in normal usage.
-
-### 4. `_multi_source_search` runs providers sequentially instead of concurrently
-- **File**: `src/aipea/search.py:954-955`
-- **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Performance optimization, not a correctness bug. Would require adding `import asyncio` to search.py.
-
-### 5. Classified markers "SECRET" and "CONFIDENTIAL" may cause false positives
-- **File**: `src/aipea/security.py:239-245`
-- **Severity**: MEDIUM | **Confidence**: MEDIUM
-- **Reason deferred**: Design decision — these markers are only checked in TACTICAL mode. Users in TACTICAL mode are expected to be in military/defense contexts where these words have specific meaning.
-
-### 6. Classified marker check only runs in TACTICAL mode
-- **File**: `src/aipea/security.py:457-459`
-- **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: Intentional design — compliance modes have scoped checks. Running classified checks in all modes would generate noise in GENERAL usage.
-
-### 7. OfflineKnowledgeBase async methods block the event loop on SQLite I/O
-- **File**: `src/aipea/knowledge.py:285-644`
-- **Severity**: MEDIUM | **Confidence**: HIGH
-- **Reason deferred**: Architectural concern requiring significant refactor (wrap all methods with asyncio.to_thread or migrate to aiosqlite). The current approach works for low-concurrency use cases.
+- **Reason deferred**: Blocked by #12 (SearchStrategy enum unification).
