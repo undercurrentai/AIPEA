@@ -240,11 +240,34 @@ class TestSecurityScanner:
         assert "pii_detected:credit_card" in result.flags
 
     def test_scan_detects_api_key(self) -> None:
-        """Test API key detection."""
+        """Test API key detection via sk- prefix."""
         ctx = SecurityContext()
         result = self.scanner.scan("Use sk-abcdefghijklmnopqrstuv for auth", ctx)
         assert result.has_pii() is True
+        assert "pii_detected:sk_key" in result.flags
+
+    def test_scan_detects_api_key_with_separator(self) -> None:
+        """Test API key detection with = separator (e.g., api_key=VALUE)."""
+        ctx = SecurityContext()
+        result = self.scanner.scan("export API_KEY=abcdefghijklmnopqrstuvwxyz1234", ctx)
+        assert result.has_pii() is True
         assert "pii_detected:api_key" in result.flags
+
+    def test_scan_detects_sk_proj_key(self) -> None:
+        """Test sk-proj- prefixed OpenAI keys are detected."""
+        ctx = SecurityContext()
+        result = self.scanner.scan("sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef", ctx)
+        assert result.has_pii() is True
+        assert "pii_detected:sk_key" in result.flags
+
+    def test_scan_detects_bearer_token(self) -> None:
+        """Test bearer token detection."""
+        ctx = SecurityContext()
+        result = self.scanner.scan(
+            "Authorization: bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abc123", ctx
+        )
+        assert result.has_pii() is True
+        assert "pii_detected:bearer_token" in result.flags
 
     def test_scan_detects_password(self) -> None:
         """Test password detection."""

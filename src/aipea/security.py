@@ -225,7 +225,9 @@ class SecurityScanner:
     PII_PATTERNS: ClassVar[dict[str, str]] = {
         "ssn": r"\b\d{3}-\d{2}-\d{4}\b",
         "credit_card": r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b",
-        "api_key": r"\b(sk-|api[_-]?key|bearer\s+)[a-zA-Z0-9]{20,}\b",
+        "api_key": r"\b(api[_-]?key)\s*[:=]\s*\S{20,}",
+        "sk_key": r"\bsk-[a-zA-Z0-9_-]{20,}\b",
+        "bearer_token": r"\bbearer\s+[a-zA-Z0-9._-]{20,}\b",
         "password": r"(password|passwd|pwd)\s*[:=]\s*\S+",
     }
 

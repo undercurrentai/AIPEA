@@ -406,6 +406,45 @@ class TestExaSearchProvider:
         # num_results=0 is clamped to 1, so confidence = 1/1 = 1.0
         assert result.confidence == 1.0
 
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"EXA_API_KEY": "test-api-key"})
+    async def test_search_handles_null_result_score(self) -> None:
+        """Exa results with null score should not crash provider result parsing."""
+        provider = ExaSearchProvider(enabled=True)
+
+        class DummyResponse:
+            def __init__(self, payload: dict[str, object]) -> None:
+                self._payload = payload
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, object]:
+                return self._payload
+
+        dummy_response = DummyResponse(
+            {
+                "results": [
+                    {
+                        "title": "Test Result",
+                        "url": "https://example.com",
+                        "text": "Snippet",
+                        "score": None,
+                    }
+                ]
+            }
+        )
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = dummy_response
+
+        with patch("aipea.search.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value = mock_client_instance
+            result = await provider.search("test query", num_results=1)
+
+        assert len(result.results) == 1
+        assert result.results[0].score == 0.0
+        assert result.confidence == 1.0
+
 
 # =============================================================================
 # FIRECRAWL PROVIDER TESTS

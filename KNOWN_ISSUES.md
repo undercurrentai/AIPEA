@@ -1,6 +1,27 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-7 + Quality Gate: 2026-02-16)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-8 + Quality Gate: 2026-02-16)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Wave 8 Fixes (2026-02-16) — 2 issues resolved
+
+### 32. `api_key` PII pattern misses common API key formats — FIXED
+- **File**: `src/aipea/security.py:228`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent
+- **Fix**: Split single `api_key` pattern into three separate patterns: `api_key` (catches `api_key=VALUE` with `:=` separators), `sk_key` (catches `sk-` prefixed keys including `sk-proj-`), and `bearer_token` (catches `bearer TOKEN` with dots/dashes). The original pattern required 20+ alphanumeric chars immediately after the prefix, missing separator characters and modern key formats.
+
+### 33. `SearchResult.__post_init__` crashes on non-numeric score (TypeError on `math.isnan`) — FIXED
+- **File**: `src/aipea/search.py:121`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Codex gpt-5.3-codex
+- **Fix**: Added `try/except (TypeError, ValueError)` guard before NaN check, coercing non-numeric scores to `0.0` via `float()`. Prevents `TypeError` when upstream provider returns `score: null` (Python `None`), which previously caused the entire provider search to silently degrade to empty results via the broad exception handler.
+
+## Wave 8 — False Positive
+
+### `add_knowledge` ON CONFLICT doesn't update `last_accessed` — NOT A BUG
+- **File**: `src/aipea/knowledge.py:472-477`
+- **Source**: Claude sweep agent
+- **Rationale**: `last_accessed` tracks search access, not re-insertion. Existing regression test `TestAddKnowledgeLastAccessedPreservation::test_readd_does_not_update_last_accessed` explicitly asserts this behavior. Re-adding content is an idempotent operation, not an "access".
 
 ## Deferred Issue Resolution (2026-02-16) — 9 issues resolved
 
@@ -30,7 +51,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Fix**: Added `_escape_markdown()` for OpenAI formatter (escapes `|`, `[`, `]`, `` ` ``) and `_escape_plaintext()` for generic formatter (escapes leading digit-period patterns). Anthropic formatter already had `html.escape()`.
 
 ### 19. `_is_regex_safe` rejects possessive quantifiers valid in Python 3.11+ — FIXED
-- **File**: `src/aipea/security.py:277`
+- **File**: `src/aipea/security.py:279`
 - **Severity**: LOW | **Confidence**: MEDIUM
 - **Fix**: Removed the overly-broad `r"\+\+"` pattern from `_DANGEROUS_PATTERNS`. The existing nested quantifier detection and compilation check already catch actual dangerous patterns. Possessive quantifiers like `\d++` are now accepted.
 
@@ -106,7 +127,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Fix**: Moved `cap_pattern` and `tech_pattern` compilation to `QueryAnalyzer.__init__` as instance attributes.
 
 ### 24. `\r` carriage return bypasses conversation separator injection detection — FIXED
-- **File**: `src/aipea/security.py:253`
+- **File**: `src/aipea/security.py:255`
 - **Fix**: Changed `\n` to `[\r\n]` in injection pattern to detect carriage return bypasses.
 
 ### 25. `search()` limit parameter allows negative values (LIMIT -1 returns all rows) — FIXED
@@ -133,19 +154,19 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Rationale**: Downstream code uses substring matching (`"gpt" in model_lower`), so `"gpt"` still matches correctly.
 
 ### 3. `merge_with` produces non-zero confidence with zero results — INTENTIONAL
-- **File**: `src/aipea/search.py:269-289`
+- **File**: `src/aipea/search.py:298-318`
 - **Rationale**: Only triggered by constructing SearchContext with non-zero confidence but empty results, which doesn't happen in normal usage.
 
 ### 5. Classified markers "SECRET"/"CONFIDENTIAL" may cause false positives — INTENTIONAL
-- **File**: `src/aipea/security.py:240-246`
+- **File**: `src/aipea/security.py:242-248`
 - **Rationale**: TACTICAL mode is for military/defense contexts where these words have specific meaning. Conservative by design.
 
 ### 6. Classified marker check only runs in TACTICAL mode — INTENTIONAL
-- **File**: `src/aipea/security.py:465-468`
+- **File**: `src/aipea/security.py:467-470`
 - **Rationale**: Intentional scoping per compliance mode. Running classified checks in all modes would generate noise in GENERAL usage.
 
 ### 11. Exa API scores may not be in [0, 1] range causing log noise — INTENTIONAL
-- **File**: `src/aipea/search.py:101-117`
+- **File**: `src/aipea/search.py:101-118`
 - **Rationale**: Clamping already handles this; log noise is minor and useful for monitoring.
 
 ## Deferred Findings (0 remaining)

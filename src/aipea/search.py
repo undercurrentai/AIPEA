@@ -118,6 +118,15 @@ class SearchResult:
 
     def __post_init__(self) -> None:
         """Validate score is within valid range."""
+        try:
+            score_val = float(self.score)
+        except (TypeError, ValueError):
+            logger.warning(
+                "SearchResult score has invalid type %s, defaulting to 0.0",
+                type(self.score).__name__,
+            )
+            score_val = 0.0
+        self.score = score_val
         if math.isnan(self.score):
             logger.warning("SearchResult score is NaN, defaulting to 0.0")
             self.score = 0.0
