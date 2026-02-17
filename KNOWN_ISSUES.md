@@ -82,7 +82,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Rationale**: Async model is single-threaded; stats are best-effort. Adding locks would add overhead to every enhance() call.
 
 ### 2. MODEL_FAMILY_MAP returns "gpt" instead of "openai" for GPT-5.x models — INTENTIONAL
-- **File**: `src/aipea/enhancer.py:187-189`
+- **File**: `src/aipea/enhancer.py:183-189`
 - **Rationale**: Downstream code uses substring matching (`"gpt" in model_lower`), so `"gpt"` still matches correctly.
 
 ### 3. `merge_with` produces non-zero confidence with zero results — INTENTIONAL
@@ -114,7 +114,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Reason deferred**: Architectural issue requiring coordinated rename. `_types.SearchStrategy` (auto() int values, has NONE) vs `search.SearchStrategy` (string values, no NONE). `engine.py` re-exports the wrong one. Fix: unify into single enum or rename the `search.py` version to `_OrchestratorStrategy`.
 
 ### 13. `engine.py` re-exports `SearchStrategy` from `search.py` instead of `_types.py`
-- **File**: `src/aipea/engine.py:43, 1700`
+- **File**: `src/aipea/engine.py:40-46`
 - **Severity**: LOW | **Confidence**: HIGH
 - **Reason deferred**: Consequence of #12. Blocked until enum unification.
 
@@ -134,7 +134,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Reason deferred**: No current patterns use possessive quantifiers. Security-sensitive change. Note: the related false *negative* (char class patterns bypassing detection) was fixed in #27.
 
 ### 20. Unvalidated `search_context` type in `EnhancedQuery`
-- **File**: `src/aipea/engine.py:1020-1078`
+- **File**: `src/aipea/engine.py:1017-1078`
 - **Severity**: LOW | **Confidence**: MEDIUM
 - **Reason deferred**: Low confidence, edge case.
 
