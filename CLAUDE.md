@@ -411,6 +411,7 @@ Audit before quarterly schedule if:
 | `docs/integration/agora-adapter.md` | Agora integration guide |
 | `docs/integration/aegis-adapter.md` | AEGIS integration guide |
 | `docs/claude/audits/aipea.md` | Audit packet (v4.0 protocol) |
+| `docs/ROADMAP.md` | Future features roadmap (P1-P4) |
 
 ---
 
