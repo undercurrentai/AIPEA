@@ -407,7 +407,7 @@ Audit before quarterly schedule if:
 | `../../CLAUDE.md` | Parent CLAUDE.md (Undercurrent Holdings root) |
 | `SPECIFICATION.md` | Full AIPEA specification (canonical architecture) |
 | `docs/adr/ADR-001-extraction.md` | Extraction decision record |
-| `docs/design-reference/` | Original Agora V design files (9 files, ~7.6K LOC) |
+| `docs/design-reference/` | Original Agora V design files (9 files, ~7.9K LOC) |
 | `docs/integration/agora-adapter.md` | Agora integration guide |
 | `docs/integration/aegis-adapter.md` | AEGIS integration guide |
 | `docs/claude/audits/aipea.md` | Audit packet (v4.0 protocol) |
