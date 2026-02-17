@@ -1,6 +1,24 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-6 + Quality Gate: 2026-02-16)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-7 + Quality Gate: 2026-02-16)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Wave 7 Fixes (2026-02-16) — 3 issues resolved
+
+### 28. NaN `confidence_score` bypasses clamping in `engine.py` `SearchContext` — FIXED
+- **File**: `src/aipea/engine.py:391-394`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Fix**: Added `math.isnan()` guard before clamping, matching the pattern used in `models.py` and `search.py` (issue #8). NaN values now default to 0.0.
+
+### 29. NaN `confidence` bypasses clamping in `engine.py` `EnhancedQuery` — FIXED
+- **File**: `src/aipea/engine.py:583-585`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Fix**: Added `math.isnan()` guard before clamping. Same class of bug as #28, both missed during #8 fix.
+
+### 30. `enhance_for_models` runs unnecessary base enhancement when no models are compliant — FIXED
+- **File**: `src/aipea/enhancer.py:585-597`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Codex gpt-5.3-codex
+- **Fix**: Pre-filter `model_ids` to compliance-approved models and return early if none are compliant, avoiding unnecessary processing and side effects.
 
 ## Wave 6 Fixes (2026-02-16) — 12 issues resolved
 
@@ -83,7 +101,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **File**: `src/aipea/search.py:103-110`
 - **Rationale**: Clamping already handles this; log noise is minor and useful for monitoring.
 
-## Deferred Findings (8 remaining)
+## Deferred Findings (9 remaining)
 
 ### 7. OfflineKnowledgeBase async methods block the event loop on SQLite I/O
 - **File**: `src/aipea/knowledge.py:285-644`
@@ -124,3 +142,8 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **File**: `src/aipea/models.py:75`
 - **Severity**: LOW | **Confidence**: HIGH
 - **Reason deferred**: Blocked by #12 (SearchStrategy enum unification).
+
+### 31. `_classify_query_type` tie-breaking depends on dict insertion order
+- **File**: `src/aipea/analyzer.py:526-536`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Reason deferred**: When two QueryType values match the same number of patterns, `max()` returns the first inserted key (TECHNICAL wins by default). Not a crash or security issue — it's a design decision about implicit priority. Same pattern exists in `engine.py:789`.

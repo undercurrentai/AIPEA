@@ -919,6 +919,25 @@ class TestEnhanceForModelsHIPAABase:
         assert len(calls) >= 1
         assert calls[0].get("model_id") == "claude-opus-4-6"
 
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_enhance_for_models_with_no_compliant_models_is_noop(
+        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    ) -> None:
+        """If no model is compliant, function should return empty without mutating stats."""
+        enhancer = AIPEAEnhancer(default_compliance=ComplianceMode.HIPAA)
+
+        requests = await enhancer.enhance_for_models(
+            "What is diabetes?",
+            model_ids=["gpt-4"],  # not allowed in HIPAA mode
+        )
+
+        assert requests == {}
+        assert enhancer._stats["queries_blocked"] == 0
+        assert enhancer._stats["queries_enhanced"] == 0
+
 
 # =============================================================================
 # WAVE 6 BUG-FIX REGRESSION TESTS

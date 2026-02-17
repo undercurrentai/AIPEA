@@ -582,17 +582,26 @@ class AIPEAEnhancer:
         """
         results: dict[str, EnhancedRequest] = {}
 
+        # Filter model list to those allowed by current compliance policy.
+        # If none are allowed, skip enhancement entirely.
+        compliance_handler = ComplianceHandler(self._default_compliance)
+        compliant_model_ids: list[str] = []
+        for model_id in model_ids:
+            if compliance_handler.validate_model(model_id):
+                compliant_model_ids.append(model_id)
+            else:
+                logger.warning("Skipping forbidden model in enhance_for_models: %s", model_id)
+
+        if not compliant_model_ids:
+            logger.warning("No compliant models provided in enhance_for_models; returning empty")
+            return results
+
         # Perform base enhancement once.  Per-model formatting is applied below
         # via create_model_specific_prompt, preventing double model-specific wrapping.
         # We use the actual compliance mode (not GENERAL) so PHI/classified scans run.
         # Pick the first compliant model from model_ids for the base call so that
         # the model passes the restricted allowlist check.
-        compliance_handler = ComplianceHandler(self._default_compliance)
-        base_model = "generic"
-        for mid in model_ids:
-            if compliance_handler.validate_model(mid):
-                base_model = mid
-                break
+        base_model = compliant_model_ids[0]
         base_result = await self.enhance(
             query=query,
             model_id=base_model,
@@ -609,14 +618,7 @@ class AIPEAEnhancer:
             )
             return results
 
-        # Validate each model against compliance policy before formatting
-        compliance_handler = ComplianceHandler(self._default_compliance)
-
-        for model_id in model_ids:
-            if not compliance_handler.validate_model(model_id):
-                logger.warning("Skipping forbidden model in enhance_for_models: %s", model_id)
-                continue
-
+        for model_id in compliant_model_ids:
             # Get model-specific formatting
             model_family = get_model_family(model_id)
 

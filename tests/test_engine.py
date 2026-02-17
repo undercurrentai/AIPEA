@@ -1743,5 +1743,35 @@ class TestOllamaRaceCondition:
         assert processor._ollama_checked is True
 
 
+# =============================================================================
+# WAVE 7 BUG-FIX REGRESSION TESTS
+# =============================================================================
+
+
+class TestNaNGuardsEngine:
+    """Regression: NaN values bypass clamping in engine.py dataclasses (wave 7)."""
+
+    @pytest.mark.unit
+    def test_search_context_nan_confidence_defaults_to_zero(self) -> None:
+        """SearchContext with NaN confidence_score should default to 0.0."""
+        ctx = SearchContext(
+            results=[],
+            confidence_score=float("nan"),
+        )
+        assert ctx.confidence_score == 0.0
+
+    @pytest.mark.unit
+    def test_enhanced_query_nan_confidence_defaults_to_zero(self) -> None:
+        """EnhancedQuery with NaN confidence should default to 0.0."""
+        eq = EnhancedQuery(
+            original_query="test",
+            enhanced_query="test enhanced",
+            tier_used=ProcessingTier.OFFLINE,
+            confidence=float("nan"),
+            query_type=QueryType.TECHNICAL,
+        )
+        assert eq.confidence == 0.0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

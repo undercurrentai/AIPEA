@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import re
 import threading
 from abc import ABC, abstractmethod
@@ -388,6 +389,12 @@ class SearchContext:
         if not self.search_timestamp:
             self.search_timestamp = datetime.now(UTC).isoformat()
 
+        # Guard against NaN (comparisons with NaN are always False,
+        # so the clamping below would leave NaN unchanged)
+        if math.isnan(self.confidence_score):
+            logger.warning("SearchContext confidence_score is NaN, defaulting to 0.0")
+            self.confidence_score = 0.0
+
         # Clamp confidence score to valid range
         if not 0.0 <= self.confidence_score <= 1.0:
             logger.warning(
@@ -577,6 +584,9 @@ class EnhancedQuery:
 
     def __post_init__(self) -> None:
         """Validate confidence score."""
+        if math.isnan(self.confidence):
+            logger.warning("EnhancedQuery confidence is NaN, defaulting to 0.0")
+            self.confidence = 0.0
         if not 0.0 <= self.confidence <= 1.0:
             logger.warning(
                 f"EnhancedQuery confidence {self.confidence} outside [0, 1] range, clamping"
