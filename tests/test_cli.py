@@ -221,5 +221,6 @@ class TestConfigureCommand:
 class TestNoArgs:
     def test_no_args_shows_help(self) -> None:
         result = runner.invoke(app, [])
-        assert result.exit_code == 0
+        # Typer's no_args_is_help returns 0 on some platforms, 2 on others
+        assert result.exit_code in (0, 2)
         assert "AIPEA" in result.output or "Usage" in result.output
