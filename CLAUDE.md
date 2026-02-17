@@ -26,7 +26,7 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~6,415 |
+| **Source LOC** | ~6,426 |
 | **Exports** | 30 symbols in `__all__` |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 

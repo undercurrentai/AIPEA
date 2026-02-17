@@ -55,7 +55,7 @@ parent: ../../CLAUDE.md
 | pyproject.toml | Build system | hatchling build backend — supports `hatch build` for PyPI |
 | pyproject.toml | Tool config | ruff line-length=100, py312 target, S-rules for bandit, mypy strict |
 | Makefile | Build targets | 13 targets: install, fmt, lint, type, test, sec, all, ci, mut, sbom, score, deps, perf |
-| pytest | Test suite | 417 passed, 15 skipped, 92.72% coverage (updated 2026-02-16) |
+| pytest | Test suite | 420 passed, 15 skipped, 92.75% coverage (updated 2026-02-17) |
 | CI workflow | Gate config | 3 jobs: lint, typecheck, test (matrix: py3.11 + py3.12); also scaffold-checks, compliance-nightly, compliance-evidence-scheduler workflows |
 | __init__.py | Public API | 30 exports in `__all__`, version = "1.0.0" |
 | pyproject.toml | License | MIT license, >=3.11 required |
@@ -222,6 +222,8 @@ parent: ../../CLAUDE.md
 | 2026-02-16 | KNOWN_ISSUES.md | All 9 DEFERRED + #31 resolved: 25 FIXED, 6 INTENTIONAL, 0 DEFERRED |
 | 2026-02-16 | Metrics update | Wave 8 bug hunt: 413→417 tests, 92.71%→92.72% coverage, 6,404→6,415 LOC |
 | 2026-02-16 | KNOWN_ISSUES.md | Added #32-#33 (FIXED), 1 false positive documented: 27 FIXED, 6 INTENTIONAL, 0 DEFERRED |
+| 2026-02-17 | Metrics update | Wave 9 bug hunt: 417→420 tests, 92.72%→92.75% coverage, 6,415→6,426 LOC |
+| 2026-02-17 | KNOWN_ISSUES.md | Added #34-#35 (FIXED), #36 (DEFERRED), #37 (FIXED via QG): 30 FIXED, 6 INTENTIONAL, 1 DEFERRED |
 
 *Audit completed: 2026-02-14 | Auditor: Claude Code (Opus 4.6) | Protocol: v4.0*
-*Last amended: 2026-02-16*
+*Last amended: 2026-02-17*
