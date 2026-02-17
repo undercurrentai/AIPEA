@@ -625,6 +625,21 @@ class TestAIPEAEnhancerEnhanceForModels:
         assert "gpt-4" in requests
         assert "gpt-4o" not in requests
 
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_enhance_for_models_passthrough_returns_formatted_prompts(
+        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    ) -> None:
+        """Disabled enhancement: enhance_for_models returns formatted prompts."""
+        enhancer = AIPEAEnhancer(enable_enhancement=False)
+        requests = await enhancer.enhance_for_models("What is Python?", ["gpt-4", "claude-3-opus"])
+        # Passthrough should still produce results (not empty dict)
+        assert len(requests) > 0
+        for _model_id, req in requests.items():
+            assert "What is Python?" in req.enhanced_prompt
+
 
 # =============================================================================
 # IS_OFFLINE_REQUIRED TESTS

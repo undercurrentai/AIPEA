@@ -445,6 +445,46 @@ class TestExaSearchProvider:
         assert result.results[0].score == 0.0
         assert result.confidence == 1.0
 
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"EXA_API_KEY": "test-api-key"})
+    async def test_search_handles_null_result_text_with_summary_fallback(self) -> None:
+        """Exa results with null text should fall back to summary instead of failing."""
+        provider = ExaSearchProvider(enabled=True)
+
+        class DummyResponse:
+            def __init__(self, payload: dict[str, object]) -> None:
+                self._payload = payload
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, object]:
+                return self._payload
+
+        dummy_response = DummyResponse(
+            {
+                "results": [
+                    {
+                        "title": "Test Result",
+                        "url": "https://example.com",
+                        "text": None,
+                        "summary": "Fallback summary",
+                        "score": 0.8,
+                    }
+                ]
+            }
+        )
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = dummy_response
+
+        with patch("aipea.search.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value = mock_client_instance
+            result = await provider.search("test query", num_results=1)
+
+        assert len(result.results) == 1
+        assert result.results[0].snippet == "Fallback summary"
+        assert result.confidence == 1.0
+
 
 # =============================================================================
 # FIRECRAWL PROVIDER TESTS
@@ -546,6 +586,43 @@ class TestFirecrawlProvider:
         # Should clamp max_depth to [1, 10] and time_limit to [30, 300]
         result = await provider.deep_research("topic", max_depth=20, time_limit=500)
         assert isinstance(result, SearchContext)
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test-api-key"})
+    async def test_search_handles_null_markdown_content(self) -> None:
+        """Firecrawl results with null markdown should not crash."""
+        provider = FirecrawlProvider(enabled=True)
+
+        class DummyResponse:
+            def __init__(self, payload: dict[str, object]) -> None:
+                self._payload = payload
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, object]:
+                return self._payload
+
+        dummy_response = DummyResponse(
+            {
+                "data": [
+                    {
+                        "title": "Test",
+                        "url": "https://example.com",
+                        "markdown": None,
+                    }
+                ]
+            }
+        )
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = dummy_response
+
+        with patch("aipea.search.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value = mock_client_instance
+            result = await provider.search("test query", num_results=1)
+
+        assert len(result.results) == 1
+        assert result.results[0].snippet == ""
 
 
 # =============================================================================

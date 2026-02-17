@@ -1,6 +1,34 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-8 + Quality Gate: 2026-02-16)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-9 + Quality Gate: 2026-02-17)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Wave 9 Fixes (2026-02-17) — 2 issues resolved
+
+### 34. `ExaSearchProvider.search()` crashes on `text: null` Exa results (TypeError on slice) — FIXED
+- **File**: `src/aipea/search.py:458-462`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Codex gpt-5.3-codex
+- **Fix**: When Exa returns `{"text": null}`, `item.get("text")` returns `None` (key exists), not the fallback. `None[:1000]` raised `TypeError`. Refactored to explicit null check with `summary` fallback and safe `str()` conversion before slicing.
+
+### 35. `enhance_for_models` returns empty dict when enhancement is disabled (passthrough conflated with blocked) — FIXED
+- **File**: `src/aipea/enhancer.py:615-622`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent
+- **Fix**: The `if not base_result.was_enhanced:` check conflated passthrough results (enhancement disabled, valid query) with blocked results (security threat). Added `original_query != enhanced_prompt` condition to distinguish passthrough (prompt equals query) from blocked (prompt is the block message). Passthrough queries now proceed to per-model formatting.
+
+### 37. `FirecrawlProvider.search()` and `deep_research()` crash on null markdown/content (same class as #34) — FIXED
+- **File**: `src/aipea/search.py:588,702`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Quality gate ultrathink (wave 9)
+- **Fix**: Same pattern as #34. `item.get("markdown")` and `source.get("content")` return `None` when the key exists with a null value, then `None[:1000]` raises `TypeError`. Fixed with `or ""` fallback and `str()` safety conversion. Regression test added.
+
+## Wave 9 — Deferred
+
+### 36. `enhance_for_models` bakes base model's family-specific prompt template into other models — DEFERRED
+- **File**: `src/aipea/enhancer.py:604-632`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Source**: Claude sweep agent
+- **Rationale**: The base enhancement at line 605 formats the prompt with `base_model`'s family-specific template. Non-base models receive this same prompt with an additional layer of their own family instructions via `create_model_specific_prompt`. This means non-base models get mismatched instructions (inner layer from base model family, outer layer from their own). The impact is cosmetic (slightly redundant/mismatched soft instructions), not causing crashes or data loss. Fix would require per-model enhancement or a "generic" base template.
 
 ## Wave 8 Fixes (2026-02-16) — 2 issues resolved
 

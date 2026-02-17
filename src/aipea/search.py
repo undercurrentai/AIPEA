@@ -455,11 +455,16 @@ class ExaSearchProvider(SearchProvider):
 
             results = []
             for item in data.get("results", []):
+                # Exa may return `text: null`; fall back to summary safely.
+                raw_snippet = item.get("text")
+                if raw_snippet is None:
+                    raw_snippet = item.get("summary", "")
+                snippet = str(raw_snippet)[:1000] if raw_snippet else ""
                 results.append(
                     SearchResult(
                         title=item.get("title", "Untitled"),
                         url=item.get("url", ""),
-                        snippet=item.get("text", item.get("summary", ""))[:1000],
+                        snippet=snippet,
                         score=item.get("score", 0.5),
                     )
                 )
@@ -580,8 +585,8 @@ class FirecrawlProvider(SearchProvider):
 
             results = []
             for item in data.get("data", []):
-                markdown_content = item.get("markdown", "")
-                snippet = markdown_content[:1000] if markdown_content else ""
+                markdown_content = item.get("markdown") or ""
+                snippet = str(markdown_content)[:1000] if markdown_content else ""
                 results.append(
                     SearchResult(
                         title=item.get("title", item.get("metadata", {}).get("title", "Untitled")),
@@ -694,7 +699,7 @@ class FirecrawlProvider(SearchProvider):
                     SearchResult(
                         title=source.get("title", "Source"),
                         url=source.get("url", ""),
-                        snippet=source.get("content", "")[:500],
+                        snippet=str(source.get("content") or "")[:500],
                         score=0.7,
                     )
                 )

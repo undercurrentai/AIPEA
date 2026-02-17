@@ -612,7 +612,13 @@ class AIPEAEnhancer:
 
         # If the base enhancement was blocked (e.g. injection detected),
         # do not wrap the block message in model-specific formatting.
-        if not base_result.was_enhanced:
+        # Passthrough results (enhancement disabled) also set was_enhanced=False
+        # but contain a valid prompt that should still be formatted per model.
+        is_blocked = (
+            not base_result.was_enhanced
+            and base_result.original_query != base_result.enhanced_prompt
+        )
+        if is_blocked:
             logger.warning(
                 "Base enhancement blocked in enhance_for_models; returning empty results"
             )
