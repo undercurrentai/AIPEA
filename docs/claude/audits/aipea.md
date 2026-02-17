@@ -55,13 +55,13 @@ parent: ../../CLAUDE.md
 | pyproject.toml | Build system | hatchling build backend — supports `hatch build` for PyPI |
 | pyproject.toml | Tool config | ruff line-length=100, py312 target, S-rules for bandit, mypy strict |
 | Makefile | Build targets | 13 targets: install, fmt, lint, type, test, sec, all, ci, mut, sbom, score, deps, perf |
-| pytest | Test suite | 420 passed, 15 skipped, 92.75% coverage (updated 2026-02-17) |
+| pytest | Test suite | 488 passed, 15 skipped, 90.83% coverage (updated 2026-02-17) |
 | CI workflow | Gate config | 3 jobs: lint, typecheck, test (matrix: py3.11 + py3.12); also scaffold-checks, compliance-nightly, compliance-evidence-scheduler workflows |
-| __init__.py | Public API | 30 exports in `__all__`, version = "1.0.0" |
+| __init__.py | Public API | 32 exports in `__all__`, version = "1.0.0" |
 | pyproject.toml | License | MIT license, >=3.11 required |
 | Exa search | PyPI publishing 2025/2026 | Trusted Publishers (OIDC) is standard; `pypa/gh-action-pypi-publish@release/v1` |
 | Context7 | hatch build docs | `hatch build` creates sdist + wheel; `hatch version` for version management |
-| wc -l src/aipea/*.py | Source LOC | 6,415 lines across all source modules (updated 2026-02-16) |
+| wc -l src/aipea/*.py | Source LOC | 7,278 lines across all source modules (updated 2026-02-17) |
 
 ### 2.2 Discrepancies Found
 
@@ -224,6 +224,7 @@ parent: ../../CLAUDE.md
 | 2026-02-16 | KNOWN_ISSUES.md | Added #32-#33 (FIXED), 1 false positive documented: 27 FIXED, 6 INTENTIONAL, 0 DEFERRED |
 | 2026-02-17 | Metrics update | Wave 9 bug hunt: 417→420 tests, 92.72%→92.75% coverage, 6,415→6,426 LOC |
 | 2026-02-17 | KNOWN_ISSUES.md | Added #34-#35 (FIXED), #36 (DEFERRED), #37 (FIXED via QG): 30 FIXED, 6 INTENTIONAL, 1 DEFERRED |
+| 2026-02-17 | CLI/config system | Added config.py, cli.py, __main__.py + tests: 420→488 tests, 92.75%→90.83% coverage, 6,426→7,278 LOC, 30→32 exports |
 
 *Audit completed: 2026-02-14 | Auditor: Claude Code (Opus 4.6) | Protocol: v4.0*
 *Last amended: 2026-02-17*

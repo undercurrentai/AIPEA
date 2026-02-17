@@ -1,5 +1,5 @@
 # CLAUDE.md - AIPEA
-> Version: 3.0.0 | Updated: 2026-02-16 | Owner: @joshuakirby
+> Version: 3.0.0 | Updated: 2026-02-17 | Owner: @joshuakirby
 
 ```yaml
 version: 3.0.0
@@ -26,8 +26,8 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~6,426 |
-| **Exports** | 30 symbols in `__all__` |
+| **Source LOC** | ~7,278 |
+| **Exports** | 32 symbols in `__all__` |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
 ---
@@ -132,8 +132,9 @@ Inherited from parent: secrets in code, force push to main.
 ### 3.3 Dependencies
 
 - **Core**: stdlib + httpx (ONLY — this is a hard constraint)
-- **Dev**: pytest, pytest-asyncio, pytest-cov, ruff, mypy
-- **Principle**: Zero external deps in core modules (`security.py`, `knowledge.py`, `search.py`)
+- **CLI (optional)**: typer[all], rich (`pip install aipea[cli]`)
+- **Dev**: pytest, pytest-asyncio, pytest-cov, ruff, mypy, typer[all]
+- **Principle**: Zero external deps in core modules (`security.py`, `knowledge.py`, `search.py`, `config.py`)
 
 ### 3.4 Commit & Branch Conventions
 
@@ -150,12 +151,15 @@ Inherited from parent: secrets in code, force push to main.
 ```
 security.py    <- ZERO aipea imports (stdlib only)
 knowledge.py   <- ZERO aipea imports (stdlib only)
-search.py      <- ZERO aipea imports (stdlib + httpx)
+search.py      <- ZERO aipea imports (stdlib + httpx); lazy-imports config
+config.py      <- ZERO aipea imports (stdlib only, tomllib for TOML)
 _types.py      <- Shared enums (ProcessingTier, QueryType, SearchStrategy)
 models.py      <- Shared data models (QueryAnalysis)
 analyzer.py    <- imports security, _types, models
 engine.py      <- imports search, _types
 enhancer.py    <- imports ALL (facade)
+cli.py         <- imports config (optional: typer, rich, httpx)
+__main__.py    <- imports cli.app (CLI entry point)
 ```
 
 ### Design Principles
@@ -182,7 +186,17 @@ enhancer.py    <- imports ALL (facade)
 | All (local) | `make all` | fmt + lint + type + test |
 | CI parity | `make ci` | lint + type + test (no autofix) |
 
-### 5.2 CI Gates (`.github/workflows/ci.yml`)
+### 5.2 CLI Commands (`pip install aipea[cli]`)
+
+| Command | Purpose | Notes |
+|---------|---------|-------|
+| `aipea configure [--global/-g]` | Interactive setup wizard | Saves to `.env` or `~/.aipea/config.toml` |
+| `aipea check [--connectivity]` | Verify config status | Tests API key validity |
+| `aipea doctor` | Full diagnostic report | Python, deps, keys, security, connectivity |
+| `aipea info` | Quick library summary | Version, config, providers |
+| `python -m aipea` | Module entry point | Alternative to `aipea` binary |
+
+### 5.3 CI Gates (`.github/workflows/ci.yml`)
 
 | Job | Python | Steps |
 |-----|--------|-------|
@@ -190,7 +204,7 @@ enhancer.py    <- imports ALL (facade)
 | `typecheck` | 3.12 | mypy src/aipea/ |
 | `test` | 3.11, 3.12 (matrix) | pytest --cov-fail-under=75 |
 
-### 5.3 Environment Variables
+### 5.4 Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -198,7 +212,7 @@ enhancer.py    <- imports ALL (facade)
 | `FIRECRAWL_API_KEY` | (none) | Firecrawl provider API key |
 | `AIPEA_HTTP_TIMEOUT` | `30.0` | HTTP timeout for search providers (seconds) |
 
-### 5.4 Research & Documentation Tools
+### 5.5 Research & Documentation Tools
 
 Before using or modifying code that depends on external libraries, verify current API patterns:
 
