@@ -1040,7 +1040,69 @@ consumer's resilience characteristics.
 
 Ordered by priority. Each item references its origin in the Agora V design.
 
-### 10.1 P2: Named Enhancement Strategies (6 types)
+### 10.1 P1: Dialogical Clarification (advisory mode)
+
+**Origin**: Production observation — AIPEA's analyzer already computes signals
+that indicate a query needs clarification, but those signals are consumed silently
+by the enhancement pipeline. Inspired by Deep Research interfaces (Claude, ChatGPT)
+that ask clarifying questions before beginning work.
+
+**Problem**: AIPEA currently polishes vague queries into *confidently vague* prompts.
+The analyzer knows when a query is ambiguous (`ambiguity_score`), short, missing
+entities (`detected_entities`), or lacking domain specificity — and
+`suggest_enhancements()` already generates human-readable suggestions. But none of
+this reaches the consumer.
+
+**Design constraint**: AIPEA is a library, not a chatbot. It cannot pause and ask
+the user questions — the consumer (Agora, AEGIS, CLI) owns the conversation. The
+solution must preserve the single-call, non-blocking API model.
+
+**Proposed approach**: Generate clarifying questions and attach them to the result
+alongside the best-effort enhancement. The consumer decides what to do with them.
+
+```python
+result = await enhancer.enhance("quantum computing", model_id="claude-opus-4-6")
+
+result.enhanced_prompt        # Still works — best-effort enhancement
+result.clarifications         # NEW: list of suggested clarifying questions
+# e.g., ["Which aspect? (error correction, algorithms, hardware)",
+#        "What's your background level on this topic?",
+#        "Academic research or practical application?"]
+```
+
+Consumer integration patterns:
+- **Agora**: Show clarifications to user, collect answers, re-call `enhance()` with
+  enriched query
+- **AEGIS**: Ignore clarifications, use best-effort prompt directly
+- **CLI tool**: Print clarifications as follow-up suggestions
+
+**Implementation sketch**:
+- Add `clarifications: list[str]` field to `EnhancementResult` (default: empty list)
+- In the enhancement pipeline (after `QueryAnalyzer.analyze()`), generate questions
+  from existing signals:
+  - High `ambiguity_score` → "Could you be more specific about...?"
+  - Low `detected_entities` count → "What specific [domain] topic?"
+  - High `complexity_score` + no search strategy → "Are you looking for a summary
+    or a deep dive?"
+  - `suggest_enhancements()` output → reformulate as questions
+- Threshold: only generate clarifications when `ambiguity_score > 0.6` or
+  `len(detected_entities) == 0` to avoid noise on clear queries
+
+**What already exists**:
+- `QueryAnalysis.ambiguity_score` — computed for every query
+- `QueryAnalysis.complexity_score` — computed for every query
+- `QueryAnalysis.detected_entities` — entity extraction per query
+- `QueryAnalyzer.suggest_enhancements()` — generates text suggestions
+- `enhancement_notes: list[str]` on `EnhancementResult` — precedent for advisory output
+
+**Bridges**: Section 10.2 (`hypothesis_clarification` technique) and Section 10.4
+(`specificity_gain` metric). Asking clarifications *before* enhancement is how
+you improve specificity at the source.
+
+**Target version**: v1.1.0 (after PyPI publish and real-world query data from
+Agora/AEGIS integration informs what clarifications actually help vs. noise).
+
+### 10.2 P2: Named Enhancement Strategies (6 types)
 
 **Origin**: `aipea-enhancement-engine.py` lines 78-503
 
@@ -1063,7 +1125,7 @@ Techniques to implement:
 - `task_decomposition` — Break complex queries into sub-tasks
 - `objective_hierarchy_construction` — Build goal tree from strategic queries
 
-### 10.2 P2: Embedding Search in Offline KB
+### 10.3 P2: Embedding Search in Offline KB
 
 **Origin**: `aipea-offline-knowledge.py` lines 632-747
 
@@ -1078,7 +1140,7 @@ Current `search()` uses domain filter + relevance score ordering. Embedding
 search would enable content-based similarity without external dependencies
 (using SQLite FTS5 for token-level matching).
 
-### 10.3 P3: Quality Assessor
+### 10.4 P3: Quality Assessor
 
 **Origin**: `aipea-enhancement-engine.py` lines 562-589
 
@@ -1098,7 +1160,7 @@ class QualityScore:
     overall: float                  # Weighted composite
 ```
 
-### 10.4 P3: Adaptive Learning Engine
+### 10.5 P3: Adaptive Learning Engine
 
 **Origin**: `aipea-offline-knowledge.py` AdaptiveLearningEngine class
 
@@ -1115,7 +1177,7 @@ Requires:
 - Pattern extraction from successful enhancements
 - Strategy performance tracking
 
-### 10.5 P4: BDI Reasoning (conditional)
+### 10.6 P4: BDI Reasoning (conditional)
 
 **Origin**: `aipea-agent-framework.py` lines 103-290
 
