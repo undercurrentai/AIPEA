@@ -1,0 +1,464 @@
+"""AIPEA CLI — onboarding and configuration commands.
+
+Requires the ``[cli]`` extra: ``pip install aipea[cli]`` (adds Typer + Rich).
+
+Commands:
+    aipea configure [--global/-g]  — Interactive setup wizard
+    aipea check [--connectivity]   — Verify configuration status
+    aipea doctor                   — Full diagnostic report
+    aipea info                     — Quick library/config summary
+"""
+
+from __future__ import annotations
+
+import sys
+
+try:
+    import typer
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+
+    _HAS_TYPER = True
+except ImportError:  # pragma: no cover
+    _HAS_TYPER = False
+
+if not _HAS_TYPER:  # pragma: no cover
+
+    def _missing_typer_error() -> None:
+        sys.stderr.write(
+            "Error: AIPEA CLI requires the [cli] extra.\nInstall with: pip install aipea[cli]\n"
+        )
+        raise SystemExit(1)
+
+    # Provide a minimal callable so `python -m aipea` shows a helpful message
+    def app() -> None:
+        _missing_typer_error()
+
+else:
+    import platform
+    from pathlib import Path
+
+    import httpx
+
+    import aipea
+    from aipea.config import (
+        _GLOBAL_CONFIG_FILE,
+        AIPEAConfig,
+        get_config_locations,
+        load_config,
+        save_dotenv,
+        save_toml_config,
+    )
+
+    console = Console()
+    app = typer.Typer(
+        name="aipea",
+        help="AIPEA — AI Prompt Engineer Agent CLI",
+        no_args_is_help=True,
+    )
+
+    # ================================================================
+    # aipea info
+    # ================================================================
+
+    @app.command()
+    def info() -> None:
+        """Show library version, config status, and detected providers."""
+        cfg = load_config()
+
+        table = Table(title="AIPEA Info", show_header=False, border_style="blue")
+        table.add_column("Key", style="bold")
+        table.add_column("Value")
+
+        table.add_row("Version", aipea.__version__)
+        table.add_row("Python", platform.python_version())
+        table.add_row("Exa API Key", AIPEAConfig.redact_key(cfg.exa_api_key))
+        table.add_row("Firecrawl API Key", AIPEAConfig.redact_key(cfg.firecrawl_api_key))
+        table.add_row("HTTP Timeout", f"{cfg.http_timeout}s")
+        table.add_row("Exports", str(len(aipea.__all__)))
+
+        # Config sources
+        for field_name, source in cfg._sources.items():
+            table.add_row(f"  {field_name} source", source)
+
+        console.print(table)
+
+    # ================================================================
+    # aipea check
+    # ================================================================
+
+    @app.command()
+    def check(
+        connectivity: bool = typer.Option(
+            False, "--connectivity/--no-connectivity", help="Test API connectivity"
+        ),
+    ) -> None:
+        """Verify configuration status and optionally test API connectivity."""
+        cfg = load_config()
+        issues: list[str] = []
+
+        table = Table(title="Configuration Check", border_style="blue")
+        table.add_column("Setting", style="bold")
+        table.add_column("Status")
+        table.add_column("Value")
+        table.add_column("Source")
+
+        # Exa
+        exa_status = "set" if cfg.has_exa() else "not set"
+        exa_style = "green" if cfg.has_exa() else "yellow"
+        table.add_row(
+            "EXA_API_KEY",
+            f"[{exa_style}]{exa_status}[/{exa_style}]",
+            AIPEAConfig.redact_key(cfg.exa_api_key),
+            cfg._sources.get("exa_api_key", "unknown"),
+        )
+        if not cfg.has_exa():
+            issues.append("Exa API key not configured — Exa search will be disabled")
+
+        # Firecrawl
+        fc_status = "set" if cfg.has_firecrawl() else "not set"
+        fc_style = "green" if cfg.has_firecrawl() else "yellow"
+        table.add_row(
+            "FIRECRAWL_API_KEY",
+            f"[{fc_style}]{fc_status}[/{fc_style}]",
+            AIPEAConfig.redact_key(cfg.firecrawl_api_key),
+            cfg._sources.get("firecrawl_api_key", "unknown"),
+        )
+        if not cfg.has_firecrawl():
+            issues.append("Firecrawl API key not configured — Firecrawl search will be disabled")
+
+        # Timeout
+        table.add_row(
+            "AIPEA_HTTP_TIMEOUT",
+            "[green]set[/green]",
+            f"{cfg.http_timeout}s",
+            cfg._sources.get("http_timeout", "unknown"),
+        )
+
+        console.print(table)
+
+        # Connectivity tests
+        if connectivity:
+            console.print("\n[bold]Connectivity Tests[/bold]")
+            if cfg.has_exa():
+                _test_exa_connectivity(cfg.exa_api_key)
+            else:
+                console.print("  Exa: [dim]skipped (no key)[/dim]")
+
+            if cfg.has_firecrawl():
+                _test_firecrawl_connectivity(cfg.firecrawl_api_key)
+            else:
+                console.print("  Firecrawl: [dim]skipped (no key)[/dim]")
+
+        if issues:
+            console.print()
+            for issue in issues:
+                console.print(f"  [yellow]![/yellow] {issue}")
+            raise typer.Exit(1)
+
+    def _test_exa_connectivity(api_key: str) -> bool:
+        """Ping Exa API to verify the key works."""
+        try:
+            resp = httpx.post(
+                "https://api.exa.ai/search",
+                headers={"x-api-key": api_key, "Content-Type": "application/json"},
+                json={"query": "test", "numResults": 1},
+                timeout=10.0,
+            )
+            if resp.status_code == 200:
+                console.print("  Exa: [green]OK[/green]")
+                return True
+            console.print(f"  Exa: [red]HTTP {resp.status_code}[/red]")
+            return False
+        except Exception as exc:
+            console.print(f"  Exa: [red]Error — {exc}[/red]")
+            return False
+
+    def _test_firecrawl_connectivity(api_key: str) -> bool:
+        """Ping Firecrawl API to verify the key works."""
+        try:
+            resp = httpx.post(
+                "https://api.firecrawl.dev/v1/search",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"query": "test", "limit": 1},
+                timeout=10.0,
+            )
+            if resp.status_code == 200:
+                console.print("  Firecrawl: [green]OK[/green]")
+                return True
+            console.print(f"  Firecrawl: [red]HTTP {resp.status_code}[/red]")
+            return False
+        except Exception as exc:
+            console.print(f"  Firecrawl: [red]Error — {exc}[/red]")
+            return False
+
+    # ================================================================
+    # aipea doctor
+    # ================================================================
+
+    class _DoctorChecks:
+        """Accumulates pass/warn/fail counts for doctor command."""
+
+        def __init__(self) -> None:
+            self.passed = 0
+            self.warned = 0
+            self.failed = 0
+
+        def ok(self, label: str, detail: str = "") -> None:
+            self.passed += 1
+            msg = f"  [green]PASS[/green] {label}"
+            if detail:
+                msg += f" — {detail}"
+            console.print(msg)
+
+        def warn(self, label: str, detail: str = "") -> None:
+            self.warned += 1
+            msg = f"  [yellow]WARN[/yellow] {label}"
+            if detail:
+                msg += f" — {detail}"
+            console.print(msg)
+
+        def fail(self, label: str, detail: str = "") -> None:
+            self.failed += 1
+            msg = f"  [red]FAIL[/red] {label}"
+            if detail:
+                msg += f" — {detail}"
+            console.print(msg)
+
+    def _doctor_deps(chk: _DoctorChecks) -> None:
+        """Check dependency availability."""
+        try:
+            import httpx as _httpx
+
+            chk.ok("httpx", _httpx.__version__)
+        except ImportError:
+            chk.fail("httpx", "not installed")
+
+        chk.ok("typer", "available (CLI mode)")
+
+        try:
+            from importlib.metadata import version as _pkg_version
+
+            chk.ok("rich", _pkg_version("rich"))
+        except Exception:
+            chk.warn("rich", "not installed or version unknown")
+
+    def _doctor_config_files(chk: _DoctorChecks) -> None:
+        """Check config file locations."""
+        locations = get_config_locations()
+        for label, key in [(".env", "dotenv"), ("global config", "global_toml")]:
+            info = locations[key]
+            if info["exists"]:
+                chk.ok(label, str(info["path"]))
+            else:
+                chk.warn(label, f"not found at {info['path']}")
+
+    def _doctor_api_keys(chk: _DoctorChecks, cfg: AIPEAConfig) -> None:
+        """Check API key configuration."""
+        for name, has_fn, key_val, src_key in [
+            ("Exa API key", cfg.has_exa, cfg.exa_api_key, "exa_api_key"),
+            ("Firecrawl API key", cfg.has_firecrawl, cfg.firecrawl_api_key, "firecrawl_api_key"),
+        ]:
+            if has_fn():
+                redacted = AIPEAConfig.redact_key(key_val)
+                source = cfg._sources.get(src_key, "?")
+                chk.ok(name, f"{redacted} (from {source})")
+            else:
+                chk.warn(name, f"not configured — {name.split()[0]} search disabled")
+        chk.ok("HTTP timeout", f"{cfg.http_timeout}s")
+
+    def _doctor_security(chk: _DoctorChecks) -> None:
+        """Check security posture."""
+        import stat as stat_mod
+
+        gitignore_path = Path.cwd() / ".gitignore"
+        if gitignore_path.exists():
+            content = gitignore_path.read_text(encoding="utf-8")
+            if ".env" in content:
+                chk.ok(".gitignore", ".env is listed")
+            else:
+                chk.warn(".gitignore", ".env is NOT listed — secrets may be committed!")
+        else:
+            chk.warn(".gitignore", "file not found")
+
+        dotenv_file = Path.cwd() / ".env"
+        if dotenv_file.exists():
+            mode = dotenv_file.stat().st_mode
+            if not (mode & stat_mod.S_IRGRP) and not (mode & stat_mod.S_IROTH):
+                chk.ok(".env permissions", "0o600 (owner only)")
+            else:
+                chk.warn(".env permissions", "file is readable by group/others")
+        else:
+            chk.ok(".env permissions", "n/a (no .env file)")
+
+    @app.command()
+    def doctor() -> None:
+        """Run a full diagnostic check of the AIPEA installation."""
+        chk = _DoctorChecks()
+        console.print(Panel("[bold]AIPEA Doctor[/bold]", border_style="blue"))
+
+        # 1. Python (requires-python >= 3.11 enforced by packaging)
+        console.print("\n[bold]1. Python Environment[/bold]")
+        chk.ok("Python version", platform.python_version())
+
+        # 2. Package
+        console.print("\n[bold]2. Package[/bold]")
+        chk.ok("AIPEA version", aipea.__version__)
+
+        # 3. Dependencies
+        console.print("\n[bold]3. Dependencies[/bold]")
+        _doctor_deps(chk)
+
+        # 4. Config files
+        console.print("\n[bold]4. Configuration Files[/bold]")
+        _doctor_config_files(chk)
+
+        # 5. API keys
+        console.print("\n[bold]5. API Keys[/bold]")
+        cfg = load_config()
+        _doctor_api_keys(chk, cfg)
+
+        # 6. Security
+        console.print("\n[bold]6. Security[/bold]")
+        _doctor_security(chk)
+
+        # 7. Connectivity
+        console.print("\n[bold]7. Connectivity[/bold]")
+        if cfg.has_exa():
+            if _test_exa_connectivity(cfg.exa_api_key):
+                chk.passed += 1
+            else:
+                chk.failed += 1
+        else:
+            console.print("  [dim]Exa: skipped (no key)[/dim]")
+        if cfg.has_firecrawl():
+            if _test_firecrawl_connectivity(cfg.firecrawl_api_key):
+                chk.passed += 1
+            else:
+                chk.failed += 1
+        else:
+            console.print("  [dim]Firecrawl: skipped (no key)[/dim]")
+
+        # Summary
+        total = chk.passed + chk.warned + chk.failed
+        if chk.failed > 0:
+            style, label = "red", "ISSUES FOUND"
+        elif chk.warned > 0:
+            style, label = "yellow", "MOSTLY OK"
+        else:
+            style, label = "green", "ALL GOOD"
+
+        console.print()
+        console.print(
+            Panel(
+                f"[{style}]{label}[/{style}]: "
+                f"{chk.passed} passed, {chk.warned} warnings, {chk.failed} failed "
+                f"(of {total} checks)",
+                title="Summary",
+                border_style=style,
+            )
+        )
+
+    # ================================================================
+    # aipea configure
+    # ================================================================
+
+    @app.command()
+    def configure(
+        global_config: bool = typer.Option(
+            False, "--global", "-g", help="Save to ~/.aipea/config.toml instead of .env"
+        ),
+        validate: bool = typer.Option(
+            True, "--validate/--no-validate", help="Validate API keys after saving"
+        ),
+    ) -> None:
+        """Interactive configuration wizard."""
+        console.print(Panel("[bold]AIPEA Configuration[/bold]", border_style="blue"))
+
+        cfg = load_config()
+
+        # Prompt for each key
+        console.print("\nEnter values (press Enter to keep existing):\n")
+
+        exa_display = AIPEAConfig.redact_key(cfg.exa_api_key) if cfg.has_exa() else "(not set)"
+        exa_input = typer.prompt(
+            f"  Exa API Key [{exa_display}]",
+            default="",
+            show_default=False,
+        )
+        if exa_input:
+            cfg.exa_api_key = exa_input
+
+        fc_display = (
+            AIPEAConfig.redact_key(cfg.firecrawl_api_key) if cfg.has_firecrawl() else "(not set)"
+        )
+        fc_input = typer.prompt(
+            f"  Firecrawl API Key [{fc_display}]",
+            default="",
+            show_default=False,
+        )
+        if fc_input:
+            cfg.firecrawl_api_key = fc_input
+
+        timeout_input = typer.prompt(
+            f"  HTTP Timeout [{cfg.http_timeout}s]",
+            default="",
+            show_default=False,
+        )
+        if timeout_input:
+            try:
+                val = float(timeout_input)
+                if 0 < val < float("inf"):
+                    cfg.http_timeout = val
+                else:
+                    console.print("  [yellow]Invalid timeout, keeping current value[/yellow]")
+            except ValueError:
+                console.print("  [yellow]Invalid timeout, keeping current value[/yellow]")
+
+        # Save
+        if global_config:
+            target = _GLOBAL_CONFIG_FILE
+            save_toml_config(target, cfg)
+            console.print(f"\n[green]Saved to {target}[/green]")
+        else:
+            target = Path.cwd() / ".env"
+            save_dotenv(target, cfg)
+            console.print(f"\n[green]Saved to {target}[/green]")
+
+            # Check .gitignore
+            gitignore = Path.cwd() / ".gitignore"
+            if gitignore.exists():
+                content = gitignore.read_text(encoding="utf-8")
+                if ".env" not in content:
+                    console.print(
+                        "[yellow]Warning: .env is not in .gitignore — "
+                        "add it to prevent committing secrets![/yellow]"
+                    )
+            else:
+                console.print(
+                    "[yellow]Warning: No .gitignore found — "
+                    "ensure .env is not committed to version control![/yellow]"
+                )
+
+        # Validate keys
+        if validate:
+            console.print("\n[bold]Validating...[/bold]")
+            if cfg.has_exa():
+                _test_exa_connectivity(cfg.exa_api_key)
+            if cfg.has_firecrawl():
+                _test_firecrawl_connectivity(cfg.firecrawl_api_key)
+
+        # Summary
+        console.print()
+        table = Table(title="Configuration Summary", show_header=False, border_style="green")
+        table.add_column("Key", style="bold")
+        table.add_column("Value")
+        table.add_row("Exa API Key", AIPEAConfig.redact_key(cfg.exa_api_key))
+        table.add_row("Firecrawl API Key", AIPEAConfig.redact_key(cfg.firecrawl_api_key))
+        table.add_row("HTTP Timeout", f"{cfg.http_timeout}s")
+        table.add_row("Saved to", str(target))
+        console.print(table)

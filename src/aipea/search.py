@@ -39,11 +39,58 @@ logger = logging.getLogger(__name__)
 # API Configuration
 EXA_API_URL = "https://api.exa.ai/search"
 FIRECRAWL_API_URL = "https://api.firecrawl.dev/v1/search"
-try:
-    _raw_timeout = float(os.environ.get("AIPEA_HTTP_TIMEOUT", "30.0"))
-    HTTP_TIMEOUT = _raw_timeout if 0 < _raw_timeout < float("inf") else 30.0
-except (ValueError, TypeError):
-    HTTP_TIMEOUT = 30.0
+
+
+def _resolve_http_timeout() -> float:
+    """Resolve HTTP timeout from env var, config files, or default (30.0).
+
+    Checks ``AIPEA_HTTP_TIMEOUT`` environment variable first, then falls
+    back to :func:`aipea.config.load_config` for .env / TOML sources.
+    """
+    env_val = os.environ.get("AIPEA_HTTP_TIMEOUT")
+    if env_val is not None:
+        try:
+            val = float(env_val)
+            return val if 0 < val < float("inf") else 30.0
+        except (ValueError, TypeError):
+            return 30.0
+    # Lazy import to avoid circular deps and import-time cost
+    from aipea.config import load_config
+
+    cfg = load_config()
+    return cfg.http_timeout
+
+
+def _get_api_key(env_var: str, constructor_value: str | None) -> str:
+    """Resolve an API key: constructor arg > env var > config files.
+
+    Args:
+        env_var: Environment variable name (e.g. ``"EXA_API_KEY"``).
+        constructor_value: Value passed by the caller (``None`` means not set).
+
+    Returns:
+        Resolved API key string (empty string if not found anywhere).
+    """
+    if constructor_value is not None:
+        return constructor_value
+    env_val = os.environ.get(env_var)
+    if env_val is not None:
+        return env_val
+    # Lazy import to avoid circular deps and import-time cost
+    from aipea.config import load_config
+
+    cfg = load_config()
+    # Map env var name to config field
+    field_map: dict[str, str] = {
+        "EXA_API_KEY": "exa_api_key",
+        "FIRECRAWL_API_KEY": "firecrawl_api_key",
+    }
+    field_name = field_map.get(env_var, "")
+    return str(getattr(cfg, field_name, "")) if field_name else ""
+
+
+# Resolved once at import time; config file changes require process restart.
+HTTP_TIMEOUT = _resolve_http_timeout()
 
 
 # =============================================================================
@@ -387,7 +434,7 @@ class ExaSearchProvider(SearchProvider):
             enabled: Whether to enable this provider (disabled returns empty results)
             api_key: Optional API key override (falls back to EXA_API_KEY env var)
         """
-        self.api_key = api_key if api_key is not None else os.environ.get("EXA_API_KEY", "")
+        self.api_key = _get_api_key("EXA_API_KEY", api_key)
         self.enabled = enabled and bool(self.api_key)
 
         if not self.api_key:
@@ -517,7 +564,7 @@ class FirecrawlProvider(SearchProvider):
             enabled: Whether to enable this provider (disabled returns empty results)
             api_key: Optional API key override (falls back to FIRECRAWL_API_KEY env var)
         """
-        self.api_key = api_key if api_key is not None else os.environ.get("FIRECRAWL_API_KEY", "")
+        self.api_key = _get_api_key("FIRECRAWL_API_KEY", api_key)
         self.enabled = enabled and bool(self.api_key)
 
         if not self.api_key:

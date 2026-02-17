@@ -2,8 +2,8 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-420%20passing-brightgreen)]()
-[![Coverage](https://img.shields.io/badge/coverage-92.75%25-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-488%20passing-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-90.83%25-brightgreen)]()
 
 A standalone Python library for prompt preprocessing, security screening, query analysis, and context enrichment for LLM systems. Extracted from [Agora IV](https://github.com/undercurrentai/agora-iv) production (v4.1.49).
 
@@ -41,11 +41,47 @@ User Query → SecurityScanner → QueryAnalyzer → SearchOrchestrator → Prom
 ## Installation
 
 ```bash
+# Library only (no CLI)
+pip install aipea
+
+# With CLI tools (adds Typer + Rich)
+pip install aipea[cli]
+
 # From source (development)
 pip install -e ".[dev]"
+```
 
-# From local path
-pip install /path/to/AIPEA
+## Configuration
+
+AIPEA can be configured via environment variables, a `.env` file, or `~/.aipea/config.toml`. Priority: env vars > `.env` > global TOML > defaults.
+
+```bash
+# Interactive setup wizard (requires [cli] extra)
+aipea configure
+
+# Save to global config instead of project .env
+aipea configure --global
+
+# Check current configuration
+aipea check
+
+# Full diagnostic report
+aipea doctor
+```
+
+Or configure manually with environment variables:
+
+```bash
+export EXA_API_KEY="your-exa-key"
+export FIRECRAWL_API_KEY="your-firecrawl-key"
+export AIPEA_HTTP_TIMEOUT=30  # seconds (optional)
+```
+
+Or create a `.env` file in your project root:
+
+```
+EXA_API_KEY="your-exa-key"
+FIRECRAWL_API_KEY="your-firecrawl-key"
 ```
 
 ## Usage

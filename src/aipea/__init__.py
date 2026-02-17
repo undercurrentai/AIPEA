@@ -15,11 +15,13 @@ from __future__ import annotations
 
 __version__ = "1.0.0"
 
+# Configuration
 # Core enums and types
 from aipea._types import ProcessingTier, QueryType, SearchStrategy
 
 # Query analysis
 from aipea.analyzer import QueryAnalyzer
+from aipea.config import AIPEAConfig, load_config
 
 # Prompt engine
 from aipea.engine import PromptEngine
@@ -67,6 +69,7 @@ from aipea.security import (
 )
 
 __all__ = [
+    "AIPEAConfig",
     "AIPEAEnhancer",
     "ComplianceHandler",
     "ComplianceMode",
@@ -96,5 +99,6 @@ __all__ = [
     "__version__",
     "enhance_prompt",
     "get_enhancer",
+    "load_config",
     "reset_enhancer",
 ]
