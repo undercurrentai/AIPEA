@@ -215,9 +215,9 @@ parent: ../../CLAUDE.md
 | 2026-02-16 | Metrics update | Wave 6 + ultrathink: 378→395 tests, 91.59%→92.44% coverage, 6,289→6,291 LOC |
 | 2026-02-16 | KNOWN_ISSUES.md | Restructured: 9 FIXED, 6 INTENTIONAL, 8 DEFERRED |
 | 2026-02-16 | Metrics update | ReDoS char-class fix: 395→401 tests, 92.44%→92.46% coverage, 6,291→6,299 LOC |
-| 2026-02-16 | KNOWN_ISSUES.md | Added #27 (FIXED), updated #6/#19 line refs: 10 FIXED, 6 INTENTIONAL, 8 DEFERRED |
+| 2026-02-16 | KNOWN_ISSUES.md | Added #24-#27 (FIXED), updated #6/#19 line refs: 13 FIXED, 6 INTENTIONAL, 8 DEFERRED |
 | 2026-02-16 | Metrics update | Wave 7 bug hunt: 401→404 tests, 92.46%→92.58% coverage, 6,299→6,311 LOC |
-| 2026-02-16 | KNOWN_ISSUES.md | Added #28-#30 (FIXED), #31 (DEFERRED): 13 FIXED, 6 INTENTIONAL, 9 DEFERRED |
+| 2026-02-16 | KNOWN_ISSUES.md | Added #28-#30 (FIXED), #31 (DEFERRED): 16 FIXED, 6 INTENTIONAL, 9 DEFERRED |
 
 *Audit completed: 2026-02-14 | Auditor: Claude Code (Opus 4.6) | Protocol: v4.0*
 *Last amended: 2026-02-16*
