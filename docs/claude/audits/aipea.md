@@ -55,13 +55,13 @@ parent: ../../CLAUDE.md
 | pyproject.toml | Build system | hatchling build backend — supports `hatch build` for PyPI |
 | pyproject.toml | Tool config | ruff line-length=100, py312 target, S-rules for bandit, mypy strict |
 | Makefile | Build targets | 13 targets: install, fmt, lint, type, test, sec, all, ci, mut, sbom, score, deps, perf |
-| pytest | Test suite | 401 passed, 15 skipped, 92.46% coverage (updated 2026-02-16) |
+| pytest | Test suite | 404 passed, 15 skipped, 92.58% coverage (updated 2026-02-16) |
 | CI workflow | Gate config | 3 jobs: lint, typecheck, test (matrix: py3.11 + py3.12); also scaffold-checks, compliance-nightly, compliance-evidence-scheduler workflows |
 | __init__.py | Public API | 30 exports in `__all__`, version = "1.0.0" |
 | pyproject.toml | License | MIT license, >=3.11 required |
 | Exa search | PyPI publishing 2025/2026 | Trusted Publishers (OIDC) is standard; `pypa/gh-action-pypi-publish@release/v1` |
 | Context7 | hatch build docs | `hatch build` creates sdist + wheel; `hatch version` for version management |
-| wc -l src/aipea/*.py | Source LOC | 6,299 lines across all source modules (updated 2026-02-16) |
+| wc -l src/aipea/*.py | Source LOC | 6,311 lines across all source modules (updated 2026-02-16) |
 
 ### 2.2 Discrepancies Found
 
@@ -216,6 +216,8 @@ parent: ../../CLAUDE.md
 | 2026-02-16 | KNOWN_ISSUES.md | Restructured: 9 FIXED, 6 INTENTIONAL, 8 DEFERRED |
 | 2026-02-16 | Metrics update | ReDoS char-class fix: 395→401 tests, 92.44%→92.46% coverage, 6,291→6,299 LOC |
 | 2026-02-16 | KNOWN_ISSUES.md | Added #27 (FIXED), updated #6/#19 line refs: 10 FIXED, 6 INTENTIONAL, 8 DEFERRED |
+| 2026-02-16 | Metrics update | Wave 7 bug hunt: 401→404 tests, 92.46%→92.58% coverage, 6,299→6,311 LOC |
+| 2026-02-16 | KNOWN_ISSUES.md | Added #28-#30 (FIXED), #31 (DEFERRED): 13 FIXED, 6 INTENTIONAL, 9 DEFERRED |
 
 *Audit completed: 2026-02-14 | Auditor: Claude Code (Opus 4.6) | Protocol: v4.0*
 *Last amended: 2026-02-16*
