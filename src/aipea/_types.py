@@ -6,7 +6,7 @@ These are extracted here to prevent circular imports.
 
 from __future__ import annotations
 
-from enum import Enum, auto
+from enum import Enum
 
 
 class ProcessingTier(Enum):
@@ -46,13 +46,27 @@ class QueryType(Enum):
 class SearchStrategy(Enum):
     """Search strategy based on query analysis."""
 
-    NONE = auto()
-    QUICK_FACTS = auto()
-    DEEP_RESEARCH = auto()
-    MULTI_SOURCE = auto()
+    NONE = "none"
+    QUICK_FACTS = "quick_facts"
+    DEEP_RESEARCH = "deep_research"
+    MULTI_SOURCE = "multi_source"
+
+
+# Explicit priority for deterministic tie-breaking (lower = higher priority).
+# Used by analyzer.py and engine.py when classifying query types via max().
+QUERY_TYPE_PRIORITY: dict[QueryType, int] = {
+    QueryType.TECHNICAL: 0,
+    QueryType.RESEARCH: 1,
+    QueryType.ANALYTICAL: 2,
+    QueryType.CREATIVE: 3,
+    QueryType.OPERATIONAL: 4,
+    QueryType.STRATEGIC: 5,
+    QueryType.UNKNOWN: 6,
+}
 
 
 __all__ = [
+    "QUERY_TYPE_PRIORITY",
     "ProcessingTier",
     "QueryType",
     "SearchStrategy",

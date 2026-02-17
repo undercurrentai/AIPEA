@@ -703,15 +703,9 @@ class AIPEAEnhancer:
             logger.debug("Search orchestrator not available, skipping online context")
             return None
 
-        # Map analysis search strategy to orchestrator strategy
-        strategy_map = {
-            SearchStrategy.QUICK_FACTS: "quick_facts",
-            SearchStrategy.DEEP_RESEARCH: "deep_research",
-            SearchStrategy.MULTI_SOURCE: "multi_source",
-            SearchStrategy.NONE: "quick_facts",
-        }
-
-        strategy = strategy_map.get(analysis.search_strategy, "quick_facts")
+        # Map analysis search strategy to orchestrator strategy string
+        strategy_name = analysis.search_strategy.value
+        strategy = strategy_name if strategy_name != "none" else "quick_facts"
 
         try:
             context = await self._search_orchestrator.search(

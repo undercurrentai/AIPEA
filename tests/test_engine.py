@@ -1012,6 +1012,43 @@ class TestEnhancedQueryPostInit:
         )
         assert eq.confidence == 0.75
 
+    def test_search_context_invalid_type_set_to_none(self):
+        """search_context with wrong type is set to None (#20)."""
+        eq = EnhancedQuery(
+            original_query="q",
+            enhanced_query="eq",
+            tier_used=ProcessingTier.OFFLINE,
+            confidence=0.8,
+            query_type=QueryType.UNKNOWN,
+            search_context="not a SearchContext",  # type: ignore[arg-type]
+        )
+        assert eq.search_context is None
+
+    def test_search_context_valid_type_preserved(self):
+        """search_context with correct type is preserved."""
+        ctx = SearchContext(results=[{"title": "t"}], sources=["s"])
+        eq = EnhancedQuery(
+            original_query="q",
+            enhanced_query="eq",
+            tier_used=ProcessingTier.OFFLINE,
+            confidence=0.8,
+            query_type=QueryType.UNKNOWN,
+            search_context=ctx,
+        )
+        assert eq.search_context is ctx
+
+    def test_search_context_none_preserved(self):
+        """search_context=None is preserved as-is."""
+        eq = EnhancedQuery(
+            original_query="q",
+            enhanced_query="eq",
+            tier_used=ProcessingTier.OFFLINE,
+            confidence=0.8,
+            query_type=QueryType.UNKNOWN,
+            search_context=None,
+        )
+        assert eq.search_context is None
+
 
 # ---------------------------------------------------------------------------
 # 8. TierProcessor abstract (lines 615, 625) — tested via subclasses below

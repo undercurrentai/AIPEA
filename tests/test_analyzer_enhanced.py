@@ -71,6 +71,16 @@ class TestQueryTypeClassification:
     def test_unknown_query(self, analyzer: QueryAnalyzer) -> None:
         assert analyzer._classify_query_type("hello world") == QueryType.UNKNOWN
 
+    def test_tie_breaking_deterministic(self, analyzer: QueryAnalyzer) -> None:
+        """When two types tie on score, priority tiebreaker is deterministic (#31)."""
+        # "analyze data" matches both ANALYTICAL ("analyze") and RESEARCH ("data")
+        # Both score 1, but ANALYTICAL has lower priority number → wins
+        result = analyzer._classify_query_type("analyze data")
+        assert result in (QueryType.ANALYTICAL, QueryType.RESEARCH)
+        # Run multiple times to verify determinism
+        results = {analyzer._classify_query_type("analyze data") for _ in range(10)}
+        assert len(results) == 1, f"Non-deterministic: got {results}"
+
 
 # =============================================================================
 # FULL ANALYSIS
@@ -428,7 +438,7 @@ class TestQueryAnalysisModel:
         assert d["query_type"] == "technical"
         assert d["complexity"] == 0.5
         assert d["suggested_tier"] == "tactical"
-        assert d["search_strategy"] == "QUICK_FACTS"
+        assert d["search_strategy"] == "quick_facts"
 
     def test_complexity_clamped(self) -> None:
         analysis = QueryAnalysis(

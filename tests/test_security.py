@@ -547,6 +547,24 @@ class TestCharClassNestedQuantifierReDoS:
         )
 
 
+class TestPossessiveQuantifierFalsePositive:
+    """Regression test for #19: possessive quantifiers should not be flagged."""
+
+    @pytest.mark.unit
+    def test_possessive_quantifier_accepted(self) -> None:
+        """Python 3.11+ possessive quantifiers like \\d++ should be safe."""
+        scanner = SecurityScanner()
+        # Possessive quantifiers are valid in Python 3.11+ and not dangerous
+        assert scanner._is_regex_safe(r"\d++") is True
+        assert scanner._is_regex_safe(r"[a-z]++") is True
+
+    @pytest.mark.unit
+    def test_double_star_still_rejected(self) -> None:
+        """Double quantifier ** should still be rejected."""
+        scanner = SecurityScanner()
+        assert scanner._is_regex_safe(r"a**") is False
+
+
 # =============================================================================
 # WAVE 4 REGRESSION TESTS
 # =============================================================================

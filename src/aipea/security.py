@@ -279,7 +279,6 @@ class SecurityScanner:
         r"\(\.\+\)\+",  # Nested .+ with quantifier
         r"\\[1-9].*[+*]|[+*].*\\[1-9]",  # Backreference with quantifier
         r"\(\.\*\?\)\+",  # Nested .*? with quantifier
-        r"\+\+",  # Possessive-like patterns that cause issues
         r"\*\*",  # Double quantifier
         r"\{\d+,\}\{\d+,\}",  # Multiple unbounded quantifiers
         r"\(\[\^[^\]]*\][+*]\)\+",  # ([^x]+)+ — char class in quantified group

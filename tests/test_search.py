@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from aipea._types import SearchStrategy
 from aipea.search import (
     Context7Provider,
     ExaSearchProvider,
@@ -27,7 +28,6 @@ from aipea.search import (
     SearchContext,
     SearchOrchestrator,
     SearchResult,
-    SearchStrategy,
     create_empty_context,
     parse_model_type,
 )
@@ -38,17 +38,25 @@ from aipea.search import (
 
 
 class TestSearchStrategy:
-    """Tests for SearchStrategy enum."""
+    """Tests for SearchStrategy enum (unified in _types.py)."""
 
     def test_strategies_exist(self) -> None:
-        """Test that all strategies are defined."""
+        """Test that all strategies are defined with string values."""
+        assert SearchStrategy.NONE.value == "none"
         assert SearchStrategy.QUICK_FACTS.value == "quick_facts"
         assert SearchStrategy.DEEP_RESEARCH.value == "deep_research"
         assert SearchStrategy.MULTI_SOURCE.value == "multi_source"
 
     def test_strategy_count(self) -> None:
-        """Test expected number of strategies."""
-        assert len(SearchStrategy) == 3
+        """Test expected number of strategies (4 including NONE)."""
+        assert len(SearchStrategy) == 4
+
+    def test_public_api_import(self) -> None:
+        """Test SearchStrategy is importable from the public API."""
+        from aipea import SearchStrategy as PublicSearchStrategy
+
+        assert PublicSearchStrategy is SearchStrategy
+        assert len(PublicSearchStrategy) == 4
 
 
 class TestModelType:
@@ -264,6 +272,39 @@ class TestSearchContext:
         )
         formatted = ctx.formatted_for_model("unknown-model")
         assert "Supporting Information:" in formatted
+
+    def test_formatted_for_model_openai_escapes_markdown(self) -> None:
+        """Test OpenAI formatter escapes markdown-breaking characters."""
+        ctx = SearchContext(
+            query="test",
+            results=[
+                SearchResult(
+                    title="Title with |pipe| and [brackets]",
+                    url="http://example.com",
+                    snippet="Snippet with `backticks` and [link](url)",
+                )
+            ],
+        )
+        formatted = ctx.formatted_for_model("openai")
+        assert "\\|pipe\\|" in formatted
+        assert "\\[brackets\\]" in formatted
+        assert "\\`backticks\\`" in formatted
+
+    def test_formatted_for_model_generic_escapes_list_injection(self) -> None:
+        """Test generic formatter escapes leading digit-period patterns."""
+        ctx = SearchContext(
+            query="test",
+            results=[
+                SearchResult(
+                    title="3. Injected list item",
+                    url="http://example.com",
+                    snippet="Normal snippet",
+                )
+            ],
+        )
+        formatted = ctx.formatted_for_model("gemini")
+        # The title should have the leading digit-period escaped
+        assert "\\3. Injected list item" in formatted
 
     def test_merge_with(self) -> None:
         """Test merging two SearchContexts."""

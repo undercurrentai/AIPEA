@@ -28,7 +28,7 @@ import re
 import threading
 from typing import ClassVar
 
-from aipea._types import ProcessingTier, QueryType, SearchStrategy
+from aipea._types import QUERY_TYPE_PRIORITY, ProcessingTier, QueryType, SearchStrategy
 from aipea.models import QueryAnalysis
 from aipea.security import SecurityContext, SecurityScanner
 
@@ -533,7 +533,10 @@ class QueryAnalyzer:
         if not scores:
             return QueryType.UNKNOWN
 
-        return max(scores.keys(), key=lambda k: scores[k])
+        return max(
+            scores.keys(),
+            key=lambda k: (scores[k], -QUERY_TYPE_PRIORITY.get(k, 99)),
+        )
 
     def _detect_entities(self, query: str) -> list[str]:
         """Detect named entities in query (simplified implementation).

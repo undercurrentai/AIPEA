@@ -2,6 +2,53 @@
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 
+## Deferred Issue Resolution (2026-02-16) — 9 issues resolved
+
+### 7. OfflineKnowledgeBase async methods block the event loop on SQLite I/O — FIXED
+- **File**: `src/aipea/knowledge.py`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Fix**: Wrapped all 9 async methods with `asyncio.to_thread()`, extracting synchronous DB work into private `_sync_*` methods. The `threading.RLock` serializes concurrent thread pool calls. `check_same_thread=False` was already set.
+
+### 12. Duplicate `SearchStrategy` enum in `_types.py` and `search.py` — FIXED
+- **File**: `src/aipea/_types.py:46-52`, `src/aipea/search.py` (removed)
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Fix**: Unified to single `SearchStrategy` in `_types.py` with string values (`"none"`, `"quick_facts"`, etc.). Removed duplicate enum from `search.py`. All consumers now import from `_types.py`.
+
+### 13. `engine.py` re-exports `SearchStrategy` from `search.py` instead of `_types.py` — FIXED
+- **File**: `src/aipea/engine.py:39`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Fix**: Changed import from `aipea.search` to `aipea._types` for `SearchStrategy`. Resolved as part of #12 unification.
+
+### 14. No test for publicly-exported `SearchStrategy` from `_types` — FIXED
+- **File**: `tests/test_search.py`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Fix**: Added `test_public_api_import` test verifying `from aipea import SearchStrategy` works, has 4 members including NONE, and uses string values. Updated existing tests for 4-member enum.
+
+### 16. OpenAI/Generic formatters lack escaping vs Anthropic formatter — FIXED
+- **File**: `src/aipea/search.py`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Fix**: Added `_escape_markdown()` for OpenAI formatter (escapes `|`, `[`, `]`, `` ` ``) and `_escape_plaintext()` for generic formatter (escapes leading digit-period patterns). Anthropic formatter already had `html.escape()`.
+
+### 19. `_is_regex_safe` rejects possessive quantifiers valid in Python 3.11+ — FIXED
+- **File**: `src/aipea/security.py:277`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Fix**: Removed the overly-broad `r"\+\+"` pattern from `_DANGEROUS_PATTERNS`. The existing nested quantifier detection and compilation check already catch actual dangerous patterns. Possessive quantifiers like `\d++` are now accepted.
+
+### 20. Unvalidated `search_context` type in `EnhancedQuery` — FIXED
+- **File**: `src/aipea/engine.py:605-610`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Fix**: Added runtime type guard in `__post_init__()` — if `search_context` is not `None` and not a `SearchContext` instance, it's logged and set to `None`.
+
+### 22. `QueryAnalysis.to_dict()` serialization inconsistency for search_strategy — FIXED
+- **File**: `src/aipea/models.py:87`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Fix**: Changed `.name` to `.value` for `search_strategy` serialization. Now returns `"quick_facts"` (string value) instead of `"QUICK_FACTS"` (enum name), consistent with other enum serialization in `to_dict()`.
+
+### 31. `_classify_query_type` tie-breaking depends on dict insertion order — FIXED
+- **File**: `src/aipea/analyzer.py:536-539`, `src/aipea/engine.py:810-813`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Fix**: Added `QUERY_TYPE_PRIORITY` dict in `_types.py` with explicit priority ordering (TECHNICAL > RESEARCH > ANALYTICAL > ...). The `max()` call now uses `(score, -priority)` as the sort key for deterministic tie-breaking. Both `analyzer.py` and `engine.py` import from the single source of truth.
+
 ## Wave 7 Fixes (2026-02-16) — 3 issues resolved
 
 ### 28. NaN `confidence_score` bypasses clamping in `engine.py` `SearchContext` — FIXED
@@ -101,49 +148,6 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **File**: `src/aipea/search.py:103-110`
 - **Rationale**: Clamping already handles this; log noise is minor and useful for monitoring.
 
-## Deferred Findings (9 remaining)
+## Deferred Findings (0 remaining)
 
-### 7. OfflineKnowledgeBase async methods block the event loop on SQLite I/O
-- **File**: `src/aipea/knowledge.py:285-644`
-- **Severity**: MEDIUM | **Confidence**: HIGH
-- **Reason deferred**: Architectural concern requiring significant refactor (wrap all methods with asyncio.to_thread or migrate to aiosqlite). The current approach works for low-concurrency use cases.
-
-### 12. Duplicate `SearchStrategy` enum in `_types.py` and `search.py` creates silent type mismatch
-- **File**: `src/aipea/_types.py:46-52`, `src/aipea/search.py:54-63`
-- **Severity**: MEDIUM | **Confidence**: HIGH
-- **Reason deferred**: Architectural issue requiring coordinated rename. `_types.SearchStrategy` (auto() int values, has NONE) vs `search.SearchStrategy` (string values, no NONE). `engine.py` re-exports the wrong one. Fix: unify into single enum or rename the `search.py` version to `_OrchestratorStrategy`.
-
-### 13. `engine.py` re-exports `SearchStrategy` from `search.py` instead of `_types.py`
-- **File**: `src/aipea/engine.py:40-46`
-- **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Consequence of #12. Blocked until enum unification.
-
-### 14. No test for publicly-exported `SearchStrategy` from `_types`
-- **File**: `tests/test_search.py:40-51`
-- **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Blocked by #12 (enum unification).
-
-### 16. OpenAI/Generic formatters lack markdown escaping vs Anthropic formatter
-- **File**: `src/aipea/search.py:184-209, 245-267`
-- **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: Cosmetic inconsistency, low impact.
-
-### 19. `_is_regex_safe` rejects possessive quantifiers valid in Python 3.11+
-- **File**: `src/aipea/security.py:277-286`
-- **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: No current patterns use possessive quantifiers. Security-sensitive change. Note: the related false *negative* (char class patterns bypassing detection) was fixed in #27.
-
-### 20. Unvalidated `search_context` type in `EnhancedQuery`
-- **File**: `src/aipea/engine.py:1017-1078`
-- **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: Low confidence, edge case.
-
-### 22. `QueryAnalysis.to_dict()` serialization inconsistency for search_strategy
-- **File**: `src/aipea/models.py:75`
-- **Severity**: LOW | **Confidence**: HIGH
-- **Reason deferred**: Blocked by #12 (SearchStrategy enum unification).
-
-### 31. `_classify_query_type` tie-breaking depends on dict insertion order
-- **File**: `src/aipea/analyzer.py:526-536`
-- **Severity**: LOW | **Confidence**: MEDIUM
-- **Reason deferred**: When two QueryType values match the same number of patterns, `max()` returns the first inserted key (TECHNICAL wins by default). Not a crash or security issue — it's a design decision about implicit priority. Same pattern exists in `engine.py:789`.
+All previously deferred issues have been resolved. See "Deferred Issue Resolution" section above.

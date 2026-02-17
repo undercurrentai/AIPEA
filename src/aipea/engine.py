@@ -36,12 +36,13 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, ClassVar
 
-from aipea._types import ProcessingTier, QueryType
+from aipea._types import QUERY_TYPE_PRIORITY, ProcessingTier, QueryType, SearchStrategy
 from aipea.search import (
     ModelType,
     SearchOrchestrator,
     SearchResult,
-    SearchStrategy,
+    _escape_markdown,
+    _escape_plaintext,
     create_empty_context,
 )
 from aipea.search import SearchContext as AIPEASearchContext
@@ -453,8 +454,8 @@ class SearchContext:
         ]
 
         for i, result in enumerate(self.results, 1):
-            title = result.get("title", "Untitled") or "Untitled"
-            snippet = result.get("snippet", "") or ""
+            title = _escape_markdown(result.get("title", "Untitled") or "Untitled")
+            snippet = _escape_markdown(result.get("snippet", "") or "")
             url = result.get("url", "") or ""
 
             lines.extend(
@@ -482,8 +483,8 @@ class SearchContext:
         ]
 
         for i, result in enumerate(self.results, 1):
-            title = result.get("title", "Untitled") or "Untitled"
-            snippet = result.get("snippet", "") or ""
+            title = _escape_markdown(result.get("title", "Untitled") or "Untitled")
+            snippet = _escape_markdown(result.get("snippet", "") or "")
             url = result.get("url", "") or ""
 
             lines.extend(
@@ -513,8 +514,8 @@ class SearchContext:
         ]
 
         for i, result in enumerate(self.results, 1):
-            title = result.get("title", "Untitled") or "Untitled"
-            snippet = result.get("snippet", "") or ""
+            title = _escape_plaintext(result.get("title", "Untitled") or "Untitled")
+            snippet = _escape_plaintext(result.get("snippet", "") or "")
             url = result.get("url", "") or ""
 
             lines.extend(
@@ -583,7 +584,7 @@ class EnhancedQuery:
     enhancement_metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Validate confidence score."""
+        """Validate confidence score and search_context type."""
         if math.isnan(self.confidence):
             logger.warning("EnhancedQuery confidence is NaN, defaulting to 0.0")
             self.confidence = 0.0
@@ -592,6 +593,15 @@ class EnhancedQuery:
                 f"EnhancedQuery confidence {self.confidence} outside [0, 1] range, clamping"
             )
             self.confidence = max(0.0, min(1.0, self.confidence))
+        # Runtime type guard: search_context may be assigned a wrong type at runtime
+        # despite the type annotation (e.g., from untyped consumer code)
+        ctx: object = self.search_context
+        if ctx is not None and not isinstance(ctx, SearchContext):
+            logger.warning(
+                "EnhancedQuery search_context has unexpected type %s, setting to None",
+                type(ctx).__name__,
+            )
+            self.search_context = None
 
 
 # =============================================================================
@@ -796,7 +806,11 @@ class OfflineTierProcessor(TierProcessor):
             return QueryType.UNKNOWN
 
         # Return the query type with the highest pattern match count
-        return max(scores.keys(), key=lambda k: scores[k])
+        # Tie-break by explicit priority (lower = higher priority)
+        return max(
+            scores.keys(),
+            key=lambda k: (scores[k], -QUERY_TYPE_PRIORITY.get(k, 99)),
+        )
 
     async def _check_ollama_availability(self) -> None:
         """Check if Ollama is available and select best model.

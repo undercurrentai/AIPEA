@@ -47,20 +47,36 @@ except (ValueError, TypeError):
 
 
 # =============================================================================
-# ENUMS
+# ESCAPING HELPERS
 # =============================================================================
 
 
-class SearchStrategy(Enum):
-    """Search strategies for the SearchOrchestrator.
+def _escape_markdown(text: str) -> str:
+    """Escape markdown-significant characters in user-supplied text.
 
-    Each strategy determines which providers are used and how results
-    are combined for different use cases.
+    Prevents injected titles/snippets from breaking markdown structure
+    (e.g., accidental headers, links, or table syntax).
     """
+    for ch in ("|", "[", "]", "`"):
+        text = text.replace(ch, f"\\{ch}")
+    return text
 
-    QUICK_FACTS = "quick_facts"  # Fast search - Exa only
-    DEEP_RESEARCH = "deep_research"  # Comprehensive - Firecrawl deep research
-    MULTI_SOURCE = "multi_source"  # Combined - Exa + Firecrawl results
+
+def _escape_plaintext(text: str) -> str:
+    """Escape plaintext-significant patterns in user-supplied text.
+
+    Prevents injected content from creating spurious numbered-list items
+    in the generic (plaintext) formatter.
+    """
+    # Escape leading digit+period that could be parsed as a list item
+    if text and len(text) >= 2 and text[0].isdigit() and text.lstrip("0123456789").startswith("."):
+        text = "\\" + text
+    return text
+
+
+# =============================================================================
+# ENUMS
+# =============================================================================
 
 
 class ModelType(Enum):
@@ -196,12 +212,14 @@ class SearchContext:
         ]
 
         for i, result in enumerate(self.results, 1):
+            safe_title = _escape_markdown(result.title)
+            safe_snippet = _escape_markdown(result.snippet)
             lines.extend(
                 [
-                    f"## Source {i}: {result.title}",
+                    f"## Source {i}: {safe_title}",
                     f"**URL:** {result.url}",
                     "",
-                    result.snippet,
+                    safe_snippet,
                     "",
                 ]
             )
@@ -255,11 +273,13 @@ class SearchContext:
         ]
 
         for i, result in enumerate(self.results, 1):
+            safe_title = _escape_plaintext(result.title)
+            safe_snippet = _escape_plaintext(result.snippet)
             lines.extend(
                 [
-                    f"{i}. {result.title}",
+                    f"{i}. {safe_title}",
                     f"   URL: {result.url}",
-                    f"   {result.snippet}",
+                    f"   {safe_snippet}",
                     "",
                 ]
             )
@@ -1091,7 +1111,6 @@ __all__ = [
     "SearchOrchestrator",
     "SearchProvider",
     "SearchResult",
-    "SearchStrategy",
     "create_empty_context",
     "parse_model_type",
 ]

@@ -84,7 +84,7 @@ class QueryAnalysis:
             "ambiguity_score": self.ambiguity_score,
             "detected_entities": self.detected_entities,
             "suggested_tier": self.suggested_tier.value if self.suggested_tier else None,
-            "search_strategy": self.search_strategy.name,
+            "search_strategy": self.search_strategy.value,
         }
 
 

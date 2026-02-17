@@ -22,6 +22,7 @@ Design principles:
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import hashlib
 import logging
@@ -307,6 +308,15 @@ class OfflineKnowledgeBase:
         Returns:
             List of KnowledgeNode objects ordered by relevance
         """
+        return await asyncio.to_thread(self._search_sync, query, domain, limit)
+
+    def _search_sync(
+        self,
+        query: str,
+        domain: KnowledgeDomain | None,
+        limit: int,
+    ) -> list[KnowledgeNode]:
+        """Synchronous implementation of search (runs in thread pool)."""
         limit = max(1, limit)
         logger.debug(
             f"Searching knowledge base: query_len={len(query)}, domain={domain}, limit={limit}"
@@ -424,6 +434,18 @@ class OfflineKnowledgeBase:
         if not 0.0 <= relevance_score <= 1.0:
             raise ValueError("relevance_score must be between 0.0 and 1.0")
 
+        return await asyncio.to_thread(
+            self._add_knowledge_sync, content, domain, classification, relevance_score
+        )
+
+    def _add_knowledge_sync(
+        self,
+        content: str,
+        domain: KnowledgeDomain,
+        classification: str,
+        relevance_score: float,
+    ) -> str:
+        """Synchronous implementation of add_knowledge (runs in thread pool)."""
         # Generate content-based ID
         content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
         node_id = content_hash[:16]
@@ -479,6 +501,10 @@ class OfflineKnowledgeBase:
         Returns:
             KnowledgeNode if found, None otherwise
         """
+        return await asyncio.to_thread(self._get_by_id_sync, node_id)
+
+    def _get_by_id_sync(self, node_id: str) -> KnowledgeNode | None:
+        """Synchronous implementation of get_by_id (runs in thread pool)."""
         with self._with_db_lock() as conn:
             cursor = conn.execute(
                 """
@@ -531,6 +557,10 @@ class OfflineKnowledgeBase:
         if not 0.0 <= new_score <= 1.0:
             raise ValueError("new_score must be between 0.0 and 1.0")
 
+        return await asyncio.to_thread(self._update_relevance_sync, node_id, new_score)
+
+    def _update_relevance_sync(self, node_id: str, new_score: float) -> bool:
+        """Synchronous implementation of update_relevance (runs in thread pool)."""
         with self._with_db_lock() as conn:
             cursor = conn.execute(
                 "UPDATE knowledge_nodes SET relevance_score = ? WHERE id = ?",
@@ -548,6 +578,10 @@ class OfflineKnowledgeBase:
         Returns:
             True if deletion succeeded, False if node not found
         """
+        return await asyncio.to_thread(self._delete_node_sync, node_id)
+
+    def _delete_node_sync(self, node_id: str) -> bool:
+        """Synchronous implementation of delete_node (runs in thread pool)."""
         with self._with_db_lock() as conn:
             cursor = conn.execute(
                 "DELETE FROM knowledge_nodes WHERE id = ?",
@@ -562,6 +596,10 @@ class OfflineKnowledgeBase:
         Returns:
             Total count of nodes in the database
         """
+        return await asyncio.to_thread(self._get_node_count_sync)
+
+    def _get_node_count_sync(self) -> int:
+        """Synchronous implementation of get_node_count (runs in thread pool)."""
         with self._with_db_lock() as conn:
             cursor = conn.execute("SELECT COUNT(*) FROM knowledge_nodes")
             result = cursor.fetchone()
@@ -577,7 +615,11 @@ class OfflineKnowledgeBase:
             - capacity_bytes: Maximum capacity for tier
             - utilization_percent: Storage utilization percentage
         """
-        node_count = await self.get_node_count()
+        return await asyncio.to_thread(self._get_storage_stats_sync)
+
+    def _get_storage_stats_sync(self) -> dict[str, int | float]:
+        """Synchronous implementation of get_storage_stats (runs in thread pool)."""
+        node_count = self._get_node_count_sync()
         db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
         capacity = self.tier.capacity_bytes
         utilization = (db_size / capacity * 100) if capacity > 0 else 0
@@ -595,6 +637,10 @@ class OfflineKnowledgeBase:
         Returns:
             Dictionary mapping domain names to node counts
         """
+        return await asyncio.to_thread(self._get_domains_summary_sync)
+
+    def _get_domains_summary_sync(self) -> dict[str, int]:
+        """Synchronous implementation of get_domains_summary (runs in thread pool)."""
         with self._with_db_lock() as conn:
             cursor = conn.execute("""
                 SELECT domain, COUNT(*) as count
@@ -625,6 +671,10 @@ class OfflineKnowledgeBase:
         if max_delete <= 0:
             raise ValueError("max_delete must be greater than 0")
 
+        return await asyncio.to_thread(self._prune_low_relevance_sync, threshold, max_delete)
+
+    def _prune_low_relevance_sync(self, threshold: float, max_delete: int) -> int:
+        """Synchronous implementation of prune_low_relevance (runs in thread pool)."""
         with self._with_db_lock() as conn:
             cursor = conn.execute(
                 """
