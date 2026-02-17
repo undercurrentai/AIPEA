@@ -35,7 +35,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Fix**: Removed the overly-broad `r"\+\+"` pattern from `_DANGEROUS_PATTERNS`. The existing nested quantifier detection and compilation check already catch actual dangerous patterns. Possessive quantifiers like `\d++` are now accepted.
 
 ### 20. Unvalidated `search_context` type in `EnhancedQuery` — FIXED
-- **File**: `src/aipea/engine.py:605-610`
+- **File**: `src/aipea/engine.py:596-604`
 - **Severity**: LOW | **Confidence**: MEDIUM
 - **Fix**: Added runtime type guard in `__post_init__()` — if `search_context` is not `None` and not a `SearchContext` instance, it's logged and set to `None`.
 
@@ -52,17 +52,17 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 ## Wave 7 Fixes (2026-02-16) — 3 issues resolved
 
 ### 28. NaN `confidence_score` bypasses clamping in `engine.py` `SearchContext` — FIXED
-- **File**: `src/aipea/engine.py:391-394`
+- **File**: `src/aipea/engine.py:395`
 - **Severity**: LOW | **Confidence**: HIGH
 - **Fix**: Added `math.isnan()` guard before clamping, matching the pattern used in `models.py` and `search.py` (issue #8). NaN values now default to 0.0.
 
 ### 29. NaN `confidence` bypasses clamping in `engine.py` `EnhancedQuery` — FIXED
-- **File**: `src/aipea/engine.py:583-585`
+- **File**: `src/aipea/engine.py:588`
 - **Severity**: LOW | **Confidence**: HIGH
 - **Fix**: Added `math.isnan()` guard before clamping. Same class of bug as #28, both missed during #8 fix.
 
 ### 30. `enhance_for_models` runs unnecessary base enhancement when no models are compliant — FIXED
-- **File**: `src/aipea/enhancer.py:585-597`
+- **File**: `src/aipea/enhancer.py:555`
 - **Severity**: LOW | **Confidence**: HIGH
 - **Source**: Codex gpt-5.3-codex
 - **Fix**: Pre-filter `model_ids` to compliance-approved models and return early if none are compliant, avoiding unnecessary processing and side effects.
@@ -129,7 +129,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Rationale**: Async model is single-threaded; stats are best-effort. Adding locks would add overhead to every enhance() call.
 
 ### 2. MODEL_FAMILY_MAP returns "gpt" instead of "openai" for GPT-5.x models — INTENTIONAL
-- **File**: `src/aipea/enhancer.py:183-189`
+- **File**: `src/aipea/enhancer.py:181-189`
 - **Rationale**: Downstream code uses substring matching (`"gpt" in model_lower`), so `"gpt"` still matches correctly.
 
 ### 3. `merge_with` produces non-zero confidence with zero results — INTENTIONAL
@@ -145,7 +145,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Rationale**: Intentional scoping per compliance mode. Running classified checks in all modes would generate noise in GENERAL usage.
 
 ### 11. Exa API scores may not be in [0, 1] range causing log noise — INTENTIONAL
-- **File**: `src/aipea/search.py:103-110`
+- **File**: `src/aipea/search.py:101-117`
 - **Rationale**: Clamping already handles this; log noise is minor and useful for monitoring.
 
 ## Deferred Findings (0 remaining)

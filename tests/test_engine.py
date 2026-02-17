@@ -525,7 +525,7 @@ class TestOfflineModelEnum:
 
 
 # ---------------------------------------------------------------------------
-# 2. OllamaOfflineClient (lines 138-337)
+# 2. OllamaOfflineClient (lines 119-345)
 # ---------------------------------------------------------------------------
 
 
@@ -861,7 +861,7 @@ class TestOllamaOfflineClient:
 
 
 # ---------------------------------------------------------------------------
-# 3. get_ollama_client() singleton (lines 354-358)
+# 3. get_ollama_client() singleton (lines 346-365)
 # ---------------------------------------------------------------------------
 
 
@@ -896,7 +896,7 @@ class TestGetOllamaClient:
 
 
 # ---------------------------------------------------------------------------
-# 4. SearchContext.__post_init__ confidence clamping (line 390)
+# 4. SearchContext.__post_init__ confidence clamping (line 388)
 # ---------------------------------------------------------------------------
 
 
@@ -936,7 +936,7 @@ class TestSearchContextFormatGeneric:
 
 
 # ---------------------------------------------------------------------------
-# 6. SearchContext.from_aipea_context() (lines 535-545)
+# 6. SearchContext.from_aipea_context() (lines 533-557)
 # ---------------------------------------------------------------------------
 
 
@@ -972,7 +972,7 @@ class TestSearchContextFromAIPEA:
 
 
 # ---------------------------------------------------------------------------
-# 7. EnhancedQuery.__post_init__ confidence clamping (lines 582-585)
+# 7. EnhancedQuery.__post_init__ confidence clamping (lines 562-610)
 # ---------------------------------------------------------------------------
 
 
@@ -1052,7 +1052,7 @@ class TestEnhancedQueryPostInit:
 
 # ---------------------------------------------------------------------------
 # 8. TierProcessor abstract (lines 615, 625) — tested via subclasses below
-# 9. OfflineTierProcessor.tier property (line 767)
+# 9. OfflineTierProcessor.tier property (line 652)
 # ---------------------------------------------------------------------------
 
 
@@ -1064,7 +1064,7 @@ class TestOfflineTierProcessorProperties:
         proc = OfflineTierProcessor(use_ollama=False)
         assert proc.tier == ProcessingTier.OFFLINE
 
-    # -- _check_ollama_availability (lines 798-817) --
+    # -- _check_ollama_availability (line 815) --
 
     @pytest.mark.asyncio
     async def test_check_ollama_availability_already_checked(self):
@@ -1216,7 +1216,7 @@ class TestProcessWithOllama:
 
 
 # ---------------------------------------------------------------------------
-# 14. TacticalTierProcessor (lines 998, 1014-1073, 1089-1094)
+# 14. TacticalTierProcessor (line 995)
 # ---------------------------------------------------------------------------
 
 
@@ -1313,7 +1313,7 @@ class TestTacticalTierProcessor:
 
 
 # ---------------------------------------------------------------------------
-# 17. StrategicTierProcessor (lines 1141, 1157-1203, 1229-1315, 1319-1324)
+# 17. StrategicTierProcessor (line 1133)
 # ---------------------------------------------------------------------------
 
 
@@ -1444,7 +1444,7 @@ class TestStrategicTierProcessor:
 
 
 # ---------------------------------------------------------------------------
-# 21-22. PromptEngine.classify_query and enhance_query (lines 1428, 1446-1454)
+# 21-22. PromptEngine.classify_query and enhance_query (lines 1509, 1520)
 # ---------------------------------------------------------------------------
 
 

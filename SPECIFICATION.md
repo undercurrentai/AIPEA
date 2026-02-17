@@ -139,7 +139,7 @@ aipea/
 ├── knowledge.py         # ZERO imports from other aipea modules
 ├── search.py            # ZERO imports from other aipea modules (only httpx)
 ├── _types.py            # Shared enums (ProcessingTier, QueryType, SearchStrategy)
-├── models.py            # Shared data models (EnhancementResult, EnhancedRequest)
+├── models.py            # Shared data models (QueryAnalysis)
 ├── analyzer.py          # Imports: security.py, _types.py
 ├── engine.py            # Imports: search.py, _types.py
 └── enhancer.py          # Imports: ALL above (facade)
@@ -192,7 +192,7 @@ aipea/                           # pip install aipea
 ├── analyzer.py                  # QueryAnalyzer, QueryRouter, QueryAnalysis
 ├── engine.py                    # PromptEngine, TierProcessors, Ollama client
 ├── enhancer.py                  # AIPEAEnhancer facade (main entry point)
-├── models.py                    # EnhancementResult, EnhancedRequest
+├── models.py                    # QueryAnalysis (shared data model)
 └── _types.py                    # ProcessingTier, QueryType, SearchStrategy, etc.
 ```
 
@@ -897,10 +897,10 @@ for ReDoS safety before execution.
 | `EXA_API_KEY` | (none) | Exa search provider API key |
 | `FIRECRAWL_API_KEY` | (none) | Firecrawl provider API key |
 | `AIPEA_HTTP_TIMEOUT` | `30.0` | HTTP timeout for search providers (seconds) |
-| `AIPEA_DB_PATH` | `aipea_knowledge.db` | Path to offline knowledge SQLite database |
-| `AIPEA_STORAGE_TIER` | `standard` | Storage tier: ultra_compact, compact, standard, extended |
-| `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode |
-| `AIPEA_OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL for offline models |
+| `AIPEA_DB_PATH` | `aipea_knowledge.db` | Path to offline knowledge SQLite database *(not yet implemented)* |
+| `AIPEA_STORAGE_TIER` | `standard` | Storage tier: ultra_compact, compact, standard, extended *(not yet implemented)* |
+| `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode *(not yet implemented)* |
+| `AIPEA_OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL for offline models *(not yet implemented — hardcoded)* |
 
 ### 8.2 Embedded Library Mode (Primary)
 
@@ -1082,7 +1082,7 @@ Consumer integration patterns:
   from existing signals:
   - High `ambiguity_score` → "Could you be more specific about...?"
   - Low `detected_entities` count → "What specific [domain] topic?"
-  - High `complexity_score` + no search strategy → "Are you looking for a summary
+  - High `complexity` + no search strategy → "Are you looking for a summary
     or a deep dive?"
   - `suggest_enhancements()` output → reformulate as questions
 - Threshold: only generate clarifications when `ambiguity_score > 0.6` or
@@ -1090,7 +1090,7 @@ Consumer integration patterns:
 
 **What already exists**:
 - `QueryAnalysis.ambiguity_score` — computed for every query
-- `QueryAnalysis.complexity_score` — computed for every query
+- `QueryAnalysis.complexity` — computed for every query
 - `QueryAnalysis.detected_entities` — entity extraction per query
 - `QueryAnalyzer.suggest_enhancements()` — generates text suggestions
 - `enhancement_notes: list[str]` on `EnhancementResult` — precedent for advisory output
@@ -1196,12 +1196,26 @@ AIPEA needs to:
 
 ### 11.1 Public Exports (`aipea/__init__.py`)
 
+> **Note**: The actual `__init__.py` exports 30 symbols. The listing below shows the
+> full internal API surface (including non-exported internals) for reference. Symbols
+> marked with `# (not in __all__)` are accessible but not part of the public API.
+
 ```python
 # Main entry points
-from aipea.enhancer import AIPEAEnhancer, enhance_prompt, get_enhancer, reset_enhancer
+from aipea.enhancer import (
+    AIPEAEnhancer,
+    EnhancedRequest,      # Data model (lives in enhancer.py, not models.py)
+    EnhancementResult,    # Data model (lives in enhancer.py, not models.py)
+    enhance_prompt,
+    get_enhancer,
+    reset_enhancer,
+)
 
-# Data models
-from aipea.models import EnhancementResult, EnhancedRequest
+# Shared data models
+from aipea.models import QueryAnalysis
+
+# Shared enums
+from aipea._types import ProcessingTier, QueryType, SearchStrategy
 
 # Security
 from aipea.security import (
@@ -1211,8 +1225,8 @@ from aipea.security import (
     ScanResult,
     SecurityScanner,
     ComplianceHandler,
-    create_security_context_for_mode,
-    quick_scan,
+    create_security_context_for_mode,  # (not in __all__)
+    quick_scan,                        # (not in __all__)
 )
 
 # Knowledge
@@ -1220,6 +1234,7 @@ from aipea.knowledge import (
     OfflineKnowledgeBase,
     KnowledgeNode,
     KnowledgeDomain,
+    KnowledgeSearchResult,
     StorageTier,
 )
 
@@ -1231,37 +1246,32 @@ from aipea.search import (
     Context7Provider,
     SearchOrchestrator,
     SearchResult,
-    SearchContext,
-    SearchStrategy as SearchProviderStrategy,
-    ModelType,
-    create_empty_context,
-    parse_model_type,
+    ModelType,             # (not in __all__)
+    create_empty_context,  # (not in __all__)
+    parse_model_type,      # (not in __all__)
 )
 
 # Analysis
 from aipea.analyzer import (
     QueryAnalyzer,
-    QueryRouter,
-    QueryAnalysis,
-    SearchStrategy,
-    analyze_query,
-    route_query,
+    QueryRouter,           # (not in __all__)
+    analyze_query,         # (not in __all__)
+    route_query,           # (not in __all__)
 )
 
 # Engine
-from aipea._types import ProcessingTier, QueryType
 from aipea.engine import (
     PromptEngine,
-    OfflineTierProcessor,
-    TacticalTierProcessor,
-    StrategicTierProcessor,
-    TierProcessor,
-    EnhancedQuery,
-    SearchContext as LegacySearchContext,
-    OllamaOfflineClient,
-    OfflineModel,
-    get_ollama_client,
-    get_prompt_engine,
+    OfflineTierProcessor,          # (not in __all__)
+    TacticalTierProcessor,         # (not in __all__)
+    StrategicTierProcessor,        # (not in __all__)
+    TierProcessor,                 # (not in __all__)
+    EnhancedQuery,                 # (not in __all__)
+    SearchContext,                  # (not in __all__) — legacy dict-based context
+    OllamaOfflineClient,           # (not in __all__)
+    OfflineModel,                  # (not in __all__)
+    get_ollama_client,             # (not in __all__)
+    get_prompt_engine,             # (not in __all__)
 )
 ```
 
