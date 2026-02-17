@@ -68,11 +68,11 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Rationale**: Downstream code uses substring matching (`"gpt" in model_lower`), so `"gpt"` still matches correctly.
 
 ### 3. `merge_with` produces non-zero confidence with zero results — INTENTIONAL
-- **File**: `src/aipea/search.py:272-280`
+- **File**: `src/aipea/search.py:269-289`
 - **Rationale**: Only triggered by constructing SearchContext with non-zero confidence but empty results, which doesn't happen in normal usage.
 
 ### 5. Classified markers "SECRET"/"CONFIDENTIAL" may cause false positives — INTENTIONAL
-- **File**: `src/aipea/security.py:239-245`
+- **File**: `src/aipea/security.py:240-246`
 - **Rationale**: TACTICAL mode is for military/defense contexts where these words have specific meaning. Conservative by design.
 
 ### 6. Classified marker check only runs in TACTICAL mode — INTENTIONAL
@@ -80,7 +80,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Rationale**: Intentional scoping per compliance mode. Running classified checks in all modes would generate noise in GENERAL usage.
 
 ### 11. Exa API scores may not be in [0, 1] range causing log noise — INTENTIONAL
-- **File**: `src/aipea/search.py:422`
+- **File**: `src/aipea/search.py:103-110`
 - **Rationale**: Clamping already handles this; log noise is minor and useful for monitoring.
 
 ## Deferred Findings (8 remaining)
@@ -91,12 +91,12 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Reason deferred**: Architectural concern requiring significant refactor (wrap all methods with asyncio.to_thread or migrate to aiosqlite). The current approach works for low-concurrency use cases.
 
 ### 12. Duplicate `SearchStrategy` enum in `_types.py` and `search.py` creates silent type mismatch
-- **File**: `src/aipea/_types.py:46-52`, `src/aipea/search.py:51-60`
+- **File**: `src/aipea/_types.py:46-52`, `src/aipea/search.py:54-63`
 - **Severity**: MEDIUM | **Confidence**: HIGH
 - **Reason deferred**: Architectural issue requiring coordinated rename. `_types.SearchStrategy` (auto() int values, has NONE) vs `search.SearchStrategy` (string values, no NONE). `engine.py` re-exports the wrong one. Fix: unify into single enum or rename the `search.py` version to `_OrchestratorStrategy`.
 
 ### 13. `engine.py` re-exports `SearchStrategy` from `search.py` instead of `_types.py`
-- **File**: `src/aipea/engine.py:43, 1692`
+- **File**: `src/aipea/engine.py:43, 1700`
 - **Severity**: LOW | **Confidence**: HIGH
 - **Reason deferred**: Consequence of #12. Blocked until enum unification.
 
@@ -106,7 +106,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Reason deferred**: Blocked by #12 (enum unification).
 
 ### 16. OpenAI/Generic formatters lack markdown escaping vs Anthropic formatter
-- **File**: `src/aipea/search.py:175-258`
+- **File**: `src/aipea/search.py:184-209, 245-267`
 - **Severity**: LOW | **Confidence**: MEDIUM
 - **Reason deferred**: Cosmetic inconsistency, low impact.
 

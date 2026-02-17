@@ -26,7 +26,7 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~6,289 |
+| **Source LOC** | ~6,299 |
 | **Exports** | 30 symbols in `__all__` |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
@@ -118,7 +118,7 @@ Inherited from parent: secrets in code, force push to main.
 
 - **Python**: >=3.11 (target 3.12, CI tests both)
 - **Formatter**: Ruff (line-length: 100, target: py312)
-- **Linter**: Ruff with rules: E, W, F, I, N, UP, B, S, T20, SIM, RUF
+- **Linter**: Ruff with rules: E, W, F, I, N, UP, B, S, C90, T20, DTZ, ICN, SIM, RUF
 - **Type Checker**: mypy strict mode (`strict = true`)
 - **Import Order**: stdlib > third-party > first-party (`aipea.*`)
 
