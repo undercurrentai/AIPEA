@@ -24,7 +24,7 @@ jobs:
           safety check --full-report || true
 
       - name: Container scan (Trivy full)
-        uses: aquasecurity/trivy-action@0.31.0
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           scan-type: 'fs'
           format: 'table'
