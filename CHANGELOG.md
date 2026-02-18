@@ -5,6 +5,23 @@ All notable changes to AIPEA will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **config**: `AIPEAConfig` dataclass and `load_config()` with priority chain: env vars > `.env` > `~/.aipea/config.toml` > defaults
+- **cli**: 4 CLI commands via `aipea[cli]` extra: `configure`, `check`, `doctor`, `info`
+- **cli**: `python -m aipea` entry point via `__main__.py`
+- **cli**: `aipea configure --global` saves to `~/.aipea/config.toml`
+- **cli**: `aipea check --connectivity` tests API key validity
+- **cli**: `aipea doctor` runs full diagnostic (Python, deps, config, security, connectivity)
+- **search**: Config file fallback in `_get_api_key()` and `_resolve_http_timeout()` helpers
+- 68 new tests (488 total, 90.83% coverage)
+
+### Fixed
+- 37 bugs across 9 bug-hunt waves (see `KNOWN_ISSUES.md` for details)
+- Quote injection in `save_dotenv()` and `save_toml_config()` config writers
+- Dotenv parser unescape for `\"` and `\\` in double-quoted values
+
 ## [1.0.0] - 2026-02-14
 
 ### Added

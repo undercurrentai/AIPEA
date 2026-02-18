@@ -5,7 +5,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 ## Wave 9 Fixes (2026-02-17) — 2 issues resolved
 
 ### 34. `ExaSearchProvider.search()` crashes on `text: null` Exa results (TypeError on slice) — FIXED
-- **File**: `src/aipea/search.py:458-462`
+- **File**: `src/aipea/search.py:506-509`
 - **Severity**: MEDIUM | **Confidence**: HIGH
 - **Source**: Codex gpt-5.3-codex
 - **Fix**: When Exa returns `{"text": null}`, `item.get("text")` returns `None` (key exists), not the fallback. `None[:1000]` raised `TypeError`. Refactored to explicit null check with `summary` fallback and safe `str()` conversion before slicing.
@@ -17,7 +17,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Fix**: The `if not base_result.was_enhanced:` check conflated passthrough results (enhancement disabled, valid query) with blocked results (security threat). Added `original_query != enhanced_prompt` condition to distinguish passthrough (prompt equals query) from blocked (prompt is the block message). Passthrough queries now proceed to per-model formatting.
 
 ### 37. `FirecrawlProvider.search()` and `deep_research()` crash on null markdown/content (same class as #34) — FIXED
-- **File**: `src/aipea/search.py:588,702`
+- **File**: `src/aipea/search.py:635,749`
 - **Severity**: MEDIUM | **Confidence**: HIGH
 - **Source**: Quality gate ultrathink (wave 9)
 - **Fix**: Same pattern as #34. `item.get("markdown")` and `source.get("content")` return `None` when the key exists with a null value, then `None[:1000]` raises `TypeError`. Fixed with `or ""` fallback and `str()` safety conversion. Regression test added.
@@ -39,7 +39,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Fix**: Split single `api_key` pattern into three separate patterns: `api_key` (catches `api_key=VALUE` with `:=` separators), `sk_key` (catches `sk-` prefixed keys including `sk-proj-`), and `bearer_token` (catches `bearer TOKEN` with dots/dashes). The original pattern required 20+ alphanumeric chars immediately after the prefix, missing separator characters and modern key formats.
 
 ### 33. `SearchResult.__post_init__` crashes on non-numeric score (TypeError on `math.isnan`) — FIXED
-- **File**: `src/aipea/search.py:121`
+- **File**: `src/aipea/search.py:166`
 - **Severity**: MEDIUM | **Confidence**: HIGH
 - **Source**: Codex gpt-5.3-codex
 - **Fix**: Added `try/except (TypeError, ValueError)` guard before NaN check, coercing non-numeric scores to `0.0` via `float()`. Prevents `TypeError` when upstream provider returns `score: null` (Python `None`), which previously caused the entire provider search to silently degrade to empty results via the broad exception handler.
@@ -163,8 +163,8 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Fix**: Added `limit = max(1, limit)` clamp before SQL query.
 
 ### 26. `HTTP_TIMEOUT` accepts `inf`, `nan`, negative, and zero values — FIXED
-- **File**: `src/aipea/search.py:43-44`
-- **Fix**: Added validation `0 < _raw_timeout < float("inf")`, defaults to 30.0 on invalid.
+- **File**: `src/aipea/search.py:54`
+- **Fix**: Added validation `0 < val < float("inf")`, defaults to 30.0 on invalid.
 
 ### 27. `_is_regex_safe` fails to detect character class nested quantifier ReDoS — FIXED
 - **File**: `src/aipea/security.py`
@@ -182,7 +182,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Rationale**: Downstream code uses substring matching (`"gpt" in model_lower`), so `"gpt"` still matches correctly.
 
 ### 3. `merge_with` produces non-zero confidence with zero results — INTENTIONAL
-- **File**: `src/aipea/search.py:298-318`
+- **File**: `src/aipea/search.py:345-365`
 - **Rationale**: Only triggered by constructing SearchContext with non-zero confidence but empty results, which doesn't happen in normal usage.
 
 ### 5. Classified markers "SECRET"/"CONFIDENTIAL" may cause false positives — INTENTIONAL
@@ -194,7 +194,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Rationale**: Intentional scoping per compliance mode. Running classified checks in all modes would generate noise in GENERAL usage.
 
 ### 11. Exa API scores may not be in [0, 1] range causing log noise — INTENTIONAL
-- **File**: `src/aipea/search.py:101-118`
+- **File**: `src/aipea/search.py:166-182`
 - **Rationale**: Clamping already handles this; log noise is minor and useful for monitoring.
 
 ## Deferred Findings (0 remaining)

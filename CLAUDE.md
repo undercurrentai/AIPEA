@@ -4,7 +4,7 @@
 ```yaml
 version: 3.0.0
 status: ACTIVE
-tier: 2  # Standard (~6K LOC, 2 contributors, internal consumers)
+tier: 2  # Standard (~7K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
 inherits_from: ../../CLAUDE.md  # Undercurrent Holdings root
 maintainer: joshuakirby

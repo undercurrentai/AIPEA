@@ -137,11 +137,14 @@ aipea/
 ├── security.py          # ZERO imports from other aipea modules
 ├── knowledge.py         # ZERO imports from other aipea modules
 ├── search.py            # ZERO imports from other aipea modules (only httpx)
+├── config.py            # ZERO imports from other aipea modules (stdlib only)
 ├── _types.py            # Shared enums (ProcessingTier, QueryType, SearchStrategy)
 ├── models.py            # Shared data models (QueryAnalysis)
 ├── analyzer.py          # Imports: security.py, _types.py
 ├── engine.py            # Imports: search.py, _types.py
-└── enhancer.py          # Imports: ALL above (facade)
+├── enhancer.py          # Imports: ALL above (facade)
+├── cli.py               # Imports: config.py, aipea (requires [cli] extra)
+└── __main__.py          # Entry point: python -m aipea
 ```
 
 Key insight: The 3 core modules form an **independent base layer** with zero
@@ -192,7 +195,10 @@ aipea/                           # pip install aipea
 ├── engine.py                    # PromptEngine, TierProcessors, Ollama client
 ├── enhancer.py                  # AIPEAEnhancer facade (main entry point)
 ├── models.py                    # QueryAnalysis (shared data model)
-└── _types.py                    # ProcessingTier, QueryType, SearchStrategy, etc.
+├── _types.py                    # ProcessingTier, QueryType, SearchStrategy, etc.
+├── config.py                    # AIPEAConfig, load_config (stdlib-only config system)
+├── cli.py                       # CLI commands: configure, check, doctor, info
+└── __main__.py                  # python -m aipea entry point
 ```
 
 ---
@@ -918,11 +924,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+cli = ["typer[all]>=0.12"]  # CLI tools (configure, check, doctor, info)
 ollama = []  # No additional deps; ollama CLI must be installed separately
+
+[project.scripts]
+aipea = "aipea.cli:app"
 ```
 
 Minimal dependency footprint: **stdlib + httpx**. This is intentional and
-must be preserved.
+must be preserved. The `[cli]` extra adds Typer + Rich for the onboarding CLI.
 
 ### 8.3 Standalone Service Mode (Optional, Future)
 
@@ -1044,7 +1054,7 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full roadmap with 6 prioritized
 
 ### 11.1 Public Exports (`aipea/__init__.py`)
 
-> **Note**: The actual `__init__.py` exports 30 symbols. The listing below shows the
+> **Note**: The actual `__init__.py` exports 32 symbols. The listing below shows the
 > full internal API surface (including non-exported internals) for reference. Symbols
 > marked with `# (not in __all__)` are accessible but not part of the public API.
 
@@ -1120,6 +1130,12 @@ from aipea.engine import (
     OfflineModel,                  # (not in __all__)
     get_ollama_client,             # (not in __all__)
     get_prompt_engine,             # (not in __all__)
+)
+
+# Configuration
+from aipea.config import (
+    AIPEAConfig,
+    load_config,
 )
 ```
 

@@ -21,7 +21,7 @@ parent: ../../CLAUDE.md
 |--------|-------|
 | Previous version | 2.0.0 (~406 lines, ~14KB, protocol v3.2) |
 | New version | 3.0.0 (~417 lines, ~14KB, protocol v4.0) |
-| Tier classification | Tier 2 (Standard): ~6K LOC, 2 contributors, internal consumers, STANDARD compliance |
+| Tier classification | Tier 2 (Standard): ~7K LOC, 2 contributors, internal consumers, STANDARD compliance |
 | Token budget | 8,000 (Tier 2 ceiling) |
 | Parent inheritance | `../../CLAUDE.md` (Undercurrent Holdings root v3.2.1) |
 | Sections added | 3 (Quick Reference, Hierarchy Context, PyPI Release playbook) |
