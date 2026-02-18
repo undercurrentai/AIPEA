@@ -170,6 +170,16 @@ class TestSearchContext:
         ctx = SearchContext(query="test", confidence=-0.5)
         assert ctx.confidence == 0.0
 
+    def test_none_confidence_coerced(self) -> None:
+        """Non-numeric confidence is coerced to 0.0 (bug #39 extension)."""
+        ctx = SearchContext(query="test", confidence=None)  # type: ignore[arg-type]
+        assert ctx.confidence == 0.0
+
+    def test_string_confidence_coerced(self) -> None:
+        """String confidence is coerced via float() (bug #39 extension)."""
+        ctx = SearchContext(query="test", confidence="0.7")  # type: ignore[arg-type]
+        assert ctx.confidence == 0.7
+
     def test_is_empty_true(self) -> None:
         """Test is_empty returns True when no results."""
         ctx = SearchContext(query="test", results=[])

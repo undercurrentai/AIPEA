@@ -1,6 +1,14 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-10 + Quality Gate: 2026-02-17)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-10 + Quality Gate: 2026-02-18)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Quality Gate Ultrathink Fix (2026-02-18)
+
+### 43. `search.py:SearchContext` confidence field missing `float()` coercion guard (same class as #39) — FIXED
+- **File**: `src/aipea/search.py:208-216`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Quality gate ultrathink sweep
+- **Fix**: `SearchContext.__post_init__` in `search.py` called `math.isnan(self.confidence)` without `float()` coercion, crashing on `None`/`str` inputs. Same pattern as #39 (engine.py/models.py) but missed in `search.py`. Added `try/except (TypeError, ValueError)` with `float()` coercion. 2 regression tests added.
 
 ## Wave 10 Fixes (2026-02-17) — 3 issues resolved
 

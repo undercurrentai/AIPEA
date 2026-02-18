@@ -205,6 +205,15 @@ class SearchContext:
 
     def __post_init__(self) -> None:
         """Validate confidence is within valid range."""
+        # Coerce to float first (same pattern as SearchResult above)
+        try:
+            self.confidence = float(self.confidence)
+        except (TypeError, ValueError):
+            logger.warning(
+                "SearchContext confidence has invalid type %s, defaulting to 0.0",
+                type(self.confidence).__name__,
+            )
+            self.confidence = 0.0
         if math.isnan(self.confidence):
             logger.warning("SearchContext confidence is NaN, defaulting to 0.0")
             self.confidence = 0.0
