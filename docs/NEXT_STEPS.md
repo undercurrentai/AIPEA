@@ -436,7 +436,7 @@ The following items are documented for future implementation. They are not block
 | Aspect | Detail |
 |--------|--------|
 | **Status** | COMPLETE — coverage improved from 49% to 99% (73 new tests + 10 mock-based Ollama tests) |
-| **Overall AIPEA coverage** | 90.91% (496 passed, 15 skipped) |
+| **Overall AIPEA coverage** | 90.92% (498 passed, 15 skipped) |
 | **Date** | 2026-02-17 |
 
 ---
