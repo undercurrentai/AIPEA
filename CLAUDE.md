@@ -26,7 +26,7 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~7,278 |
+| **Source LOC** | ~7,332 |
 | **Exports** | 32 symbols in `__all__` |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
@@ -410,7 +410,7 @@ Audit before quarterly schedule if:
 - Public API surface changes significantly (>3 exports)
 - New CI/CD workflow added
 
-**Audit schedule**: Quarterly (next: 2026-05-16)
+**Audit schedule**: Quarterly (next: 2026-05-14)
 
 ---
 

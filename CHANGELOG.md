@@ -15,12 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **cli**: `aipea check --connectivity` tests API key validity
 - **cli**: `aipea doctor` runs full diagnostic (Python, deps, config, security, connectivity)
 - **search**: Config file fallback in `_get_api_key()` and `_resolve_http_timeout()` helpers
-- 68 new tests (488 total, 90.83% coverage)
+- 78 new tests (498 total, 90.92% coverage)
 
 ### Fixed
-- 37 bugs across 9 bug-hunt waves (see `KNOWN_ISSUES.md` for details)
+- 41 bugs across 10 bug-hunt waves + quality gate (see `KNOWN_ISSUES.md` for details)
 - Quote injection in `save_dotenv()` and `save_toml_config()` config writers
 - Dotenv parser unescape for `\"` and `\\` in double-quoted values
+- `enhance()` offline tier enforcement when `force_offline=True` (#38)
+- `float()` coercion guards for all dataclass `__post_init__` isnan checks (#39, #43)
+- Newline/CR escaping in `save_dotenv`/`save_toml_config` (#40)
 
 ## [1.0.0] - 2026-02-14
 

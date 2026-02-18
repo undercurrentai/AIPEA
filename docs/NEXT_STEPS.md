@@ -423,7 +423,7 @@ The following items are documented for future implementation. They are not block
 
 | Aspect | Detail |
 |--------|--------|
-| **Status** | DEFERRED — workflow created, one-time PyPI setup pending |
+| **Status** | READY — workflow created in `.github/workflows/publish.yml`, one-time PyPI setup pending |
 | **Workflow** | `.github/workflows/publish.yml` (trusted publisher OIDC, no API tokens) |
 | **Build tool** | `hatch build` (hatchling backend) |
 | **Current install** | `pip install -e /Projects/AIPEA` (local editable) or vendored at `AgoraIV/vendor/aipea/` |
