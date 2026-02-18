@@ -389,6 +389,38 @@ class TestSaveDotenv:
         # The raw file should have escaped backslash
         assert "key_with\\\\backslash" in content
 
+    def test_escapes_newline_in_keys(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Keys containing newlines are escaped for valid .env file (bug #40)."""
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+
+        target = tmp_path / ".env"
+        key_with_newline = "abc\ndef"
+        save_dotenv(target, AIPEAConfig(exa_api_key=key_with_newline))
+
+        content = target.read_text()
+        # Raw file should have escaped newline (literal \n, not actual newline)
+        assert "abc\\ndef" in content
+        # Should NOT contain a literal newline inside the value
+        for line in content.splitlines():
+            if line.startswith("EXA_API_KEY="):
+                assert "\n" not in line.split("=", 1)[1]
+
+    def test_newline_roundtrip(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Newline in key survives save/load round-trip (bug #40)."""
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+
+        target = tmp_path / ".env"
+        key_with_newline = "abc\ndef"
+        save_dotenv(target, AIPEAConfig(exa_api_key=key_with_newline))
+
+        monkeypatch.chdir(tmp_path)
+        loaded = load_config()
+        assert loaded.exa_api_key == key_with_newline
+
 
 class TestSaveToml:
     def test_writes_file(self, tmp_path: Path) -> None:

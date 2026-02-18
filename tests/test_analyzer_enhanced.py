@@ -460,6 +460,28 @@ class TestQueryAnalysisModel:
         )
         assert analysis.confidence == 0.0
 
+    def test_none_complexity_coerced(self) -> None:
+        """Non-numeric complexity is coerced to 0.0 (bug #39)."""
+        analysis = QueryAnalysis(
+            query="test",
+            query_type=QueryType.UNKNOWN,
+            complexity=None,  # type: ignore[arg-type]
+            confidence=0.5,
+            needs_current_info=False,
+        )
+        assert analysis.complexity == 0.0
+
+    def test_string_confidence_coerced(self) -> None:
+        """String confidence is coerced via float() (bug #39)."""
+        analysis = QueryAnalysis(
+            query="test",
+            query_type=QueryType.UNKNOWN,
+            complexity=0.5,
+            confidence="0.8",  # type: ignore[arg-type]
+            needs_current_info=False,
+        )
+        assert analysis.confidence == 0.8
+
 
 # =============================================================================
 # LOGGING

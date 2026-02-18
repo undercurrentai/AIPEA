@@ -38,6 +38,18 @@ class QueryAnalysis:
 
     def __post_init__(self) -> None:
         """Validate and clamp scores to valid ranges."""
+        # Coerce to float first (same pattern as SearchResult in search.py)
+        for attr in ("complexity", "confidence", "ambiguity_score"):
+            try:
+                setattr(self, attr, float(getattr(self, attr)))
+            except (TypeError, ValueError):
+                logger.warning(
+                    "QueryAnalysis %s has invalid type %s, defaulting to 0.0",
+                    attr,
+                    type(getattr(self, attr)).__name__,
+                )
+                setattr(self, attr, 0.0)
+
         # Replace NaN with 0.0 before clamping (NaN bypasses comparison operators)
         if math.isnan(self.complexity):
             logger.warning("QueryAnalysis complexity is NaN, defaulting to 0.0")

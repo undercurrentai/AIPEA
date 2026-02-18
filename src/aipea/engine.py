@@ -390,6 +390,16 @@ class SearchContext:
         if not self.search_timestamp:
             self.search_timestamp = datetime.now(UTC).isoformat()
 
+        # Coerce to float first (same pattern as SearchResult in search.py)
+        try:
+            self.confidence_score = float(self.confidence_score)
+        except (TypeError, ValueError):
+            logger.warning(
+                "SearchContext confidence_score has invalid type %s, defaulting to 0.0",
+                type(self.confidence_score).__name__,
+            )
+            self.confidence_score = 0.0
+
         # Guard against NaN (comparisons with NaN are always False,
         # so the clamping below would leave NaN unchanged)
         if math.isnan(self.confidence_score):
@@ -585,6 +595,15 @@ class EnhancedQuery:
 
     def __post_init__(self) -> None:
         """Validate confidence score and search_context type."""
+        # Coerce to float first (same pattern as SearchResult in search.py)
+        try:
+            self.confidence = float(self.confidence)
+        except (TypeError, ValueError):
+            logger.warning(
+                "EnhancedQuery confidence has invalid type %s, defaulting to 0.0",
+                type(self.confidence).__name__,
+            )
+            self.confidence = 0.0
         if math.isnan(self.confidence):
             logger.warning("EnhancedQuery confidence is NaN, defaulting to 0.0")
             self.confidence = 0.0

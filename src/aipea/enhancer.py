@@ -499,6 +499,9 @@ class AIPEAEnhancer:
 
         # Step 6: Determine processing tier
         processing_tier = analysis.suggested_tier or ProcessingTier.OFFLINE
+        if offline_required:
+            # Offline-required requests must report OFFLINE tier for consistency
+            processing_tier = ProcessingTier.OFFLINE
 
         # Step 7: Formulate enhanced prompt
         model_family = get_model_family(model_id)

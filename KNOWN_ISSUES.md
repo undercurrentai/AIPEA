@@ -1,6 +1,40 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-9 + Quality Gate: 2026-02-17)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-10 + Quality Gate: 2026-02-17)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Wave 10 Fixes (2026-02-17) — 3 issues resolved
+
+### 38. `enhance()` doesn't enforce `ProcessingTier.OFFLINE` when `force_offline=True` — FIXED
+- **File**: `src/aipea/enhancer.py:502-504`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Codex gpt-5.3-codex
+- **Fix**: When security scan returns `force_offline=True`, offline context is used but `processing_tier` was still taken from `analysis.suggested_tier`. Added explicit override: `if offline_required: processing_tier = ProcessingTier.OFFLINE`. Regression test asserts `result.processing_tier == ProcessingTier.OFFLINE`.
+
+### 39. `SearchContext`/`EnhancedQuery`/`QueryAnalysis` crash on non-numeric score types (TypeError on `math.isnan`) — FIXED
+- **File**: `src/aipea/engine.py:395,600`, `src/aipea/models.py:42-50`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Source**: Claude sweep agent
+- **Fix**: Same class as #33 but in different dataclasses. Added `try/except (TypeError, ValueError)` with `float()` coercion before `math.isnan()` calls, matching the pattern already applied to `SearchResult.__post_init__` in search.py. Passing `confidence_score=None` or `confidence="0.5"` now coerces gracefully instead of crashing.
+
+### 40. `save_dotenv`/`save_toml_config` don't escape newline/carriage return in values — FIXED
+- **File**: `src/aipea/config.py:259-261`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Claude sweep agent
+- **Fix**: Extracted `_escape_config_value()` helper that escapes `\`, `"`, `\n`, and `\r`. Updated `_parse_dotenv` unescape logic to handle `\n` and `\r` for round-trip correctness. Regression tests verify both escaped output and round-trip fidelity.
+
+## Wave 10 — Deferred
+
+### 41. `aipea check` exits with code 1 when optional API keys are not configured — DEFERRED
+- **File**: `src/aipea/cli.py:108-158`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Source**: Claude sweep agent
+- **Rationale**: The `check` command treats missing optional API keys (Exa, Firecrawl) as issues, causing exit code 1. This is borderline — scripts calling `aipea check` may interpret this as a failure even when the tool is properly configured for offline-only use. Fix would require distinguishing "error" issues from "warning" issues.
+
+### 42. `doctor` connectivity section uses inconsistent output format — DEFERRED
+- **File**: `src/aipea/cli.py:331-344`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Claude sweep agent
+- **Rationale**: Connectivity results print `"Exa: OK"` format while all other doctor checks use `"PASS label"` format via `_DoctorChecks.ok()`. Counting logic is correct but the visual inconsistency is fragile if refactored. Cosmetic issue only.
 
 ## Wave 9 Fixes (2026-02-17) — 2 issues resolved
 

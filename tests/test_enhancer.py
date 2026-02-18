@@ -541,6 +541,7 @@ class TestAIPEAEnhancerEnhance:
             result = await enhancer.enhance("test", "gpt-4")
             mock_offline.assert_awaited_once()
             assert any("offline" in n.lower() for n in result.enhancement_notes)
+            assert result.processing_tier == ProcessingTier.OFFLINE
 
 
 class TestAIPEAEnhancerEnhanceForModels:

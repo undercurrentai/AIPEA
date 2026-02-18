@@ -107,7 +107,13 @@ def _parse_dotenv(path: Path) -> dict[str, str]:
             value = raw_value[1:-1]
             # Unescape double-quoted values (single-quoted are literal)
             if quote_char == '"':
-                value = value.replace("\\\\", "\x00").replace('\\"', '"').replace("\x00", "\\")
+                value = (
+                    value.replace("\\\\", "\x00")
+                    .replace('\\"', '"')
+                    .replace("\\n", "\n")
+                    .replace("\\r", "\r")
+                    .replace("\x00", "\\")
+                )
         else:
             # Strip inline comment for unquoted values
             comment_idx = raw_value.find(" #")
@@ -250,6 +256,11 @@ def load_config(
 # ---------------------------------------------------------------------------
 
 
+def _escape_config_value(value: str) -> str:
+    """Escape a value for safe inclusion in double-quoted .env or TOML strings."""
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+
+
 def save_dotenv(path: Path, config: AIPEAConfig) -> None:
     """Write configuration to a ``.env`` file with restricted permissions.
 
@@ -263,10 +274,10 @@ def save_dotenv(path: Path, config: AIPEAConfig) -> None:
         "",
     ]
     if config.exa_api_key:
-        escaped = config.exa_api_key.replace("\\", "\\\\").replace('"', '\\"')
+        escaped = _escape_config_value(config.exa_api_key)
         lines.append(f'EXA_API_KEY="{escaped}"')
     if config.firecrawl_api_key:
-        escaped = config.firecrawl_api_key.replace("\\", "\\\\").replace('"', '\\"')
+        escaped = _escape_config_value(config.firecrawl_api_key)
         lines.append(f'FIRECRAWL_API_KEY="{escaped}"')
     if config.http_timeout != _DEFAULT_HTTP_TIMEOUT:
         lines.append(f"AIPEA_HTTP_TIMEOUT={config.http_timeout}")
@@ -297,10 +308,10 @@ def save_toml_config(path: Path, config: AIPEAConfig) -> None:
         "[aipea]",
     ]
     if config.exa_api_key:
-        escaped = config.exa_api_key.replace("\\", "\\\\").replace('"', '\\"')
+        escaped = _escape_config_value(config.exa_api_key)
         lines.append(f'exa_api_key = "{escaped}"')
     if config.firecrawl_api_key:
-        escaped = config.firecrawl_api_key.replace("\\", "\\\\").replace('"', '\\"')
+        escaped = _escape_config_value(config.firecrawl_api_key)
         lines.append(f'firecrawl_api_key = "{escaped}"')
     if config.http_timeout != _DEFAULT_HTTP_TIMEOUT:
         lines.append(f"http_timeout = {config.http_timeout}")

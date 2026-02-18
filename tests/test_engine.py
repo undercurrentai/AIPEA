@@ -910,6 +910,16 @@ class TestSearchContextPostInit:
         # Should be a valid ISO format string
         assert "T" in ctx.search_timestamp
 
+    def test_none_confidence_score_coerced(self):
+        """Non-numeric confidence_score is coerced to 0.0 (bug #39)."""
+        ctx = SearchContext(results=[], sources=[], confidence_score=None)
+        assert ctx.confidence_score == 0.0
+
+    def test_string_confidence_score_coerced(self):
+        """String confidence_score is coerced via float() (bug #39)."""
+        ctx = SearchContext(results=[], sources=[], confidence_score="0.7")
+        assert ctx.confidence_score == 0.7
+
 
 # ---------------------------------------------------------------------------
 # 5. SearchContext._format_generic() with results (line 501)
@@ -1011,6 +1021,28 @@ class TestEnhancedQueryPostInit:
             query_type=QueryType.UNKNOWN,
         )
         assert eq.confidence == 0.75
+
+    def test_none_confidence_coerced(self):
+        """Non-numeric confidence is coerced to 0.0 (bug #39)."""
+        eq = EnhancedQuery(
+            original_query="q",
+            enhanced_query="eq",
+            tier_used=ProcessingTier.OFFLINE,
+            confidence=None,  # type: ignore[arg-type]
+            query_type=QueryType.UNKNOWN,
+        )
+        assert eq.confidence == 0.0
+
+    def test_string_confidence_coerced(self):
+        """String confidence is coerced via float() (bug #39)."""
+        eq = EnhancedQuery(
+            original_query="q",
+            enhanced_query="eq",
+            tier_used=ProcessingTier.OFFLINE,
+            confidence="0.6",  # type: ignore[arg-type]
+            query_type=QueryType.UNKNOWN,
+        )
+        assert eq.confidence == 0.6
 
     def test_search_context_invalid_type_set_to_none(self):
         """search_context with wrong type is set to None (#20)."""
