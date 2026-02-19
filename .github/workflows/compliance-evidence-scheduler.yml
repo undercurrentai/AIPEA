@@ -66,6 +66,8 @@ jobs:
     steps:
       - name: Determine schedule type
         id: check
+        env:
+          INPUT_EVIDENCE_TYPE: ${{ github.event.inputs.evidence_type }}
         run: |
           MONTH=$(date +%m | sed 's/^0//')
           YEAR=$(date +%Y)
@@ -97,11 +99,11 @@ jobs:
           fi
 
           # Manual dispatch override
-          if [ -n "${{ github.event.inputs.evidence_type }}" ]; then
+          if [ -n "$INPUT_EVIDENCE_TYPE" ]; then
             echo "is_quarterly=false" >> "$GITHUB_OUTPUT"
             echo "is_monthly=false" >> "$GITHUB_OUTPUT"
             echo "is_annual=false" >> "$GITHUB_OUTPUT"
-            case "${{ github.event.inputs.evidence_type }}" in
+            case "$INPUT_EVIDENCE_TYPE" in
               access-review|vendor-risk|incident-drill|fsi-emergency-test) echo "is_quarterly=true" >> "$GITHUB_OUTPUT" ;;
               postmarket-monitoring) echo "is_monthly=true" >> "$GITHUB_OUTPUT" ;;
               bcp-drp-test) echo "is_annual=true" >> "$GITHUB_OUTPUT" ;;
