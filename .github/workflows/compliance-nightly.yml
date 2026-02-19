@@ -41,4 +41,4 @@ jobs:
 
       - name: Full mutation testing
         run: |
-          if [ -d tests ]; then pip install mutmut && mutmut run --paths-to-mutate src --simple-output; fi
+          if [ -d tests ]; then pip install mutmut && mutmut run; fi

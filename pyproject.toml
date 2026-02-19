@@ -106,6 +106,9 @@ branch = true
 fail_under = 75
 show_missing = true
 
+[tool.mutmut]
+paths_to_mutate = ["src/"]
+
 [tool.standards]
 tier = "ENHANCED"
 test_measurement = "traditional"
