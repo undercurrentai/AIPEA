@@ -1,0 +1,6 @@
+# Default: all changes require joshuakirby review
+* @ThermoclineLeviathan
+
+# Critical paths: require explicit admin review
+.github/ @ThermoclineLeviathan
+CLAUDE.md @ThermoclineLeviathan
