@@ -34,7 +34,7 @@ jobs:
       - name: IaC scan (Checkov)
         run: |
           pip install checkov
-          checkov -q -d .
+          checkov --compact -d .
 
       - name: Full mutation testing
         run: |
