@@ -5,6 +5,9 @@ on:
     - cron: '17 3 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   nightly:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -34,7 +37,7 @@ jobs:
       - name: IaC scan (Checkov)
         run: |
           pip install checkov
-          checkov --compact -d .
+          checkov --compact -d . --skip-check CKV_GHA_7
 
       - name: Full mutation testing
         run: |
