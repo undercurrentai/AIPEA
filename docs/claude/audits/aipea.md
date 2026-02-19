@@ -56,7 +56,7 @@ parent: ../../CLAUDE.md
 | pyproject.toml | Tool config | ruff line-length=100, py312 target, S-rules for bandit, mypy strict |
 | Makefile | Build targets | 13 targets: install, fmt, lint, type, test, sec, all, ci, mut, sbom, score, deps, perf |
 | pytest | Test suite | 498 passed, 15 skipped, 90.92% coverage (updated 2026-02-18) |
-| CI workflow | Gate config | 3 jobs: lint, typecheck, test (matrix: py3.11 + py3.12); also scaffold-checks, compliance-nightly, compliance-evidence-scheduler workflows |
+| CI workflow | Gate config | 6 workflows: ci.yml (lint, typecheck, test matrix), publish.yml, compliance-nightly.yml, scaffold-checks.yml, codeql-analysis.yml, dependency-review.yml; all Actions SHA-pinned |
 | __init__.py | Public API | 32 exports in `__all__`, version = "1.0.0" |
 | pyproject.toml | License | MIT license, >=3.11 required |
 | Exa search | PyPI publishing 2025/2026 | Trusted Publishers (OIDC) is standard; `pypa/gh-action-pypi-publish@release/v1` |
@@ -227,6 +227,7 @@ parent: ../../CLAUDE.md
 | 2026-02-17 | CLI/config system | Added config.py, cli.py, __main__.py + tests: 420→488 tests, 92.75%→90.83% coverage, 6,426→7,278 LOC, 30→32 exports |
 | 2026-02-17 | Wave 10 bug hunt | 3 fixes (#38-#40), 2 deferred (#41-#42): 488→496 tests, 90.83%→90.91% coverage, 33 FIXED, 6 INTENTIONAL, 3 DEFERRED |
 | 2026-02-18 | Quality gate ultrathink | 1 fix (#43 — search.py SearchContext coercion): 496→498 tests, 90.91%→90.92% coverage, 34 FIXED, 6 INTENTIONAL, 3 DEFERRED |
+| 2026-02-19 | CI hardening | trivy-action 0.31.0→0.34.0 (CVE-2026-26189), checkov `-q`→`--compact` + skip CKV_GHA_7, mutmut v3.x config migration, `permissions: contents: read` on 2 workflows, all Actions SHA-pinned, added: codeql-analysis.yml, dependency-review.yml, Dependabot, CODEOWNERS, PR template; 6 workflows total |
 
 *Audit completed: 2026-02-14 | Auditor: Claude Code (Opus 4.6) | Protocol: v4.0*
-*Last amended: 2026-02-18*
+*Last amended: 2026-02-19*

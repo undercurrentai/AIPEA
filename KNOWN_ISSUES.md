@@ -44,7 +44,7 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Source**: Claude sweep agent
 - **Rationale**: Connectivity results print `"Exa: OK"` format while all other doctor checks use `"PASS label"` format via `_DoctorChecks.ok()`. Counting logic is correct but the visual inconsistency is fragile if refactored. Cosmetic issue only.
 
-## Wave 9 Fixes (2026-02-17) — 2 issues resolved
+## Wave 9 Fixes (2026-02-17) — 3 issues resolved
 
 ### 34. `ExaSearchProvider.search()` crashes on `text: null` Exa results (TypeError on slice) — FIXED
 - **File**: `src/aipea/search.py:506-509`

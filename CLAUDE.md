@@ -1,5 +1,5 @@
 # CLAUDE.md - AIPEA
-> Version: 3.0.0 | Updated: 2026-02-17 | Owner: @joshuakirby
+> Version: 3.0.0 | Updated: 2026-02-19 | Owner: @joshuakirby
 
 ```yaml
 version: 3.0.0

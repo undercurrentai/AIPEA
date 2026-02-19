@@ -15,7 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **cli**: `aipea check --connectivity` tests API key validity
 - **cli**: `aipea doctor` runs full diagnostic (Python, deps, config, security, connectivity)
 - **search**: Config file fallback in `_get_api_key()` and `_resolve_http_timeout()` helpers
-- 78 new tests (498 total, 90.92% coverage)
+- 161 new tests (498 total, 90.92% coverage)
+
+### Changed
+- **ci**: All GitHub Actions SHA-pinned for supply chain security
+- **ci**: trivy-action bumped to 0.34.0 (CVE-2026-26189 fix)
+- **ci**: Checkov migrated from `-q` to `--compact`, CKV_GHA_7 skipped (false positive)
+- **ci**: mutmut migrated to v3.x config-based `[tool.mutmut]` in pyproject.toml
+- **ci**: Added `permissions: contents: read` to compliance-nightly and scaffold-checks workflows
+- **ci**: Added CodeQL analysis, dependency-review, Dependabot, CODEOWNERS, PR template
 
 ### Fixed
 - 41 bugs across 10 bug-hunt waves + quality gate (see `KNOWN_ISSUES.md` for details)
