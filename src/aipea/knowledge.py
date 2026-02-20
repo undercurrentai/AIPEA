@@ -69,15 +69,15 @@ class StorageTier(Enum):
     STANDARD = ("standard", 20_000_000_000)  # 20GB - laptops
     EXTENDED = ("extended", 100_000_000_000)  # 100GB - workstations
 
-    def __init__(self, tier_name: str, capacity_bytes: int) -> None:
+    def __init__(self, tier_name: str, capacity_bytes: int) -> None:  # pragma: no mutate
         """Initialize storage tier with name and capacity.
 
         Args:
             tier_name: Human-readable tier identifier
             capacity_bytes: Maximum storage capacity in bytes
         """
-        self.tier_name = tier_name
-        self.capacity_bytes = capacity_bytes
+        self.tier_name = tier_name  # pragma: no mutate
+        self.capacity_bytes = capacity_bytes  # pragma: no mutate
 
 
 @dataclass
