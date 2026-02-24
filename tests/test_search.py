@@ -316,6 +316,18 @@ class TestSearchContext:
         # The title should have the leading digit-period escaped
         assert "\\3. Injected list item" in formatted
 
+    def test_formatted_for_model_openai_null_fields(self) -> None:
+        """Formatters handle None title/url/snippet without crashing."""
+        results = [SearchResult(title=None, url=None, snippet=None, score=0.5)]  # type: ignore[arg-type]
+        ctx = SearchContext(query="test", results=results, confidence=0.5)
+        # All three formatter paths should succeed without AttributeError
+        openai_fmt = ctx.formatted_for_model("openai")
+        assert "Untitled" in openai_fmt
+        anthropic_fmt = ctx.formatted_for_model("claude")
+        assert "<title>Untitled</title>" in anthropic_fmt
+        generic_fmt = ctx.formatted_for_model("gemini")
+        assert "Untitled" in generic_fmt
+
     def test_merge_with(self) -> None:
         """Test merging two SearchContexts."""
         ctx1 = SearchContext(
@@ -452,8 +464,46 @@ class TestExaSearchProvider:
             result = await provider.search("test query", num_results=1)
 
         assert len(result.results) == 1
-        assert result.results[0].score == 0.0
+        assert result.results[0].score == 0.5  # null score gets sensible default
         assert result.confidence == 1.0
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"EXA_API_KEY": "test-api-key"})
+    async def test_search_preserves_zero_score(self) -> None:
+        """Exa results with score=0 must preserve zero, not coerce to default."""
+        provider = ExaSearchProvider(enabled=True)
+
+        class DummyResponse:
+            def __init__(self, payload: dict[str, object]) -> None:
+                self._payload = payload
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, object]:
+                return self._payload
+
+        dummy_response = DummyResponse(
+            {
+                "results": [
+                    {
+                        "title": "Low Relevance",
+                        "url": "https://example.com",
+                        "text": "Content",
+                        "score": 0,
+                    }
+                ]
+            }
+        )
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = dummy_response
+
+        with patch("aipea.search.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value = mock_client_instance
+            result = await provider.search("test query", num_results=1)
+
+        assert len(result.results) == 1
+        assert result.results[0].score == 0.0  # zero must be preserved, not coerced to 0.5
 
     @pytest.mark.asyncio
     @patch.dict(os.environ, {"EXA_API_KEY": "test-api-key"})
@@ -494,6 +544,45 @@ class TestExaSearchProvider:
         assert len(result.results) == 1
         assert result.results[0].snippet == "Fallback summary"
         assert result.confidence == 1.0
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"EXA_API_KEY": "test-api-key"})
+    async def test_search_handles_null_title_and_url(self) -> None:
+        """Exa results with null title/url should use fallback defaults."""
+        provider = ExaSearchProvider(enabled=True)
+
+        class DummyResponse:
+            def __init__(self, payload: dict[str, object]) -> None:
+                self._payload = payload
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, object]:
+                return self._payload
+
+        dummy_response = DummyResponse(
+            {
+                "results": [
+                    {
+                        "title": None,
+                        "url": None,
+                        "text": "Some content",
+                        "score": 0.8,
+                    }
+                ]
+            }
+        )
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = dummy_response
+
+        with patch("aipea.search.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value = mock_client_instance
+            result = await provider.search("test query", num_results=1)
+
+        assert len(result.results) == 1
+        assert result.results[0].title == "Untitled"
+        assert result.results[0].url == ""
 
 
 # =============================================================================
@@ -633,6 +722,86 @@ class TestFirecrawlProvider:
 
         assert len(result.results) == 1
         assert result.results[0].snippet == ""
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test-api-key"})
+    async def test_search_handles_null_metadata_title_fallback(self) -> None:
+        """Firecrawl results with metadata=null should still parse titles safely."""
+        provider = FirecrawlProvider(enabled=True)
+
+        class DummyResponse:
+            def __init__(self, payload: dict[str, object]) -> None:
+                self._payload = payload
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, object]:
+                return self._payload
+
+        dummy_response = DummyResponse(
+            {
+                "data": [
+                    {
+                        "title": "Known title",
+                        "url": "https://example.com/1",
+                        "markdown": "Snippet 1",
+                    },
+                    {
+                        "metadata": None,
+                        "url": "https://example.com/2",
+                        "markdown": "Snippet 2",
+                    },
+                ]
+            }
+        )
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = dummy_response
+
+        with patch("aipea.search.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value = mock_client_instance
+            result = await provider.search("test query", num_results=2)
+
+        assert len(result.results) == 2
+        assert result.results[0].title == "Known title"
+        assert result.results[1].title == "Untitled"
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test-api-key"})
+    async def test_search_handles_null_url(self) -> None:
+        """Firecrawl results with url=null should use empty string fallback."""
+        provider = FirecrawlProvider(enabled=True)
+
+        class DummyResponse:
+            def __init__(self, payload: dict[str, object]) -> None:
+                self._payload = payload
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, object]:
+                return self._payload
+
+        dummy_response = DummyResponse(
+            {
+                "data": [
+                    {
+                        "title": "Test",
+                        "url": None,
+                        "markdown": "Content",
+                    }
+                ]
+            }
+        )
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = dummy_response
+
+        with patch("aipea.search.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value = mock_client_instance
+            result = await provider.search("test query", num_results=1)
+
+        assert len(result.results) == 1
+        assert result.results[0].url == ""
 
 
 # =============================================================================

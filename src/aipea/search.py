@@ -277,12 +277,12 @@ class SearchContext:
         ]
 
         for i, result in enumerate(self.results, 1):
-            safe_title = _escape_markdown(result.title)
-            safe_snippet = _escape_markdown(result.snippet)
+            safe_title = _escape_markdown(result.title or "Untitled")
+            safe_snippet = _escape_markdown(result.snippet or "")
             lines.extend(
                 [
                     f"## Source {i}: {safe_title}",
-                    f"**URL:** {result.url}",
+                    f"**URL:** {result.url or ''}",
                     "",
                     safe_snippet,
                     "",
@@ -308,9 +308,9 @@ class SearchContext:
         ]
 
         for result in self.results:
-            safe_title = html.escape(result.title, quote=False)
-            safe_url = html.escape(result.url, quote=False)
-            safe_snippet = html.escape(result.snippet, quote=False)
+            safe_title = html.escape(result.title or "Untitled", quote=False)
+            safe_url = html.escape(result.url or "", quote=False)
+            safe_snippet = html.escape(result.snippet or "", quote=False)
             lines.extend(
                 [
                     "  <source>",
@@ -338,12 +338,12 @@ class SearchContext:
         ]
 
         for i, result in enumerate(self.results, 1):
-            safe_title = _escape_plaintext(result.title)
-            safe_snippet = _escape_plaintext(result.snippet)
+            safe_title = _escape_plaintext(result.title or "Untitled")
+            safe_snippet = _escape_plaintext(result.snippet or "")
             lines.extend(
                 [
                     f"{i}. {safe_title}",
-                    f"   URL: {result.url}",
+                    f"   URL: {result.url or ''}",
                     f"   {safe_snippet}",
                     "",
                 ]
@@ -516,12 +516,13 @@ class ExaSearchProvider(SearchProvider):
                 if raw_snippet is None:
                     raw_snippet = item.get("summary", "")
                 snippet = str(raw_snippet)[:1000] if raw_snippet else ""
+                score_raw = item.get("score")
                 results.append(
                     SearchResult(
-                        title=item.get("title", "Untitled"),
-                        url=item.get("url", ""),
+                        title=item.get("title") or "Untitled",
+                        url=item.get("url") or "",
                         snippet=snippet,
-                        score=item.get("score", 0.5),
+                        score=score_raw if score_raw is not None else 0.5,
                     )
                 )
 
@@ -643,10 +644,14 @@ class FirecrawlProvider(SearchProvider):
             for item in data.get("data", []):
                 markdown_content = item.get("markdown") or ""
                 snippet = str(markdown_content)[:1000] if markdown_content else ""
+                metadata = item.get("metadata")
+                metadata_title = metadata.get("title") if isinstance(metadata, dict) else None
+                raw_title = item.get("title") or metadata_title
+                title = str(raw_title) if raw_title else "Untitled"
                 results.append(
                     SearchResult(
-                        title=item.get("title", item.get("metadata", {}).get("title", "Untitled")),
-                        url=item.get("url", ""),
+                        title=title,
+                        url=item.get("url") or "",
                         snippet=snippet,
                         score=0.7,  # Firecrawl doesn't return relevance scores
                     )
@@ -736,8 +741,10 @@ class FirecrawlProvider(SearchProvider):
                 data = response.json()
 
             # Deep research returns a synthesized analysis
-            final_analysis = data.get("data", {}).get("finalAnalysis", "")
-            sources = data.get("data", {}).get("sources", [])
+            inner = data.get("data")
+            inner = inner if isinstance(inner, dict) else {}
+            final_analysis = inner.get("finalAnalysis") or ""
+            sources = inner.get("sources") or []
 
             results = []
             if final_analysis:
@@ -753,8 +760,8 @@ class FirecrawlProvider(SearchProvider):
             for source in sources[:5]:  # Limit to 5 sources
                 results.append(
                     SearchResult(
-                        title=source.get("title", "Source"),
-                        url=source.get("url", ""),
+                        title=source.get("title") or "Source",
+                        url=source.get("url") or "",
                         snippet=str(source.get("content") or "")[:500],
                         score=0.7,
                     )

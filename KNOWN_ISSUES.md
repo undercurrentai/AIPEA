@@ -1,6 +1,54 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-10 + Quality Gate: 2026-02-18)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-11 + Quality Gate: 2026-02-24)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Quality Gate Ultrathink Fixes (2026-02-24) — 3 issues resolved
+
+### 48. Exa `score: 0` coerced to `0.5` by `or` pattern (introduced in wave 11 #45 fix) — FIXED
+- **File**: `src/aipea/search.py:520-525`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Quality gate ultrathink
+- **Fix**: `item.get("score") or 0.5` is wrong for numeric fields because `0 or 0.5` evaluates to `0.5` (zero is falsy). Replaced with explicit None check: `score_raw if score_raw is not None else 0.5`. Regression test verifies `score: 0` is preserved as `0.0`.
+
+### 49. Firecrawl `deep_research()` title/url still use old `dict.get("key", default)` pattern — FIXED
+- **File**: `src/aipea/search.py:760-761`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Quality gate ultrathink
+- **Fix**: Same class as #45. `source.get("title", "Source")` returns `None` when key exists with null value. Changed to `or` pattern: `source.get("title") or "Source"`.
+
+### 50. Firecrawl `deep_research()` chained `.get()` crashes when `data.data` is null — FIXED
+- **File**: `src/aipea/search.py:744-745`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Quality gate ultrathink
+- **Fix**: Same class as #44. `data.get("data", {}).get("finalAnalysis", "")` crashes when `data` key exists with null value. Refactored to safe `isinstance(inner, dict)` guard with `or` fallbacks.
+
+## Wave 11 Fixes (2026-02-24) — 4 issues resolved
+
+### 44. `FirecrawlProvider.search()` crashes when `metadata` is `None` (chained `.get()` on NoneType) — FIXED
+- **File**: `src/aipea/search.py:646-649`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Codex gpt-5.3-codex + Claude sweep agent (overlap)
+- **Fix**: The chained `item.get("metadata", {}).get("title", "Untitled")` returned `None` when `metadata` key existed with `null` value, then called `.get()` on `None` causing `AttributeError`. Refactored to safe step-by-step resolution with `isinstance(metadata, dict)` guard.
+
+### 45. Exa/Firecrawl `title`, `url`, `score` fields crash on explicit null values (`dict.get` null pattern) — FIXED
+- **File**: `src/aipea/search.py:521-524,653`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent
+- **Fix**: Same class as #34/#37. `item.get("title", "Untitled")` returns `None` when key exists with null value, not the fallback default. Changed all provider field extractions to use `or` pattern: `item.get("title") or "Untitled"`, `item.get("url") or ""`, `item.get("score") or 0.5`.
+
+### 46. Search formatters (`_format_openai`, `_format_anthropic`, `_format_generic`) crash on `None` result fields — FIXED
+- **File**: `src/aipea/search.py:280-281,311-313,341-342`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent
+- **Fix**: Defense-in-depth: all three formatter methods now guard against `None` title/url/snippet with `or "Untitled"` / `or ""` fallbacks before passing to escape functions (`_escape_markdown`, `html.escape`, `_escape_plaintext`). Prevents `AttributeError` on `NoneType.replace()`.
+
+## Wave 11 — Deferred
+
+### 47. `TacticalTierProcessor.process` `has_search_context` metadata inconsistency — DEFERRED
+- **File**: `src/aipea/engine.py:1070-1132`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Source**: Claude sweep agent
+- **Rationale**: When a wrong-typed `search_context` is passed via the `context` dict, `has_search_context` metadata reports `True` before `EnhancedQuery.__post_init__` silently resets it to `None`. No crash occurs (the type guard catches it), and the metadata field is informational only. Fixing requires restructuring the metadata computation order relative to dataclass construction.
 
 ## Quality Gate Ultrathink Fix (2026-02-18)
 
