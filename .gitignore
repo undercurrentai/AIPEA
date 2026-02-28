@@ -29,6 +29,9 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Codex runs (generated)
+.codex_runs/
+
 # Environment
 .env
 .env.*
