@@ -55,13 +55,13 @@ parent: ../../CLAUDE.md
 | pyproject.toml | Build system | hatchling build backend — supports `hatch build` for PyPI |
 | pyproject.toml | Tool config | ruff line-length=100, py312 target, S-rules for bandit, mypy strict |
 | Makefile | Build targets | 13 targets: install, fmt, lint, type, test, sec, all, ci, mut, sbom, score, deps, perf |
-| pytest | Test suite | 498 passed, 15 skipped, 90.92% coverage (updated 2026-02-18) |
-| CI workflow | Gate config | 6 workflows: ci.yml (lint, typecheck, test matrix), publish.yml, compliance-nightly.yml, scaffold-checks.yml, codeql-analysis.yml, dependency-review.yml; all Actions SHA-pinned |
+| pytest | Test suite | 516 passed, 15 skipped, 90.20% coverage (updated 2026-03-09) |
+| CI workflow | Gate config | 7 workflows: ci.yml (lint, typecheck, test matrix), publish.yml, compliance-nightly.yml, scaffold-checks.yml, codeql-analysis.yml, dependency-review.yml, compliance-evidence-scheduler.yml; all Actions SHA-pinned |
 | __init__.py | Public API | 32 exports in `__all__`, version = "1.0.0" |
 | pyproject.toml | License | MIT license, >=3.11 required |
 | Exa search | PyPI publishing 2025/2026 | Trusted Publishers (OIDC) is standard; `pypa/gh-action-pypi-publish@release/v1` |
 | Context7 | hatch build docs | `hatch build` creates sdist + wheel; `hatch version` for version management |
-| wc -l src/aipea/*.py | Source LOC | 7,332 lines across all source modules (updated 2026-02-18) |
+| wc -l src/aipea/*.py | Source LOC | 7,363 lines across all source modules (updated 2026-03-09) |
 
 ### 2.2 Discrepancies Found
 
@@ -89,7 +89,7 @@ parent: ../../CLAUDE.md
 
 | Check | Status | Evidence |
 |-------|--------|----------|
-| Parent exists | PASS | `../../CLAUDE.md` exists (v3.2.1) |
+| Parent exists | PASS | `../../CLAUDE.md` exists (v3.4.0) |
 | `inherits_from` declared | PASS | Header YAML block |
 | Inherited policies listed | PASS | Section 1.4 |
 | No parent duplication | PASS | Secrets and hard stops reference parent |
@@ -229,5 +229,9 @@ parent: ../../CLAUDE.md
 | 2026-02-18 | Quality gate ultrathink | 1 fix (#43 — search.py SearchContext coercion): 496→498 tests, 90.91%→90.92% coverage, 34 FIXED, 6 INTENTIONAL, 3 DEFERRED |
 | 2026-02-19 | CI hardening | trivy-action 0.31.0→0.34.0 (CVE-2026-26189), checkov `-q`→`--compact` + skip CKV_GHA_7, mutmut v3.x config migration, `permissions: contents: read` on 2 workflows, all Actions SHA-pinned, added: codeql-analysis.yml, dependency-review.yml, Dependabot, CODEOWNERS, PR template; 6 workflows total |
 
+| 2026-02-24 | Wave 11 bug hunt | 4 fixes (#44-#46 + 3 QG), 1 deferred (#47): 498→503 tests, 90.92%→90.25% coverage, 7,278→7,332 LOC, 41 FIXED, 7 INTENTIONAL, 4 DEFERRED |
+| 2026-03-09 | Wave 12 bug hunt | 5 fixes (#51-#55), 1 deferred (#56): 503→516 tests, 90.25%→90.20% coverage, 7,332→7,363 LOC, 46 FIXED, 7 INTENTIONAL, 1 DEFERRED |
+| 2026-03-09 | Docs-sync | README badges, CLAUDE.md metrics, audit packet refreshed |
+
 *Audit completed: 2026-02-14 | Auditor: Claude Code (Opus 4.6) | Protocol: v4.0*
-*Last amended: 2026-02-19*
+*Last amended: 2026-03-09*

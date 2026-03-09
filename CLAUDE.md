@@ -8,7 +8,7 @@ tier: 2  # Standard (~7K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
 inherits_from: ../../CLAUDE.md  # Undercurrent Holdings root
 maintainer: joshuakirby
-last_audit: 2026-02-16
+last_audit: 2026-03-09
 protocol: v4.0
 token_budget: 8000
 ```
@@ -26,7 +26,7 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~7,332 |
+| **Source LOC** | ~7,363 |
 | **Exports** | 32 symbols in `__all__` |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
