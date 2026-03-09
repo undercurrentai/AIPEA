@@ -2,8 +2,9 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-516%20passing-brightgreen)]()
-[![Coverage](https://img.shields.io/badge/coverage-90.20%25-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-533%20passing-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-90.24%25-brightgreen)]()
+[![PyPI](https://img.shields.io/pypi/v/aipea)](https://pypi.org/project/aipea/)
 
 A standalone Python library for prompt preprocessing, security screening, query analysis, and context enrichment for LLM systems. Extracted from [Agora IV](https://github.com/undercurrentai/agora-iv) production (v4.1.49).
 
@@ -183,19 +184,12 @@ for result in results.results:
     print(f"[{results.source}] {result.title}: {result.url}")
 ```
 
-## Integration with Agora IV
+## Integration
 
-AIPEA is vendored into Agora IV at `vendor/aipea/` and re-exported through thin shim modules:
+AIPEA is designed as a standalone preprocessing layer for LLM systems. It integrates with:
 
-```python
-# These imports work in Agora IV (re-export shims)
-from aipea_security_context import SecurityScanner, SecurityContext
-from pcw_query_analyzer import QueryAnalyzer
-from pcw_search_providers import SearchOrchestrator
-from pcw_offline_knowledge import OfflineKnowledgeBase
-from pcw_prompt_engine import PromptEngine
-from aipea_enhancer import enhance_prompt
-```
+- **[AEGIS Governance](https://github.com/undercurrentai/aegis-governance)** — engineering standards & compliance SDK (`pip install aegis-governance[aipea]`)
+- **Agora IV** — multi-model orchestration platform (uses AIPEA for prompt preprocessing)
 
 ## Development
 

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-03-09
+
 ### Added
 - **enhancer**: `enhance_prompt()` convenience function now accepts `compliance_mode` and `force_offline` params (D1)
 - **security**: `quick_scan` exported from root `__init__.py` — `from aipea import quick_scan` now works (D9)
