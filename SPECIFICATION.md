@@ -655,18 +655,15 @@ The primary public API:
 
 ```python
 # Simple enhancement
-from aipea import enhance_prompt
+from aipea import enhance_prompt, SecurityLevel, ComplianceMode
 
 result = await enhance_prompt(
     query="What are the latest advances in quantum error correction?",
     model_id="claude-opus-4-6",
     security_level=SecurityLevel.UNCLASSIFIED,  # Optional, default UNCLASSIFIED
+    compliance_mode=ComplianceMode.HIPAA,        # Optional, default None (uses enhancer default)
+    force_offline=False,                         # Optional, default False
 )
-
-# For full control (compliance_mode, force_offline), use AIPEAEnhancer directly:
-# enhancer = AIPEAEnhancer()
-# result = await enhancer.enhance(query, model_id,
-#     compliance_mode=ComplianceMode.HIPAA, force_offline=True)
 
 # result.enhanced_prompt      → str (ready for LLM)
 # result.processing_tier      → ProcessingTier.TACTICAL
@@ -722,36 +719,32 @@ class AgoraPromptEnhancement:
         return await self._enhancer.enhance_for_models(query, model_ids, ...)
 
 # Convenience functions remain for backward compatibility
-async def enhance_prompt(query, model_id, security_level) -> EnhancementResult:
-    return await get_enhancer().enhance(query, model_id, security_level)
+async def enhance_prompt(query, model_id, security_level=UNCLASSIFIED,
+                         compliance_mode=None, force_offline=False) -> EnhancementResult:
+    return await get_enhancer().enhance(query, model_id, security_level, compliance_mode, force_offline)
 
 async def enhance_for_agora(query, model_ids, security_level) -> dict[str, EnhancedRequest]:
     return await get_enhancer().enhance_for_models(query, model_ids, security_level)
 ```
 
-### 5.3 AEGIS Adapter (spec-only)
+### 5.3 AEGIS Adapter
 
-Lives in **aegis-governance** repo. Maps AIPEA output to AEGIS gate evaluation input:
+Lives in **aegis-governance** repo at `src/integration/aipea_bridge.py`.
+Maps AIPEA output to AEGIS gate evaluation input via `AIPEAGateAdapter`:
 
 ```python
 # In aegis-governance repo
-from aipea import enhance_prompt, EnhancementResult
+from integration.aipea_bridge import AIPEAGateAdapter
 
-class AIPEAGateAdapter:
-    """Preprocesses claims through AIPEA before gate evaluation."""
-
-    async def preprocess_claim(self, claim_text: str) -> dict:
-        result: EnhancementResult = await enhance_prompt(
-            query=claim_text,
-            model_id="claude-opus-4-6",
-        )
-        return {
-            "enhanced_claim": result.enhanced_prompt,
-            "search_context": result.search_context,
-            "security_flags": result.security_context.to_dict(),
-            "query_analysis": result.query_analysis.to_dict(),
-        }
+adapter = AIPEAGateAdapter(compliance_mode="general")
+claim = await adapter.preprocess_claim("Evaluate this proposal")
+# claim.enhanced_claim  → enriched text
+# claim.query_type      → "technical" | "research" | ...
+# claim.complexity      → 0.0-1.0
+# claim.processing_tier → "offline" | "tactical" | "strategic"
 ```
+
+AIPEA is an optional dependency — adapter returns passthrough results when not installed.
 
 ### 5.4 Generic Consumer Protocol
 
@@ -907,7 +900,46 @@ for ReDoS safety before execution.
 
 Additional planned env vars are documented in [`docs/ROADMAP.md`](docs/ROADMAP.md#planned-environment-variables).
 
-### 8.2 Embedded Library Mode (Primary)
+### 8.2 Configuration System
+
+AIPEA uses a layered configuration system implemented in `config.py`:
+
+**Priority chain** (highest wins):
+
+```
+Constructor args > Environment vars > .env (cwd) > ~/.aipea/config.toml > Defaults
+```
+
+**`AIPEAConfig` dataclass** (`from aipea import AIPEAConfig, load_config`):
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `exa_api_key` | `str \| None` | `None` | Exa search provider key |
+| `firecrawl_api_key` | `str \| None` | `None` | Firecrawl provider key |
+| `http_timeout` | `float` | `30.0` | HTTP timeout (seconds) |
+
+Helpers: `has_exa()`, `has_firecrawl()`, `redact_key(key)`.
+
+**File locations**:
+
+| Location | Scope | Format |
+|----------|-------|--------|
+| `.env` (cwd) | Project-local | `KEY=VALUE` (one per line) |
+| `~/.aipea/config.toml` | Global | TOML `[aipea]` section |
+
+Files are created with `0o600` permissions for security. The `_sources` dict
+on `AIPEAConfig` tracks where each value was resolved from.
+
+**CLI commands** (`pip install aipea[cli]`):
+
+| Command | Purpose |
+|---------|---------|
+| `aipea configure [--global]` | Interactive setup wizard |
+| `aipea check [--connectivity]` | Verify config and test API keys |
+| `aipea doctor` | Full diagnostic (Python, deps, config, security, connectivity) |
+| `aipea info` | Quick library summary |
+
+### 8.3 Embedded Library Mode (Primary)
 
 AIPEA ships as a Python package installable via pip:
 
@@ -936,7 +968,7 @@ aipea = "aipea.cli:app"
 Minimal dependency footprint: **stdlib + httpx**. This is intentional and
 must be preserved. The `[cli]` extra adds Typer + Rich for the onboarding CLI.
 
-### 8.3 Standalone Service Mode (Optional, Future)
+### 8.4 Standalone Service Mode (Optional, Future)
 
 For consumers that prefer HTTP over library import:
 
@@ -1086,7 +1118,7 @@ from aipea.security import (
     SecurityScanner,
     ComplianceHandler,
     create_security_context_for_mode,  # (not in __all__)
-    quick_scan,                        # (not in __all__)
+    quick_scan,
 )
 
 # Knowledge
@@ -1127,7 +1159,7 @@ from aipea.engine import (
     StrategicTierProcessor,        # (not in __all__)
     TierProcessor,                 # (not in __all__)
     EnhancedQuery,                 # (not in __all__)
-    SearchContext,                  # (not in __all__) — legacy dict-based context
+    SearchContext,                  # (not in __all__) — re-export of aipea.search.SearchContext
     OllamaOfflineClient,           # (not in __all__)
     OfflineModel,                  # (not in __all__)
     get_ollama_client,             # (not in __all__)

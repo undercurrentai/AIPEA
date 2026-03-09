@@ -7,12 +7,11 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 Drift between `SPECIFICATION.md` and the live implementation. Items marked RESOLVED
 were fixed in the spec during this audit. Items marked FUTURE require code changes.
 
-### D1. `enhance_prompt()` facade missing `compliance_mode` and `force_offline` params — FUTURE
-- **File**: `src/aipea/enhancer.py:1003-1027`
+### D1. `enhance_prompt()` facade missing `compliance_mode` and `force_offline` params — RESOLVED
+- **File**: `src/aipea/enhancer.py`
 - **Severity**: HIGH | **Type**: Code gap
-- **Details**: The convenience function `enhance_prompt(query, model_id, security_level)` only exposes 3 params. The full `AIPEAEnhancer.enhance()` method accepts `compliance_mode` and `force_offline` in addition. Consumers needing compliance control must instantiate `AIPEAEnhancer` directly.
-- **Spec action**: Updated Section 5.1 to show accurate 3-param signature with a comment pointing to `AIPEAEnhancer` for full control.
-- **Code action**: Future — add `compliance_mode` and `force_offline` optional params to `enhance_prompt()`. This is a public API addition (non-breaking) but requires ASK-first approval per CLAUDE.md.
+- **Details**: The convenience function `enhance_prompt(query, model_id, security_level)` only exposed 3 params.
+- **Fix**: Added `compliance_mode: ComplianceMode | None = None` and `force_offline: bool = False` as optional params. Updated SPECIFICATION.md Section 5.1 to show full 5-param signature. 3 regression tests added.
 
 ### D2. Spec used string types for enum parameters — RESOLVED
 - **Severity**: HIGH | **Type**: Spec error
@@ -29,10 +28,10 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 - **Details**: Constructor accepts optional API key injection params (enhancer.py:304-305) not reflected in spec Section 11.2.
 - **Fix**: Updated spec API reference.
 
-### D5. Dual `SearchContext` architecture underspecified — FUTURE (LOW)
+### D5. Dual `SearchContext` architecture underspecified — RESOLVED
 - **Severity**: MEDIUM | **Type**: Spec gap
-- **Details**: Two `SearchContext` classes exist: `aipea.search.SearchContext` (AIPEA-native, used by facade) and `aipea.engine.SearchContext` (legacy dict-based, used by PromptEngine). The facade converts between them via `SearchContext.from_aipea_context()`. Spec Section 11 mentions the legacy one as `(not in __all__)` but doesn't explain the dual-context pattern.
-- **Code action**: Future — consider unifying into a single SearchContext, or documenting the adapter pattern in spec Section 4.
+- **Details**: Two `SearchContext` classes existed with ~200 LOC of duplicated logic.
+- **Fix**: Deleted legacy `SearchContext` from `engine.py` (~200 lines). `engine.py` now re-exports `aipea.search.SearchContext` for backward compatibility. Added 4 read-only compat properties (`search_timestamp`, `sources`, `confidence_score`, `query_type`) to the AIPEA class. Removed `from_aipea_context()` conversion in `enhancer.py`. Engine tests rewritten to use AIPEA SearchContext constructor.
 
 ### D6. AEGIS adapter example used string `compliance_mode` — RESOLVED
 - **Severity**: MEDIUM | **Type**: Spec error
@@ -44,15 +43,15 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 - **Details**: Spec Section 7.4 documented the old pattern `\n(Human|Assistant|System):` without the whitespace tolerance added in wave 12 (#51).
 - **Fix**: Updated to `\n\s*(Human|Assistant|System):`.
 
-### D8. Config module (`AIPEAConfig`, `load_config`) priority chain underdocumented — FUTURE (LOW)
+### D8. Config module (`AIPEAConfig`, `load_config`) priority chain underdocumented — RESOLVED
 - **Severity**: LOW | **Type**: Spec gap
-- **Details**: Spec Section 8.1 only documents env vars. The `config.py` module implements a full priority chain (env vars > `.env` > `~/.aipea/config.toml` > defaults) with `AIPEAConfig` dataclass and `load_config()` function. The module is listed in Section 2.4 and 11.1 but the priority chain behavior is not documented in Section 8.
-- **Code action**: None needed. Future spec enhancement to add config priority chain docs to Section 8.
+- **Details**: Spec Section 8.1 only documented env vars.
+- **Fix**: Added new Section 8.2 (Configuration System) to SPECIFICATION.md documenting the priority chain, `AIPEAConfig` fields, file locations, permissions, source tracking, and CLI commands. Renumbered existing 8.2→8.3, 8.3→8.4.
 
-### D9. `quick_scan` function referenced in spec but not in `__all__` — FUTURE (LOW)
+### D9. `quick_scan` function referenced in spec but not in `__all__` — RESOLVED
 - **Severity**: LOW | **Type**: Spec aspirational
-- **Details**: Spec Section 5.1 shows `from aipea import quick_scan, ComplianceMode` as a usage example. `quick_scan` exists in security.py but is marked `(not in __all__)` in Section 11.1. Consumers would need `from aipea.security import quick_scan`.
-- **Code action**: Future — consider adding `quick_scan` to `__all__` or updating spec to show correct import path.
+- **Details**: `quick_scan` existed in security.py but was not importable from root.
+- **Fix**: Added `quick_scan` to `__init__.py` imports and `__all__`. Removed `(not in __all__)` annotation from spec Section 11.1. Regression test verifies `from aipea import quick_scan` works.
 
 ### D10. `enhance_for_models` base model template baking — DOCUMENTED (#36)
 - **Severity**: LOW | **Type**: Known limitation
@@ -387,10 +386,6 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 - **File**: `src/aipea/search.py:166-182`
 - **Rationale**: Clamping already handles this; log noise is minor and useful for monitoring.
 
-## Deferred Findings (1 bug + 4 spec-drift items remaining)
+## Deferred Findings (1 bug remaining)
 
 - **#56** Unicode homoglyph bypass (MEDIUM) — requires NFKC normalization implementation
-- **D1** `enhance_prompt()` missing `compliance_mode`/`force_offline` (HIGH) — public API addition
-- **D5** Dual SearchContext unification (MEDIUM) — architectural simplification
-- **D8** Config priority chain spec documentation (LOW) — spec enhancement
-- **D9** `quick_scan` not in `__all__` (LOW) — public API decision

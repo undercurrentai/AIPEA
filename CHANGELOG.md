@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **enhancer**: `enhance_prompt()` convenience function now accepts `compliance_mode` and `force_offline` params (D1)
+- **security**: `quick_scan` exported from root `__init__.py` — `from aipea import quick_scan` now works (D9)
+- **search**: `SearchContext` exported from root `__init__.py` as public API
+- **search**: Backward-compatibility properties on `SearchContext` (`search_timestamp`, `sources`, `confidence_score`, `query_type`)
 - **config**: `AIPEAConfig` dataclass and `load_config()` with priority chain: env vars > `.env` > `~/.aipea/config.toml` > defaults
 - **cli**: 4 CLI commands via `aipea[cli]` extra: `configure`, `check`, `doctor`, `info`
 - **cli**: `python -m aipea` entry point via `__main__.py`
@@ -15,9 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **cli**: `aipea check --connectivity` tests API key validity
 - **cli**: `aipea doctor` runs full diagnostic (Python, deps, config, security, connectivity)
 - **search**: Config file fallback in `_get_api_key()` and `_resolve_http_timeout()` helpers
-- 179 new tests (516 total, 90.20% coverage)
+- 196 new tests (533 total, 90.24% coverage)
 
 ### Changed
+- **engine**: Unified dual `SearchContext` classes — legacy class deleted from `engine.py`, re-exports `aipea.search.SearchContext` (D5)
+- **enhancer**: Removed `SearchContext.from_aipea_context()` conversion — passes AIPEA SearchContext directly to PromptEngine (D5)
+- **spec**: Section 5.1 updated with full 5-param `enhance_prompt()` signature (D1)
+- **spec**: New Section 8.2 documents configuration system priority chain (D8)
+- **spec**: Section 11.1 `quick_scan` no longer marked as `(not in __all__)` (D9)
 - **ci**: All GitHub Actions SHA-pinned for supply chain security
 - **ci**: trivy-action bumped to 0.34.0 (CVE-2026-26189 fix)
 - **ci**: Checkov migrated from `-q` to `--compact`, CKV_GHA_7 skipped (false positive)

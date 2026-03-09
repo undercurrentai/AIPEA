@@ -27,7 +27,7 @@ token_budget: 8000
 | **Coverage floor** | 75% |
 | **License** | MIT |
 | **Source LOC** | ~7,363 |
-| **Exports** | 32 symbols in `__all__` |
+| **Exports** | 34 symbols in `__all__` |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
 ---
