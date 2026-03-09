@@ -1,5 +1,5 @@
 # AIPEA Specification
-> **AI Prompt Engineer Agent** | Version 1.0.0 | 2026-02-14
+> **AI Prompt Engineer Agent** | Version 1.0.1 | 2026-03-09
 
 ```yaml
 status: ACCEPTED
@@ -660,10 +660,13 @@ from aipea import enhance_prompt
 result = await enhance_prompt(
     query="What are the latest advances in quantum error correction?",
     model_id="claude-opus-4-6",
-    security_level="UNCLASSIFIED",        # Optional, default UNCLASSIFIED
-    compliance_mode="general",             # Optional, default GENERAL
-    force_offline=False,                   # Optional, default False
+    security_level=SecurityLevel.UNCLASSIFIED,  # Optional, default UNCLASSIFIED
 )
+
+# For full control (compliance_mode, force_offline), use AIPEAEnhancer directly:
+# enhancer = AIPEAEnhancer()
+# result = await enhancer.enhance(query, model_id,
+#     compliance_mode=ComplianceMode.HIPAA, force_offline=True)
 
 # result.enhanced_prompt      → str (ready for LLM)
 # result.processing_tier      → ProcessingTier.TACTICAL
@@ -741,7 +744,6 @@ class AIPEAGateAdapter:
         result: EnhancementResult = await enhance_prompt(
             query=claim_text,
             model_id="claude-opus-4-6",
-            compliance_mode="general",
         )
         return {
             "enhanced_claim": result.enhanced_prompt,
@@ -869,9 +871,9 @@ Per-compliance-mode allowlists use **substring matching** (case-insensitive):
 | Mode | Allowed Models | Rationale |
 |------|---------------|-----------|
 | GENERAL | All (except forbidden) | No restrictions |
-| HIPAA | `claude-opus-4-6`, `gpt-5.2` | BAA-covered families |
+| HIPAA | `claude-opus-4-6`, `claude-opus-4-5`, `gpt-5.2` | BAA-covered families |
 | TACTICAL | `llama-3.3-70b` | Local models only |
-| FEDRAMP | `claude-opus-4-6`, `gpt-5.2` | FedRAMP authorized |
+| FEDRAMP | `claude-opus-4-6`, `claude-opus-4-5`, `gpt-5.2` | FedRAMP authorized |
 
 **Global forbidden list**: `gpt-4o`, `gpt-4o-mini` (deprecated models).
 
@@ -882,7 +884,7 @@ Per-compliance-mode allowlists use **substring matching** (case-insensitive):
 1. `ignore (previous|all) instructions` — Prompt injection
 2. `</(system|user|assistant)>` — XML role tag injection
 3. `[/(system|user|assistant|human)]` — Bracket-style role tags
-4. `\n(Human|Assistant|System):` — Conversation separator injection
+4. `\n\s*(Human|Assistant|System):` — Conversation separator injection (with whitespace tolerance)
 5. `DROP TABLE` — SQL injection
 6. `UNION SELECT` — SQL injection
 7. `{{.*}}` — Template injection (Jinja2/Handlebars)
@@ -1150,6 +1152,8 @@ class AIPEAEnhancer:
         enable_enhancement: bool = True,
         storage_tier: StorageTier = StorageTier.STANDARD,
         default_compliance: ComplianceMode = ComplianceMode.GENERAL,
+        exa_api_key: str | None = None,
+        firecrawl_api_key: str | None = None,
     ) -> None: ...
 
     async def enhance(
