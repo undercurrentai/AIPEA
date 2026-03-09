@@ -53,6 +53,7 @@ from aipea.search import (
     Context7Provider,
     ExaSearchProvider,
     FirecrawlProvider,
+    SearchContext,
     SearchOrchestrator,
     SearchProvider,
     SearchResult,
@@ -66,6 +67,7 @@ from aipea.security import (
     SecurityContext,
     SecurityLevel,
     SecurityScanner,
+    quick_scan,
 )
 
 __all__ = [
@@ -88,6 +90,7 @@ __all__ = [
     "QueryAnalyzer",
     "QueryType",
     "ScanResult",
+    "SearchContext",
     "SearchOrchestrator",
     "SearchProvider",
     "SearchResult",
@@ -100,5 +103,6 @@ __all__ = [
     "enhance_prompt",
     "get_enhancer",
     "load_config",
+    "quick_scan",
     "reset_enhancer",
 ]

@@ -51,11 +51,10 @@ from typing import Any
 
 from aipea._types import ProcessingTier, QueryType, SearchStrategy
 from aipea.analyzer import QueryAnalyzer
-from aipea.engine import PromptEngine, SearchContext
+from aipea.engine import PromptEngine
 from aipea.knowledge import KnowledgeDomain, OfflineKnowledgeBase, StorageTier
 from aipea.models import QueryAnalysis
-from aipea.search import SearchContext as AIPEASearchContext
-from aipea.search import SearchOrchestrator, SearchResult, create_empty_context
+from aipea.search import SearchContext, SearchOrchestrator, SearchResult, create_empty_context
 from aipea.security import (
     ComplianceHandler,
     ComplianceMode,
@@ -97,7 +96,7 @@ class EnhancementResult:
     processing_tier: ProcessingTier
     security_context: SecurityContext
     query_analysis: QueryAnalysis
-    search_context: AIPEASearchContext | None = None
+    search_context: SearchContext | None = None
     enhancement_time_ms: float = 0.0
     was_enhanced: bool = True
     enhancement_notes: list[str] = field(default_factory=list)
@@ -481,7 +480,7 @@ class AIPEAEnhancer:
             enhancement_notes.append("Processing in offline mode due to security/connectivity")
 
         # Step 5: Gather context
-        search_context: AIPEASearchContext | None = None
+        search_context: SearchContext | None = None
 
         if offline_required:
             search_context = await self._gather_offline_context(query, analysis)
@@ -506,11 +505,6 @@ class AIPEAEnhancer:
         # Step 7: Formulate enhanced prompt
         model_family = get_model_family(model_id)
 
-        # Convert AIPEA search context to legacy format for prompt engine
-        legacy_search_context: SearchContext | None = None
-        if search_context and not search_context.is_empty():
-            legacy_search_context = SearchContext.from_aipea_context(search_context)
-
         # Determine complexity string from tier
         complexity_map = {
             ProcessingTier.OFFLINE: "simple",
@@ -523,7 +517,7 @@ class AIPEAEnhancer:
         enhanced_prompt = await self._prompt_engine.formulate_search_aware_prompt(
             query=query,
             complexity=complexity,
-            search_context=legacy_search_context,
+            search_context=search_context,
             model_type=model_family,
         )
 
@@ -690,7 +684,7 @@ class AIPEAEnhancer:
         query: str,
         analysis: QueryAnalysis,
         security_context: SecurityContext,
-    ) -> AIPEASearchContext | None:
+    ) -> SearchContext | None:
         """Gather context from online search providers.
 
         Uses the SearchOrchestrator to gather relevant context
@@ -731,7 +725,7 @@ class AIPEAEnhancer:
         self,
         query: str,
         analysis: QueryAnalysis,
-    ) -> AIPEASearchContext | None:
+    ) -> SearchContext | None:
         """Gather context from offline knowledge base.
 
         Uses the OfflineKnowledgeBase to retrieve relevant cached
@@ -785,7 +779,7 @@ class AIPEAEnhancer:
                     )
                 )
 
-            return AIPEASearchContext(
+            return SearchContext(
                 query=query,
                 results=results,
                 timestamp=datetime.now(UTC),
@@ -1004,6 +998,8 @@ async def enhance_prompt(
     query: str,
     model_id: str,
     security_level: SecurityLevel = SecurityLevel.UNCLASSIFIED,
+    compliance_mode: ComplianceMode | None = None,
+    force_offline: bool = False,
 ) -> EnhancementResult:
     """Convenience function for quick prompt enhancement.
 
@@ -1013,6 +1009,8 @@ async def enhance_prompt(
         query: The user's query to enhance
         model_id: Target model identifier
         security_level: Security classification level
+        compliance_mode: Compliance mode (HIPAA, TACTICAL, etc.) or None for default
+        force_offline: Force air-gapped mode regardless of security level
 
     Returns:
         EnhancementResult with enhanced prompt and metadata
@@ -1024,7 +1022,9 @@ async def enhance_prompt(
         ... )
         >>> print(result.enhanced_prompt)
     """
-    return await get_enhancer().enhance(query, model_id, security_level)
+    return await get_enhancer().enhance(
+        query, model_id, security_level, compliance_mode, force_offline
+    )
 
 
 # =============================================================================

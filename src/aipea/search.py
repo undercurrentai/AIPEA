@@ -243,6 +243,28 @@ class SearchContext:
         """
         return len(self.results) == 0
 
+    # -- Backward-compatibility properties for PromptEngine (legacy field names) --
+
+    @property
+    def search_timestamp(self) -> str:
+        """ISO timestamp string (legacy compat for PromptEngine)."""
+        return self.timestamp.isoformat()
+
+    @property
+    def sources(self) -> list[str]:
+        """Source list (legacy compat — wraps single ``source`` field)."""
+        return [self.source]
+
+    @property
+    def confidence_score(self) -> float:
+        """Confidence score (legacy compat — alias for ``confidence``)."""
+        return self.confidence
+
+    @property
+    def query_type(self) -> str:
+        """Query type string (legacy compat — always ``'web'``)."""
+        return "web"
+
     def formatted_for_model(self, model_type: str) -> str:
         """Format search results for injection into a specific model's prompt.
 

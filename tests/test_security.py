@@ -712,5 +712,18 @@ class TestWhitespaceInjectionBypass:
         assert not result.is_blocked
 
 
+class TestQuickScanRootImport:
+    """Regression: quick_scan must be importable from aipea root (D9)."""
+
+    @pytest.mark.unit
+    def test_quick_scan_importable_from_root(self) -> None:
+        """from aipea import quick_scan must work at runtime."""
+        from aipea import quick_scan
+
+        result = quick_scan("test query")
+        assert isinstance(result, ScanResult)
+        assert not result.is_blocked
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

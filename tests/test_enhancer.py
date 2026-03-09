@@ -748,10 +748,117 @@ class TestEnhancePromptConvenience:
             mock_get.return_value = mock_enhancer
 
             result = await enhance_prompt("q", "gpt-4")
-            mock_enhancer.enhance.assert_awaited_once_with("q", "gpt-4", SecurityLevel.UNCLASSIFIED)
+            mock_enhancer.enhance.assert_awaited_once_with(
+                "q", "gpt-4", SecurityLevel.UNCLASSIFIED, None, False
+            )
             assert result.enhanced_prompt == "eq"
 
         reset_enhancer()  # cleanup
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_enhance_prompt_with_compliance_mode(
+        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    ) -> None:
+        """enhance_prompt() forwards compliance_mode to enhance()."""
+        reset_enhancer()
+        with patch("aipea.enhancer.get_enhancer") as mock_get:
+            mock_enhancer = MagicMock()
+            mock_enhancer.enhance = AsyncMock(
+                return_value=EnhancementResult(
+                    original_query="q",
+                    enhanced_prompt="eq",
+                    processing_tier=ProcessingTier.OFFLINE,
+                    security_context=SecurityContext(),
+                    query_analysis=QueryAnalysis(
+                        query="q",
+                        query_type=QueryType.UNKNOWN,
+                        complexity=0.0,
+                        confidence=0.0,
+                        needs_current_info=False,
+                    ),
+                )
+            )
+            mock_get.return_value = mock_enhancer
+
+            await enhance_prompt("q", "gpt-4", compliance_mode=ComplianceMode.HIPAA)
+            mock_enhancer.enhance.assert_awaited_once_with(
+                "q", "gpt-4", SecurityLevel.UNCLASSIFIED, ComplianceMode.HIPAA, False
+            )
+
+        reset_enhancer()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_enhance_prompt_with_force_offline(
+        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    ) -> None:
+        """enhance_prompt() forwards force_offline to enhance()."""
+        reset_enhancer()
+        with patch("aipea.enhancer.get_enhancer") as mock_get:
+            mock_enhancer = MagicMock()
+            mock_enhancer.enhance = AsyncMock(
+                return_value=EnhancementResult(
+                    original_query="q",
+                    enhanced_prompt="eq",
+                    processing_tier=ProcessingTier.OFFLINE,
+                    security_context=SecurityContext(),
+                    query_analysis=QueryAnalysis(
+                        query="q",
+                        query_type=QueryType.UNKNOWN,
+                        complexity=0.0,
+                        confidence=0.0,
+                        needs_current_info=False,
+                    ),
+                )
+            )
+            mock_get.return_value = mock_enhancer
+
+            await enhance_prompt("q", "gpt-4", force_offline=True)
+            mock_enhancer.enhance.assert_awaited_once_with(
+                "q", "gpt-4", SecurityLevel.UNCLASSIFIED, None, True
+            )
+
+        reset_enhancer()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_enhance_prompt_backward_compat(
+        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    ) -> None:
+        """enhance_prompt() works with only 2 args (backward compatible)."""
+        reset_enhancer()
+        with patch("aipea.enhancer.get_enhancer") as mock_get:
+            mock_enhancer = MagicMock()
+            mock_enhancer.enhance = AsyncMock(
+                return_value=EnhancementResult(
+                    original_query="q",
+                    enhanced_prompt="eq",
+                    processing_tier=ProcessingTier.OFFLINE,
+                    security_context=SecurityContext(),
+                    query_analysis=QueryAnalysis(
+                        query="q",
+                        query_type=QueryType.UNKNOWN,
+                        complexity=0.0,
+                        confidence=0.0,
+                        needs_current_info=False,
+                    ),
+                )
+            )
+            mock_get.return_value = mock_enhancer
+
+            await enhance_prompt("q", "gpt-4")
+            mock_enhancer.enhance.assert_awaited_once_with(
+                "q", "gpt-4", SecurityLevel.UNCLASSIFIED, None, False
+            )
+
+        reset_enhancer()
 
 
 # =============================================================================

@@ -28,7 +28,6 @@ from aipea.engine import (
     get_ollama_client,
     get_prompt_engine,
 )
-from aipea.search import SearchContext as AIPEASearchContext
 from aipea.search import SearchResult
 
 
@@ -38,19 +37,19 @@ class TestSearchContext:
     def test_search_context_creation(self):
         """Test creating SearchContext with valid data"""
         results = [
-            {
-                "title": "Test Article",
-                "snippet": "Test content snippet",
-                "url": "https://example.com",
-            }
+            SearchResult(
+                title="Test Article",
+                snippet="Test content snippet",
+                url="https://example.com",
+                score=0.9,
+            )
         ]
 
         context = SearchContext(
+            query="test query",
             results=results,
-            sources=["example.com"],
-            confidence_score=0.85,
-            search_timestamp="2025-01-01T12:00:00",
-            query_type="web",
+            source="example.com",
+            confidence=0.85,
         )
 
         assert context.results == results
@@ -61,18 +60,19 @@ class TestSearchContext:
     def test_formatted_for_model_openai(self):
         """Test OpenAI-specific formatting"""
         results = [
-            {
-                "title": "AI Development 2025",
-                "snippet": "Latest AI developments in machine learning",
-                "url": "https://example.com/ai-2025",
-            }
+            SearchResult(
+                title="AI Development 2025",
+                snippet="Latest AI developments in machine learning",
+                url="https://example.com/ai-2025",
+                score=0.9,
+            )
         ]
 
         context = SearchContext(
+            query="AI development",
             results=results,
-            sources=["example.com"],
-            confidence_score=0.9,
-            search_timestamp="2025-01-01T12:00:00",
+            source="example.com",
+            confidence=0.9,
         )
 
         formatted = context.formatted_for_model("openai")
@@ -81,66 +81,69 @@ class TestSearchContext:
         assert "AI Development 2025" in formatted
         assert "Latest AI developments" in formatted
         assert "example.com" in formatted
-        assert "1. **" in formatted  # OpenAI structured format
+        assert "## Source 1:" in formatted  # OpenAI structured format
 
     def test_formatted_for_model_openai_numbers_each_result(self):
         """Ensure OpenAI formatting numbers results sequentially."""
         results = [
-            {
-                "title": "Result One",
-                "snippet": "First snippet",
-                "url": "https://example.com/one",
-            },
-            {
-                "title": "Result Two",
-                "snippet": "Second snippet",
-                "url": "https://example.com/two",
-            },
+            SearchResult(
+                title="Result One",
+                snippet="First snippet",
+                url="https://example.com/one",
+                score=0.9,
+            ),
+            SearchResult(
+                title="Result Two",
+                snippet="Second snippet",
+                url="https://example.com/two",
+                score=0.85,
+            ),
         ]
 
         context = SearchContext(
+            query="test query",
             results=results,
-            sources=["example.com"],
-            confidence_score=0.9,
-            search_timestamp="2025-01-01T12:00:00",
+            source="example.com",
+            confidence=0.9,
         )
 
         formatted = context.formatted_for_model("openai")
 
-        assert "1. **Result One**" in formatted
-        assert "2. **Result Two**" in formatted
+        assert "## Source 1: Result One" in formatted
+        assert "## Source 2: Result Two" in formatted
 
     def test_formatted_for_model_claude(self):
         """Test Claude-specific formatting"""
         results = [
-            {
-                "title": "Python Best Practices",
-                "snippet": "Modern Python development guidelines",
-                "url": "https://python.org/guide",
-            }
+            SearchResult(
+                title="Python Best Practices",
+                snippet="Modern Python development guidelines",
+                url="https://python.org/guide",
+                score=0.8,
+            )
         ]
 
         context = SearchContext(
+            query="Python best practices",
             results=results,
-            sources=["python.org"],
-            confidence_score=0.8,
-            search_timestamp="2025-01-01T12:00:00",
+            source="python.org",
+            confidence=0.8,
         )
 
         formatted = context.formatted_for_model("claude")
 
-        assert "## Source 1:" in formatted  # Claude detailed format
-        assert "**URL:**" in formatted
-        assert "**Content:**" in formatted
+        assert "<search_context>" in formatted  # Claude XML tag format
+        assert "<title>" in formatted
+        assert "<snippet>" in formatted
         assert "python.org" in formatted
 
     def test_empty_results_formatting(self):
         """Test formatting with no search results"""
         context = SearchContext(
+            query="empty test",
             results=[],
-            sources=[],
-            confidence_score=0.0,
-            search_timestamp="2025-01-01T12:00:00",
+            source="",
+            confidence=0.0,
         )
 
         formatted = context.formatted_for_model("general")
@@ -159,22 +162,23 @@ class TestPromptEngine:
     def mock_search_context(self):
         """Create mock search context for testing"""
         return SearchContext(
+            query="AI safety research",
             results=[
-                {
-                    "title": "AI Safety Research 2025",
-                    "snippet": "Recent developments in AI alignment and safety protocols",
-                    "url": "https://ai-safety.org/2025-research",
-                },
-                {
-                    "title": "Machine Learning Advances",
-                    "snippet": "Breakthrough in transformer architecture efficiency",
-                    "url": "https://ml-research.com/advances",
-                },
+                SearchResult(
+                    title="AI Safety Research 2025",
+                    url="https://ai-safety.org/2025-research",
+                    snippet="Recent developments in AI alignment and safety protocols",
+                    score=0.9,
+                ),
+                SearchResult(
+                    title="Machine Learning Advances",
+                    url="https://ml-research.com/advances",
+                    snippet="Breakthrough in transformer architecture efficiency",
+                    score=0.85,
+                ),
             ],
-            sources=["ai-safety.org", "ml-research.com"],
-            confidence_score=0.88,
-            search_timestamp="2025-01-01T15:30:00",
-            query_type="web",
+            source="ai-safety.org",
+            confidence=0.88,
         )
 
     @pytest.mark.asyncio
@@ -277,7 +281,7 @@ class TestPromptEngine:
 
         assert "sophisticated analysis" in optimized
         assert "nuanced understanding" in optimized
-        assert "## Source 1:" in optimized  # Claude-formatted search context
+        assert "<search_context>" in optimized  # Claude XML-formatted search context
 
     @pytest.mark.asyncio
     async def test_model_specific_optimization_gemini(self, prompt_engine, mock_search_context):
@@ -398,17 +402,17 @@ class TestPromptEngineEdgeCases:
     async def test_malformed_search_context(self, prompt_engine):
         """Test handling of malformed search context"""
         malformed_context = SearchContext(
+            query="Test query",
             results=[
-                {
-                    "title": None,  # Missing title
-                    "snippet": "",  # Empty snippet
-                    "url": "invalid-url",  # Invalid URL
-                }
+                SearchResult(
+                    title="",  # Empty title
+                    url="invalid-url",  # Invalid URL
+                    snippet="",  # Empty snippet
+                    score=-1.0,  # Invalid score (will be clamped to 0.0)
+                )
             ],
-            sources=[],
-            confidence_score=-1.0,  # Invalid confidence
-            search_timestamp="invalid-date",
-            query_type="unknown",
+            source="",
+            confidence=-1.0,  # Invalid confidence (will be clamped to 0.0)
         )
 
         prompt = await prompt_engine.formulate_search_aware_prompt(
@@ -428,18 +432,19 @@ class TestPromptEngineEdgeCases:
         large_results = []
         for i in range(100):  # Create 100 search results
             large_results.append(
-                {
-                    "title": f"Large Result {i}" * 10,  # Long titles
-                    "snippet": f"Very long snippet content for result {i}. " * 50,  # Long snippets
-                    "url": f"https://example{i}.com/very/long/url/path",
-                }
+                SearchResult(
+                    title=f"Large Result {i}" * 10,  # Long titles
+                    snippet=f"Very long snippet content for result {i}. " * 50,  # Long snippets
+                    url=f"https://example{i}.com/very/long/url/path",
+                    score=0.5,
+                )
             )
 
         large_context = SearchContext(
+            query="Test with large context",
             results=large_results,
-            sources=[f"example{i}.com" for i in range(100)],
-            confidence_score=0.5,
-            search_timestamp="2025-01-01T12:00:00",
+            source="example0.com",
+            confidence=0.5,
         )
 
         prompt = await prompt_engine.formulate_search_aware_prompt(
@@ -903,21 +908,24 @@ class TestGetOllamaClient:
 class TestSearchContextPostInit:
     """Tests for SearchContext __post_init__ auto-timestamp and clamping."""
 
-    def test_auto_timestamp_when_empty(self):
-        """Generates ISO timestamp when search_timestamp is empty (line 390)."""
-        ctx = SearchContext(results=[], sources=[], confidence_score=0.5)
+    def test_auto_timestamp_exists(self):
+        """Default timestamp is always present (datetime default)."""
+        ctx = SearchContext(query="t", results=[], confidence=0.5)
+        assert ctx.timestamp is not None
         assert ctx.search_timestamp != ""
         # Should be a valid ISO format string
         assert "T" in ctx.search_timestamp
 
-    def test_none_confidence_score_coerced(self):
-        """Non-numeric confidence_score is coerced to 0.0 (bug #39)."""
-        ctx = SearchContext(results=[], sources=[], confidence_score=None)
+    def test_none_confidence_coerced(self):
+        """Non-numeric confidence is coerced to 0.0 (bug #39)."""
+        ctx = SearchContext(query="t", confidence=None)  # type: ignore[arg-type]
+        assert ctx.confidence == 0.0
         assert ctx.confidence_score == 0.0
 
-    def test_string_confidence_score_coerced(self):
-        """String confidence_score is coerced via float() (bug #39)."""
-        ctx = SearchContext(results=[], sources=[], confidence_score="0.7")
+    def test_string_confidence_coerced(self):
+        """String confidence is coerced via float() (bug #39)."""
+        ctx = SearchContext(query="t", confidence="0.7")  # type: ignore[arg-type]
+        assert ctx.confidence == 0.7
         assert ctx.confidence_score == 0.7
 
 
@@ -930,55 +938,19 @@ class TestSearchContextFormatGeneric:
     """Tests for _format_generic with non-empty results."""
 
     def test_format_generic_with_results(self):
-        """Generic format includes 'Supporting Information' header (line 501+)."""
+        """Generic format includes 'Supporting Information' header."""
         ctx = SearchContext(
+            query="test",
             results=[
-                {"title": "Result A", "snippet": "Content A", "url": "https://a.com"},
+                SearchResult(title="Result A", url="https://a.com", snippet="Content A", score=0.7),
             ],
-            sources=["a.com"],
-            confidence_score=0.7,
-            search_timestamp="2025-06-01T00:00:00",
+            source="a.com",
+            confidence=0.7,
         )
         formatted = ctx.formatted_for_model("gemini")
         assert "Supporting Information:" in formatted
         assert "1. Result A" in formatted
         assert "https://a.com" in formatted
-
-
-# ---------------------------------------------------------------------------
-# 6. SearchContext.from_aipea_context() (lines 533-557)
-# ---------------------------------------------------------------------------
-
-
-class TestSearchContextFromAIPEA:
-    """Tests for SearchContext.from_aipea_context conversion."""
-
-    def test_from_aipea_context_basic(self):
-        """Converts an AIPEA SearchContext to legacy SearchContext."""
-        aipea_ctx = AIPEASearchContext(
-            query="test query",
-            results=[
-                SearchResult(title="Title1", url="https://x.com", snippet="Snip1", score=0.9),
-                SearchResult(title="Title2", url="https://y.com", snippet="Snip2", score=0.5),
-            ],
-            source="exa",
-            confidence=0.85,
-        )
-        legacy = SearchContext.from_aipea_context(aipea_ctx)
-
-        assert len(legacy.results) == 2
-        assert legacy.results[0]["title"] == "Title1"
-        assert legacy.results[1]["url"] == "https://y.com"
-        assert legacy.sources == ["exa"]
-        assert legacy.confidence_score == 0.85
-        assert legacy.query_type == "web"
-
-    def test_from_aipea_context_empty(self):
-        """Handles empty AIPEA context."""
-        aipea_ctx = AIPEASearchContext(query="empty", results=[], source="none", confidence=0.0)
-        legacy = SearchContext.from_aipea_context(aipea_ctx)
-        assert legacy.results == []
-        assert legacy.is_empty()
 
 
 # ---------------------------------------------------------------------------
@@ -1058,7 +1030,11 @@ class TestEnhancedQueryPostInit:
 
     def test_search_context_valid_type_preserved(self):
         """search_context with correct type is preserved."""
-        ctx = SearchContext(results=[{"title": "t"}], sources=["s"])
+        ctx = SearchContext(
+            query="test",
+            results=[SearchResult(title="t", url="", snippet="", score=0.5)],
+            source="s",
+        )
         eq = EnhancedQuery(
             original_query="q",
             enhanced_query="eq",
@@ -1276,10 +1252,10 @@ class TestTacticalTierProcessor:
         """Includes search context when provided in context dict."""
         proc = TacticalTierProcessor(orchestrator=None)
         sc = SearchContext(
-            results=[{"title": "T", "snippet": "S", "url": "https://t.com"}],
-            sources=["t.com"],
-            confidence_score=0.8,
-            search_timestamp="2025-01-01T00:00:00",
+            query="test",
+            results=[SearchResult(title="T", url="https://t.com", snippet="S", score=0.8)],
+            source="t.com",
+            confidence=0.8,
         )
         result = await proc.process("test", context={"search_context": sc})
 
@@ -1822,12 +1798,9 @@ class TestNaNGuardsEngine:
 
     @pytest.mark.unit
     def test_search_context_nan_confidence_defaults_to_zero(self) -> None:
-        """SearchContext with NaN confidence_score should default to 0.0."""
-        ctx = SearchContext(
-            results=[],
-            confidence_score=float("nan"),
-        )
-        assert ctx.confidence_score == 0.0
+        """SearchContext with NaN confidence should default to 0.0."""
+        ctx = SearchContext(query="t", results=[], confidence=float("nan"))
+        assert ctx.confidence == 0.0
 
     @pytest.mark.unit
     def test_enhanced_query_nan_confidence_defaults_to_zero(self) -> None:
