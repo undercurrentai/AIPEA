@@ -142,12 +142,14 @@ else:
         if connectivity:
             console.print("\n[bold]Connectivity Tests[/bold]")
             if cfg.has_exa():
-                _test_exa_connectivity(cfg.exa_api_key)
+                if not _test_exa_connectivity(cfg.exa_api_key):
+                    issues.append("Exa API connectivity test failed")
             else:
                 console.print("  Exa: [dim]skipped (no key)[/dim]")
 
             if cfg.has_firecrawl():
-                _test_firecrawl_connectivity(cfg.firecrawl_api_key)
+                if not _test_firecrawl_connectivity(cfg.firecrawl_api_key):
+                    issues.append("Firecrawl API connectivity test failed")
             else:
                 console.print("  Firecrawl: [dim]skipped (no key)[/dim]")
 

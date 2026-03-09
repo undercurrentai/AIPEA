@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **cli**: `aipea check --connectivity` tests API key validity
 - **cli**: `aipea doctor` runs full diagnostic (Python, deps, config, security, connectivity)
 - **search**: Config file fallback in `_get_api_key()` and `_resolve_http_timeout()` helpers
-- 161 new tests (498 total, 90.92% coverage)
+- 179 new tests (516 total, 90.20% coverage)
 
 ### Changed
 - **ci**: All GitHub Actions SHA-pinned for supply chain security
@@ -26,12 +26,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ci**: Added CodeQL analysis, dependency-review, Dependabot, CODEOWNERS, PR template
 
 ### Fixed
-- 41 bugs across 10 bug-hunt waves + quality gate (see `KNOWN_ISSUES.md` for details)
+- 46 bugs across 12 bug-hunt waves + quality gates (see `KNOWN_ISSUES.md` for details)
 - Quote injection in `save_dotenv()` and `save_toml_config()` config writers
 - Dotenv parser unescape for `\"` and `\\` in double-quoted values
 - `enhance()` offline tier enforcement when `force_offline=True` (#38)
 - `float()` coercion guards for all dataclass `__post_init__` isnan checks (#39, #43)
 - Newline/CR escaping in `save_dotenv`/`save_toml_config` (#40)
+- Conversation separator injection bypass via leading whitespace (#51)
+- `save_dotenv` silently destroying non-AIPEA keys in `.env` files (#52)
+- `aipea check --connectivity` exit code not reflecting failures (#53)
+- `_escape_markdown` missing `#`, `*`, `_`, `~` escaping for rogue header injection (#54)
+- `_escape_plaintext` only escaping first line of multi-line text (#55)
 
 ## [1.0.0] - 2026-02-14
 

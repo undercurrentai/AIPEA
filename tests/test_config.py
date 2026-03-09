@@ -501,6 +501,52 @@ class TestSaveToml:
 # ============================================================================
 
 
+# ============================================================================
+# BUG-HUNT REGRESSION: save_dotenv preserves non-AIPEA keys
+# ============================================================================
+
+
+class TestSaveDotenvPreservesKeys:
+    """Regression tests for save_dotenv not destroying non-AIPEA environment vars."""
+
+    def test_preserves_existing_non_aipea_keys(self, tmp_path: Path) -> None:
+        env_file = tmp_path / ".env"
+        env_file.write_text('DATABASE_URL="postgres://localhost/mydb"\nSECRET_KEY="abc123"\n')
+
+        config = AIPEAConfig(exa_api_key="test-exa-key")
+        save_dotenv(env_file, config)
+
+        content = env_file.read_text()
+        assert "DATABASE_URL" in content
+        assert "SECRET_KEY" in content
+        assert "EXA_API_KEY" in content
+
+    def test_empty_file_still_works(self, tmp_path: Path) -> None:
+        env_file = tmp_path / ".env"
+        config = AIPEAConfig(exa_api_key="test-key")
+        save_dotenv(env_file, config)
+
+        content = env_file.read_text()
+        assert "EXA_API_KEY" in content
+
+    def test_updates_aipea_keys_in_place(self, tmp_path: Path) -> None:
+        env_file = tmp_path / ".env"
+        env_file.write_text('EXA_API_KEY="old-key"\nMY_VAR="keep"\n')
+
+        config = AIPEAConfig(exa_api_key="new-key")
+        save_dotenv(env_file, config)
+
+        content = env_file.read_text()
+        assert "MY_VAR" in content
+        assert "new-key" in content
+        assert "old-key" not in content
+
+
+# ============================================================================
+# Config locations
+# ============================================================================
+
+
 class TestGetConfigLocations:
     def test_returns_both_locations(self) -> None:
         locations = get_config_locations()

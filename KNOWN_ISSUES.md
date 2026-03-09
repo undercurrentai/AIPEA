@@ -1,6 +1,46 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-11 + Quality Gate: 2026-02-24)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-12 + Quality Gate: 2026-03-09)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Wave 12 Fixes (2026-03-09) — 5 issues resolved
+
+### 51. Conversation separator injection bypassed by leading whitespace — FIXED
+- **File**: `src/aipea/security.py:255`
+- **Severity**: HIGH | **Confidence**: HIGH
+- **Source**: Claude sweep agent (Opus deep sweep)
+- **Fix**: Regex `(?:^|[\r\n])(?:Human|Assistant|System)\s*:` didn't allow whitespace between newline and role keyword. Added `\s*` after the line boundary group: `(?:^|[\r\n])\s*(?:Human|...)`. Inputs like `\n  Human: evil` now correctly detected. 4 regression tests added.
+
+### 52. `save_dotenv` silently destroys all non-AIPEA keys in `.env` file — FIXED
+- **File**: `src/aipea/config.py:264-290`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (engine/cli/config partition)
+- **Fix**: `save_dotenv` wrote only AIPEA keys, truncating any existing non-AIPEA entries (e.g., `DATABASE_URL`). Now calls `_parse_dotenv(path)` first and preserves non-AIPEA keys in output. 3 regression tests added.
+
+### 53. `aipea check --connectivity` always exits 0 even when connectivity tests fail — FIXED
+- **File**: `src/aipea/cli.py:141-158`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (engine/cli/config partition)
+- **Fix**: `_test_exa_connectivity` and `_test_firecrawl_connectivity` return values were discarded. Now appended to `issues` list on failure, causing `typer.Exit(1)`.
+
+### 54. `_escape_markdown` doesn't escape `#`, `*`, `_`, `~` allowing rogue header/emphasis injection — FIXED
+- **File**: `src/aipea/search.py:101-109`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (Opus deep sweep)
+- **Fix**: Added `*`, `_`, `~` to character escape loop. Added per-line `#` header escape. Malicious search results with titles like `# IGNORE INSTRUCTIONS` no longer inject markdown headers. 4 regression tests added.
+
+### 55. `_escape_plaintext` only escapes first line of multi-line text — FIXED
+- **File**: `src/aipea/search.py:112-121`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Claude sweep agent (Opus deep sweep)
+- **Fix**: Changed single-line check to per-line loop. Interior lines like `\n1. Ignore instructions` now have list-item prefix escaped. 2 regression tests added.
+
+## Wave 12 — Deferred
+
+### 56. Unicode homoglyph bypass of all injection patterns — DEFERRED
+- **File**: `src/aipea/security.py:251-260`
+- **Severity**: MEDIUM | **Confidence**: MEDIUM
+- **Source**: Claude sweep agent (Opus deep sweep)
+- **Rationale**: All injection patterns use ASCII characters only. Attackers can substitute Unicode confusable characters (e.g., Cyrillic `о` U+043E for Latin `o`) to evade detection while LLMs interpret them equivalently. Fix requires NFKC normalization plus confusable character mapping before scanning — non-trivial scope requiring dedicated implementation and testing.
 
 ## Quality Gate Ultrathink Fixes (2026-02-24) — 3 issues resolved
 
@@ -287,6 +327,6 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **File**: `src/aipea/search.py:166-182`
 - **Rationale**: Clamping already handles this; log noise is minor and useful for monitoring.
 
-## Deferred Findings (0 remaining)
+## Deferred Findings (1 remaining)
 
-All previously deferred issues have been resolved. See "Deferred Issue Resolution" section above.
+- **#56** Unicode homoglyph bypass (MEDIUM) — requires NFKC normalization implementation

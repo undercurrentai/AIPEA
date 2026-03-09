@@ -104,21 +104,33 @@ def _escape_markdown(text: str) -> str:
     Prevents injected titles/snippets from breaking markdown structure
     (e.g., accidental headers, links, or table syntax).
     """
-    for ch in ("|", "[", "]", "`"):
+    for ch in ("|", "[", "]", "`", "*", "_", "~"):
         text = text.replace(ch, f"\\{ch}")
-    return text
+    # Escape leading # that would create headers (per line)
+    lines = text.split("\n")
+    lines = [("\\#" + line[1:] if line.startswith("#") else line) for line in lines]
+    return "\n".join(lines)
 
 
 def _escape_plaintext(text: str) -> str:
     """Escape plaintext-significant patterns in user-supplied text.
 
     Prevents injected content from creating spurious numbered-list items
-    in the generic (plaintext) formatter.
+    in the generic (plaintext) formatter — checks every line, not just the first.
     """
-    # Escape leading digit+period that could be parsed as a list item
-    if text and len(text) >= 2 and text[0].isdigit() and text.lstrip("0123456789").startswith("."):
-        text = "\\" + text
-    return text
+    lines = text.split("\n")
+    escaped = []
+    for line in lines:
+        is_list_item = (
+            line
+            and len(line) >= 2
+            and line[0].isdigit()
+            and line.lstrip("0123456789").startswith(".")
+        )
+        if is_list_item:
+            line = "\\" + line
+        escaped.append(line)
+    return "\n".join(escaped)
 
 
 # =============================================================================
