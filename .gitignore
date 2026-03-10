@@ -32,6 +32,9 @@ Thumbs.db
 # Codex runs (generated)
 .codex_runs/
 
+# Playwright MCP logs
+.playwright-mcp/
+
 # Environment
 .env
 .env.*

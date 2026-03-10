@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **enhancer**: Ollama LLM integration in offline enhancement path — `_try_ollama_enhancement()` uses local SLMs when available, falls back to templates gracefully
+- **enhancer**: Cached `OfflineTierProcessor` instance to avoid per-call 18-regex recompilation
+- **knowledge**: `SEED_KNOWLEDGE` (13 entries, 7 domains) and `seed_knowledge_base()` helper for populating offline KB
+- **cli**: `aipea seed-kb` command to populate knowledge base with seed data
+- **cli**: `_doctor_ollama()` diagnostic section — checks Ollama availability, model count, best model
+- **cli**: `_doctor_knowledge_base()` diagnostic section — checks KB node count, domain summary
+- **engine**: `gemma3:1b` (815MB, 1B params) added to `OfflineModel` enum and Tier 1 preference order
+- 77 new tests (610 total, 91.02% coverage)
+
+### Changed
+- **enhancer**: Offline tier now attempts Ollama LLM enhancement before falling back to template-only mode
+- **engine**: `get_best_available_model()` preference order updated: phi3:mini > gemma3:1b > gemma3:270m
+
+### Fixed
+- **enhancer**: `TYPE_CHECKING` import for `OfflineTierProcessor` resolves Pyright attribute access diagnostic
+
 ## [1.1.0] - 2026-03-09
 
 ### Added

@@ -348,6 +348,9 @@ Key implementation details:
 - **Access tracking**: Every `search()` call increments `access_count` and updates
   `last_accessed` for retrieved nodes.
 - **Context manager**: Supports `with` statement for clean connection lifecycle.
+- **Seed data**: `SEED_KNOWLEDGE` (13 entries across 7 domains) provides baseline
+  knowledge for offline mode. Populated via `seed_knowledge_base(kb)` helper or
+  `aipea seed-kb` CLI command.
 
 #### 3.2.5 Schema
 
@@ -565,6 +568,7 @@ Two modes:
 | Model | Size | Params | Use Case |
 |-------|------|--------|----------|
 | `gemma3:270m` | 291 MB | 270M | Ultra-lightweight, edge devices |
+| `gemma3:1b` | 815 MB | 1B | Lightweight, good quality/size tradeoff |
 | `phi3:mini` | 2.2 GB | 3.8B | Higher quality, preferred when available |
 | `gpt-oss-20b` | ~11 GB | 20B | Future: higher quality |
 | `llama-3.3-70b` | ~40 GB | 70B | Future: highest quality |
@@ -597,7 +601,7 @@ on top of the tactical result.
 #### 4.2.5 Model-Specific Prompt Optimization
 
 ```python
-async def formulate_search_aware_prompt(query, complexity, search_context, model_type) -> str
+async def formulate_search_aware_prompt(query, complexity, search_context, model_type, query_type=None) -> str
 async def create_model_specific_prompt(base_prompt, model_type, search_context) -> str
 ```
 
@@ -791,7 +795,7 @@ async def my_llm_call(query: str, model_id: str) -> str:
 - Query complexity <= 0.3 AND no temporal needs
 
 **Resources**: SQLite database (configurable tier: 1GB-100GB),
-optional Ollama (291MB-40GB depending on model).
+optional Ollama (291MB-40GB depending on model, including gemma3:1b at 815MB).
 
 ### 6.2 Tier 1 — Tactical
 
@@ -936,8 +940,9 @@ on `AIPEAConfig` tracks where each value was resolved from.
 |---------|---------|
 | `aipea configure [--global]` | Interactive setup wizard |
 | `aipea check [--connectivity]` | Verify config and test API keys |
-| `aipea doctor` | Full diagnostic (Python, deps, config, security, connectivity) |
+| `aipea doctor` | Full diagnostic (Python, deps, config, security, Ollama, knowledge base, connectivity) |
 | `aipea info` | Quick library summary |
+| `aipea seed-kb` | Populate offline knowledge base with 13 seed entries across 7 domains |
 
 ### 8.3 Embedded Library Mode (Primary)
 
