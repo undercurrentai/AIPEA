@@ -822,7 +822,7 @@ SEED_KNOWLEDGE: list[tuple[str, KnowledgeDomain, float]] = [
         KnowledgeDomain.MEDICAL,
         0.88,
     ),
-    # MILITARY / LOGISTICS
+    # MILITARY
     (
         "Operational security (OPSEC) fundamentals: Identify critical information that could "
         "compromise operations. Analyze potential adversary intelligence collection "
@@ -835,6 +835,29 @@ SEED_KNOWLEDGE: list[tuple[str, KnowledgeDomain, float]] = [
         0.85,
     ),
     (
+        "Military communications security (COMSEC): Use end-to-end encryption for all "
+        "tactical communications. Implement frequency hopping and spread-spectrum techniques "
+        "for radio communications. Enforce strict key management procedures — rotate "
+        "encryption keys on schedule and after suspected compromise. Use TEMPEST-certified "
+        "equipment in sensitive facilities to prevent electromagnetic emanation interception. "
+        "Maintain communications silence discipline during operations. Use brevity codes and "
+        "authentication challenges to verify identity. Ensure redundant communication paths "
+        "for mission-critical messaging.",
+        KnowledgeDomain.MILITARY,
+        0.84,
+    ),
+    (
+        "Tactical decision-making frameworks: OODA loop (Observe, Orient, Decide, Act) for "
+        "rapid decision cycles in dynamic environments. MDMP (Military Decision Making "
+        "Process) for deliberate planning: receipt of mission, mission analysis, COA "
+        "development, COA analysis, COA comparison, COA approval, orders production. Apply "
+        "commander's intent to enable decentralized execution. Use red-teaming to stress-test "
+        "plans against adversary capabilities. Maintain decision logs for after-action review.",
+        KnowledgeDomain.MILITARY,
+        0.83,
+    ),
+    # LOGISTICS
+    (
         "Supply chain risk management: Map the full supply chain to identify single points "
         "of failure. Diversify suppliers across geographies. Implement real-time tracking "
         "and visibility tools. Maintain safety stock for critical components. Develop "
@@ -843,6 +866,63 @@ SEED_KNOWLEDGE: list[tuple[str, KnowledgeDomain, float]] = [
         "escalation procedures for supply chain incidents.",
         KnowledgeDomain.LOGISTICS,
         0.83,
+    ),
+    (
+        "Field logistics and sustainment operations: Pre-position critical supplies at "
+        "forward operating locations. Use push logistics for initial deployment, transition "
+        "to pull logistics for sustained operations. Implement automated inventory tracking "
+        "with barcode or RFID systems. Plan for fuel, ammunition, water, and medical supply "
+        "distribution chains. Establish maintenance recovery points with standardized repair "
+        "kits. Use containerization for rapid supply distribution. Coordinate airlift and "
+        "ground transport assets for multi-modal delivery.",
+        KnowledgeDomain.LOGISTICS,
+        0.82,
+    ),
+    # COMMUNICATIONS
+    (
+        "Network architecture for resilient communications: Design networks with no single "
+        "point of failure using mesh or ring topologies. Implement automatic failover between "
+        "primary and backup links. Use software-defined networking (SDN) for dynamic traffic "
+        "management. Deploy network segmentation to contain security incidents. Monitor "
+        "bandwidth utilization and latency with real-time dashboards. Implement QoS policies "
+        "to prioritize mission-critical traffic. Use satellite and HF radio as backup for "
+        "terrestrial link failures. Test disaster recovery procedures quarterly.",
+        KnowledgeDomain.COMMUNICATIONS,
+        0.84,
+    ),
+    (
+        "Secure messaging and collaboration: Use end-to-end encrypted messaging platforms "
+        "with ephemeral message options. Implement identity verification through certificate-"
+        "based authentication. Enforce message retention policies aligned with compliance "
+        "requirements. Use air-gapped systems for classified discussions. Implement data "
+        "loss prevention (DLP) controls on outbound communications. Train users on phishing "
+        "recognition and social engineering tactics. Maintain audit logs of all message "
+        "access for accountability.",
+        KnowledgeDomain.COMMUNICATIONS,
+        0.82,
+    ),
+    # MEDICAL (additional)
+    (
+        "Clinical decision support systems: Integrate evidence-based guidelines into EHR "
+        "workflows for real-time alerts. Use severity scoring systems (APACHE, SOFA, qSOFA) "
+        "for triage prioritization. Implement drug interaction checking at order entry. "
+        "Support differential diagnosis generation from symptom clusters. Maintain audit "
+        "trails for all clinical decisions. Ensure AI-assisted diagnostics include confidence "
+        "scores and uncertainty quantification. Require human-in-the-loop validation for all "
+        "treatment recommendations.",
+        KnowledgeDomain.MEDICAL,
+        0.86,
+    ),
+    # GENERAL (additional)
+    (
+        "Data privacy by design principles: Minimize data collection — only gather what is "
+        "strictly necessary. Implement purpose limitation — data used only for stated purposes. "
+        "Apply data retention limits with automatic deletion schedules. Use pseudonymization "
+        "and anonymization techniques. Provide users with data export and deletion capabilities "
+        "(right to be forgotten). Conduct Data Protection Impact Assessments (DPIA) for "
+        "high-risk processing. Implement consent management with granular opt-in/opt-out.",
+        KnowledgeDomain.GENERAL,
+        0.85,
     ),
 ]
 

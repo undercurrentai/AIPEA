@@ -1,23 +1,17 @@
-"""AIPEA Prompt Engine - AI Query Enhancement with Tiered Processing.
+"""AIPEA Prompt Engine - AI Query Enhancement.
 
-This module provides the core prompt engineering capabilities,
-implementing a three-tier processing architecture for query enhancement:
+This module provides the core prompt engineering capabilities:
 
-- Tier 0 (Offline): Pattern-based, template-driven enhancement (<2 seconds)
-- Tier 1 (Tactical): LLM-assisted disambiguation with search context (2-5 seconds)
-- Tier 2 (Strategic): Multi-agent reasoning chains for complex queries (5-15 seconds)
-
-Key features:
-- Tiered query processing with configurable confidence thresholds
+- Query classification via pattern matching (OfflineTierProcessor)
+- Model-aware query formatting (XML for Claude, markdown for GPT, etc.)
 - Search context integration from multiple providers
-- Model-specific prompt optimization (OpenAI, Claude, Gemini)
-- Offline/air-gapped support via OfflineKnowledgeBase
+- Offline/air-gapped support via Ollama
 - Current year injection for temporal awareness
 
 Design principles:
-- Progressive complexity: Start simple, escalate only when needed
-- Model-aware: Different AI models receive optimized prompt structures
-- Graceful degradation: Falls back to simpler tiers on failure
+- Model-aware: Different AI models receive structurally optimized prompts
+- Content-only: Enriches query content without prescribing response style
+- Graceful degradation: Falls back to templates when LLM unavailable
 - Type-safe: Full type hints throughout
 
 Based on AIPEA design patterns.
@@ -806,433 +800,6 @@ class OfflineTierProcessor(TierProcessor):
 
 
 # =============================================================================
-# TIER 1: TACTICAL PROCESSOR
-# =============================================================================
-
-
-class TacticalTierProcessor(TierProcessor):
-    """Tier 1 (Tactical) processor - LLM-assisted enhancement with search.
-
-    Uses LLM analysis for query disambiguation and integrates
-    search context for improved responses. When an orchestrator is
-    provided, makes a single LLM call to improve query understanding;
-    otherwise falls back to template-based enhancement.
-
-    Characteristics:
-    - LLM-assisted analysis (when orchestrator provided)
-    - Search context integration
-    - Structured prompt templates (fallback)
-    - Latency: 2-5 seconds
-    - Confidence range: 0.80-0.90
-    """
-
-    def __init__(self, orchestrator: Any | None = None) -> None:
-        """Initialize the tactical tier processor.
-
-        Args:
-            orchestrator: Optional ConsultationOrchestrator for LLM calls.
-                         If None, falls back to template-only enhancement.
-        """
-        self._offline_processor = OfflineTierProcessor()
-        self._orchestrator = orchestrator
-        logger.debug("TacticalTierProcessor initialized (llm=%s)", orchestrator is not None)
-
-    @property
-    def tier(self) -> ProcessingTier:
-        """Return the tier this processor handles.
-
-        Returns:
-            ProcessingTier.TACTICAL
-        """
-        return ProcessingTier.TACTICAL
-
-    async def process(
-        self,
-        query: str,
-        context: dict[str, Any] | None = None,
-    ) -> EnhancedQuery:
-        """Process a query with LLM assistance and search context.
-
-        Args:
-            query: The original query to enhance
-            context: Optional context (may contain search_context)
-
-        Returns:
-            EnhancedQuery with LLM-enhanced content
-        """
-        logger.debug("TacticalTierProcessor processing query: %s...", query[:50])
-
-        # Get base classification from offline processor
-        query_type = self._offline_processor.classify_query(query)
-
-        # Extract search context if provided
-        search_context = None
-        if context and "search_context" in context:
-            search_context = context["search_context"]
-
-        # Build enhanced prompt template
-        enhanced_parts = [
-            f"Query (requiring tactical analysis): {query}",
-            "",
-            "Please provide a thorough response with:",
-            "- Clear structure and organization",
-            "- Evidence-based reasoning",
-            "- Practical recommendations",
-        ]
-
-        # Add search context if available
-        if search_context and isinstance(search_context, SearchContext):
-            formatted = search_context.formatted_for_model("general")
-            if formatted:
-                enhanced_parts.extend(
-                    [
-                        "",
-                        "Relevant Context:",
-                        formatted,
-                    ]
-                )
-
-        enhanced = "\n".join(enhanced_parts)
-        llm_assisted = False
-        confidence = 0.85
-
-        # Attempt LLM-assisted disambiguation if orchestrator available
-        if self._orchestrator is not None and hasattr(self._orchestrator, "consult"):
-            try:
-                disambiguation_prompt = (
-                    f"Disambiguate and clarify the following query. "
-                    f"Return a single improved version of the query that is more "
-                    f"specific and actionable:\n\n{query}"
-                )
-                responses = await self._orchestrator.consult(
-                    prompt=disambiguation_prompt,
-                    models=self._get_available_models(),
-                    parallel=False,
-                )
-                # Use the first successful response
-                for resp in responses:
-                    if hasattr(resp, "content") and resp.content:
-                        enhanced = resp.content
-                        llm_assisted = True
-                        confidence = 0.88
-                        break
-            except Exception:
-                logger.debug("LLM disambiguation failed, using template fallback")
-
-        return EnhancedQuery(
-            original_query=query,
-            enhanced_query=enhanced,
-            tier_used=ProcessingTier.TACTICAL,
-            confidence=confidence,
-            query_type=query_type,
-            search_context=search_context,
-            enhancement_metadata={
-                "processor": "tactical",
-                "has_search_context": search_context is not None,
-                "llm_assisted": llm_assisted,
-            },
-        )
-
-    def _get_available_models(self) -> list[tuple[Any, str]]:
-        """Get list of available model tuples from orchestrator providers."""
-        if not self._orchestrator or not hasattr(self._orchestrator, "providers"):
-            return []
-        models: list[tuple[Any, str]] = []
-        for provider_key in self._orchestrator.providers:
-            models.append((provider_key, "default"))
-        return models[:1]  # Use single model for tactical tier
-
-
-# =============================================================================
-# TIER 2: STRATEGIC PROCESSOR
-# =============================================================================
-
-
-class StrategicTierProcessor(TierProcessor):
-    """Tier 2 (Strategic) processor - Multi-agent reasoning chains.
-
-    Uses multi-step reasoning with critique loops for complex
-    queries requiring deep analysis. When an orchestrator is provided,
-    performs decomposition, parallel sub-question analysis, iterative
-    critique, and final synthesis via LLM calls.
-
-    Characteristics:
-    - Multi-step reasoning chain (when orchestrator provided)
-    - Cross-domain synthesis
-    - Critique loop (up to 3 rounds)
-    - Latency: 5-15 seconds
-    - Confidence range: 0.90-0.98
-    """
-
-    def __init__(self, orchestrator: Any | None = None) -> None:
-        """Initialize the strategic tier processor.
-
-        Args:
-            orchestrator: Optional ConsultationOrchestrator for LLM calls.
-                         If None, falls back to template-only enhancement.
-        """
-        self._tactical_processor = TacticalTierProcessor(orchestrator=orchestrator)
-        self._orchestrator = orchestrator
-        self._max_critique_rounds = 3
-        logger.debug(
-            "StrategicTierProcessor initialized (llm=%s, max_critique=%d)",
-            orchestrator is not None,
-            self._max_critique_rounds,
-        )
-
-    @property
-    def tier(self) -> ProcessingTier:
-        """Return the tier this processor handles.
-
-        Returns:
-            ProcessingTier.STRATEGIC
-        """
-        return ProcessingTier.STRATEGIC
-
-    async def process(
-        self,
-        query: str,
-        context: dict[str, Any] | None = None,
-    ) -> EnhancedQuery:
-        """Process a query with multi-agent reasoning chains.
-
-        Args:
-            query: The original query to enhance
-            context: Optional context for processing
-
-        Returns:
-            EnhancedQuery with strategic multi-step enhancement
-        """
-        logger.debug("StrategicTierProcessor processing query: %s...", query[:50])
-
-        # Get base result from tactical processor
-        tactical_result = await self._tactical_processor.process(query, context)
-
-        # Build strategic template enhancement
-        strategic_parts = [
-            "Strategic Analysis Required",
-            "=" * 40,
-            "",
-            f"Original Query: {query}",
-            "",
-            "Multi-Step Reasoning Framework:",
-            "1. Problem Decomposition: Break down the query into component parts",
-            "2. Cross-Domain Analysis: Consider implications across related domains",
-            "3. Synthesis: Integrate findings into a cohesive response",
-            "4. Validation: Verify reasoning chain for logical consistency",
-            "",
-            "Tactical Context:",
-            tactical_result.enhanced_query,
-            "",
-            "Please provide a comprehensive strategic response that:",
-            "- Addresses all aspects of the original query",
-            "- Considers multiple perspectives and trade-offs",
-            "- Provides actionable recommendations",
-            "- Acknowledges uncertainties and limitations",
-        ]
-
-        enhanced = "\n".join(strategic_parts)
-        multi_agent = False
-        critique_rounds = 0
-        confidence = 0.92
-
-        # Attempt multi-step LLM reasoning if orchestrator available
-        if self._orchestrator is not None and hasattr(self._orchestrator, "consult"):
-            try:
-                models = self._get_available_models()
-                if models:
-                    enhanced, critique_rounds = await self._run_strategic_reasoning(
-                        query, tactical_result.enhanced_query, models
-                    )
-                    multi_agent = True
-                    confidence = min(0.92 + critique_rounds * 0.02, 0.98)
-            except Exception:
-                logger.debug("Strategic LLM reasoning failed, using template fallback")
-
-        return EnhancedQuery(
-            original_query=query,
-            enhanced_query=enhanced,
-            tier_used=ProcessingTier.STRATEGIC,
-            confidence=confidence,
-            query_type=tactical_result.query_type,
-            search_context=tactical_result.search_context,
-            enhancement_metadata={
-                "processor": "strategic",
-                "critique_rounds": critique_rounds,
-                "multi_agent": multi_agent,
-                "tactical_confidence": tactical_result.confidence,
-            },
-        )
-
-    async def _decompose_query(
-        self,
-        query: str,
-        models: list[tuple[Any, str]],
-    ) -> list[str]:
-        """Decompose a complex query into sub-questions via LLM.
-
-        Args:
-            query: The original query to decompose
-            models: Available model tuples for LLM calls
-
-        Returns:
-            List of sub-questions (falls back to [query] on failure)
-        """
-        if self._orchestrator is None:
-            raise RuntimeError("Orchestrator not initialized")
-
-        decompose_prompt = (
-            f"Break the following complex query into 2-4 independent sub-questions "
-            f"that together cover all aspects. Return one sub-question per line.\n\n"
-            f"Query: {query}"
-        )
-        decompose_responses = await self._orchestrator.consult(
-            prompt=decompose_prompt, models=models, parallel=False
-        )
-        for resp in decompose_responses:
-            if hasattr(resp, "content") and resp.content:
-                lines = [ln.strip() for ln in resp.content.strip().split("\n") if ln.strip()]
-                if lines:
-                    return lines[:4]
-        return [query]
-
-    async def _synthesize_analyses(
-        self,
-        query: str,
-        analyses: list[str],
-        models: list[tuple[Any, str]],
-    ) -> str:
-        """Synthesize sub-question analyses into a comprehensive response.
-
-        Args:
-            query: The original query
-            analyses: List of analysis strings from sub-questions
-            models: Available model tuples for LLM calls
-
-        Returns:
-            Synthesized response text
-        """
-        if self._orchestrator is None:
-            raise RuntimeError("Orchestrator not initialized")
-
-        synthesis_prompt = (
-            f"Synthesize the following analyses into a comprehensive response to: {query}\n\n"
-            + "\n\n---\n\n".join(analyses)
-        )
-        synthesis_responses = await self._orchestrator.consult(
-            prompt=synthesis_prompt, models=models, parallel=False
-        )
-        for resp in synthesis_responses:
-            if hasattr(resp, "content") and resp.content:
-                return str(resp.content)
-        return "\n\n".join(analyses)
-
-    async def _critique_and_refine(
-        self,
-        query: str,
-        synthesis: str,
-        models: list[tuple[Any, str]],
-    ) -> tuple[str, int]:
-        """Run critique loop to refine synthesis.
-
-        Args:
-            query: The original query
-            synthesis: Current synthesized response
-            models: Available model tuples for LLM calls
-
-        Returns:
-            Tuple of (refined_text, critique_rounds_completed)
-        """
-        if self._orchestrator is None:
-            raise RuntimeError("Orchestrator not initialized")
-
-        critique_rounds = 0
-        for _ in range(self._max_critique_rounds):
-            critique_prompt = (
-                f"Critically evaluate this response for gaps, errors, or missed perspectives. "
-                f"If it is complete and accurate, respond with exactly 'APPROVED'. "
-                f"Otherwise describe what needs improvement.\n\n"
-                f"Original query: {query}\n\nResponse:\n{synthesis}"
-            )
-            critique_responses = await self._orchestrator.consult(
-                prompt=critique_prompt, models=models, parallel=False
-            )
-            critique_text = ""
-            for resp in critique_responses:
-                if hasattr(resp, "content") and resp.content:
-                    critique_text = resp.content
-                    break
-
-            critique_rounds += 1
-
-            if "APPROVED" in critique_text.upper():
-                break
-
-            refine_prompt = (
-                f"Improve this response based on the critique:\n\n"
-                f"Critique: {critique_text}\n\nCurrent response:\n{synthesis}"
-            )
-            refine_responses = await self._orchestrator.consult(
-                prompt=refine_prompt, models=models, parallel=False
-            )
-            for resp in refine_responses:
-                if hasattr(resp, "content") and resp.content:
-                    synthesis = resp.content
-                    break
-
-        return synthesis, critique_rounds
-
-    async def _run_strategic_reasoning(
-        self,
-        query: str,
-        tactical_context: str,
-        models: list[tuple[Any, str]],
-    ) -> tuple[str, int]:
-        """Run multi-step strategic reasoning via LLM.
-
-        Pipeline: decompose -> parallel analyze -> synthesize -> critique.
-
-        Returns:
-            Tuple of (enhanced_response, critique_rounds_completed)
-        """
-        if self._orchestrator is None:
-            raise RuntimeError("Orchestrator not initialized")
-        orchestrator = self._orchestrator
-
-        # Step 1: Decompose query into sub-questions
-        sub_questions = await self._decompose_query(query, models)
-
-        # Step 2: Parallel sub-question analysis
-        async def analyze_sub(sq: str) -> str:
-            responses = await orchestrator.consult(
-                prompt=f"Provide a concise analysis:\n\n{sq}\n\nContext:\n{tactical_context}",
-                models=models,
-                parallel=False,
-            )
-            for r in responses:
-                if hasattr(r, "content") and r.content:
-                    return str(r.content)
-            return sq
-
-        analyses = await asyncio.gather(*[analyze_sub(sq) for sq in sub_questions])
-
-        # Step 3: Synthesize analyses
-        synthesis = await self._synthesize_analyses(query, list(analyses), models)
-
-        # Step 4: Critique and refine
-        return await self._critique_and_refine(query, synthesis, models)
-
-    def _get_available_models(self) -> list[tuple[Any, str]]:
-        """Get list of available model tuples from orchestrator providers."""
-        if not self._orchestrator or not hasattr(self._orchestrator, "providers"):
-            return []
-        models: list[tuple[Any, str]] = []
-        for provider_key in self._orchestrator.providers:
-            models.append((provider_key, "default"))
-        return models[:2]  # Use up to 2 models for strategic tier
-
-
-# =============================================================================
 # MAIN PROMPT ENGINE
 # =============================================================================
 
@@ -1240,12 +807,11 @@ class StrategicTierProcessor(TierProcessor):
 class PromptEngine:
     """AIPEA Prompt Engine - Core query enhancement system.
 
-    Orchestrates tiered query processing and provides model-specific
-    prompt optimization for different AI providers.
+    Provides model-specific prompt optimization for different AI providers.
 
     Features:
-    - Three-tier processing (Offline, Tactical, Strategic)
-    - Model-specific prompt templates
+    - Query classification via OfflineTierProcessor
+    - Model-aware query formatting (XML for Claude, markdown for GPT, etc.)
     - Search context integration
     - Current year injection for temporal awareness
 
@@ -1260,11 +826,9 @@ class PromptEngine:
     """
 
     def __init__(self) -> None:
-        """Initialize the prompt engine with all tier processors."""
+        """Initialize the prompt engine."""
         self._offline_processor = OfflineTierProcessor()
-        self._tactical_processor = TacticalTierProcessor()
-        self._strategic_processor = StrategicTierProcessor()
-        logger.info("PromptEngine initialized with all tier processors")
+        logger.info("PromptEngine initialized")
 
     # Query-type-specific instructions injected into prompts
     _QUERY_TYPE_INSTRUCTIONS: ClassVar[dict[str, str]] = {
@@ -1294,14 +858,11 @@ class PromptEngine:
         ),
     }
 
-    def _get_prompt_template(
-        self, complexity: str, model_type: str, query_type: str = "unknown"
-    ) -> str:
-        """Get a prompt template based on complexity, model type, and query type.
+    def _get_prompt_template(self, complexity: str, query_type: str = "unknown") -> str:
+        """Get a prompt template based on complexity and query type.
 
         Args:
             complexity: Query complexity level (simple, medium, complex)
-            model_type: Target model type (openai, claude, gemini, general)
             query_type: Classified query type (technical, research, etc.)
 
         Returns:
@@ -1331,32 +892,10 @@ class PromptEngine:
                 "Please provide a thorough but focused response."
             )
 
-        # Model-specific instructions
-        model_lower = model_type.lower()
-        if "openai" in model_lower or "gpt" in model_lower:
-            model_instructions = (
-                "You excel at structured, logical responses with step-by-step reasoning. "
-                "Use clear headings and numbered lists where appropriate."
-            )
-        elif "claude" in model_lower or "anthropic" in model_lower:
-            model_instructions = (
-                "You excel at detailed, nuanced analysis with sophisticated reasoning. "
-                "Provide thoughtful exploration of the topic."
-            )
-        elif "gemini" in model_lower or "google" in model_lower:
-            model_instructions = (
-                "You excel at comprehensive, well-structured responses with "
-                "practical applications. Balance depth with clarity."
-            )
-        else:  # general
-            model_instructions = (
-                "Please provide a well-organized response appropriate to the query complexity."
-            )
-
         # Query-type-specific instructions
         type_instructions = self._QUERY_TYPE_INSTRUCTIONS.get(query_type.lower(), "")
 
-        parts = [base_intro, "", complexity_instructions, "", model_instructions]
+        parts = [base_intro, "", complexity_instructions]
         if type_instructions:
             parts.extend(["", type_instructions])
 
@@ -1372,32 +911,6 @@ class PromptEngine:
             Detected QueryType
         """
         return self._offline_processor.classify_query(query)
-
-    async def enhance_query(
-        self,
-        query: str,
-        tier: ProcessingTier,
-        context: dict[str, Any] | None = None,
-    ) -> EnhancedQuery:
-        """Enhance a query using the specified processing tier.
-
-        Args:
-            query: The query to enhance
-            tier: Processing tier to use
-            context: Optional context for processing
-
-        Returns:
-            EnhancedQuery with enhancement results
-        """
-        match tier:
-            case ProcessingTier.OFFLINE:
-                return await self._offline_processor.process(query, context)
-            case ProcessingTier.TACTICAL:
-                return await self._tactical_processor.process(query, context)
-            case ProcessingTier.STRATEGIC:
-                return await self._strategic_processor.process(query, context)
-            case _:
-                raise ValueError(f"Unsupported processing tier: {tier}")
 
     async def formulate_search_aware_prompt(
         self,
@@ -1435,8 +948,8 @@ class PromptEngine:
             query_type,
         )
 
-        # Get base template (now includes query-type instructions)
-        template = self._get_prompt_template(complexity, model_type, query_type)
+        # Get base template (includes query-type instructions)
+        template = self._get_prompt_template(complexity, query_type)
 
         # Model-aware query formatting (Defect 3)
         model_lower = model_type.lower()
@@ -1456,14 +969,15 @@ class PromptEngine:
             query_section,
         ]
 
-        # Add search context if available
+        # Add search context if available (clearly framed as supplementary)
         if search_context is not None and not search_context.is_empty():
             formatted = search_context.formatted_for_model(model_type)
             if formatted:
                 parts.extend(
                     [
                         "",
-                        "Relevant Search Context:",
+                        "[Supplementary Context from Web Search — not part of the user's"
+                        " original query. Use to inform your response but verify claims.]",
                         formatted,
                     ]
                 )
@@ -1501,41 +1015,7 @@ class PromptEngine:
         Returns:
             Model-optimized prompt string
         """
-        model_lower = model_type.lower()
-
-        parts = []
-
-        if "gpt" in model_lower or "openai" in model_lower:
-            parts.extend(
-                [
-                    "System: You are an expert assistant. You excel at providing "
-                    "structured, logical responses with step-by-step reasoning. "
-                    "Use Clear headings and structure for complex answers.",
-                    "",
-                    base_prompt,
-                ]
-            )
-        elif "claude" in model_lower:
-            parts.extend(
-                [
-                    "You are an expert assistant capable of sophisticated analysis. "
-                    "Please provide a response demonstrating nuanced understanding "
-                    "and detailed reasoning.",
-                    "",
-                    base_prompt,
-                ]
-            )
-        elif "gemini" in model_lower:
-            parts.extend(
-                [
-                    "Please provide a comprehensive response that demonstrates "
-                    "deep understanding with practical application of concepts.",
-                    "",
-                    base_prompt,
-                ]
-            )
-        else:
-            parts.append(base_prompt)
+        parts = [base_prompt]
 
         # Add search context if available
         if search_context is not None and not search_context.is_empty():
@@ -1594,8 +1074,6 @@ __all__ = [
     "SearchOrchestrator",
     "SearchResult",
     "SearchStrategy",
-    "StrategicTierProcessor",
-    "TacticalTierProcessor",
     "TierProcessor",
     "create_empty_context",
     "get_ollama_client",

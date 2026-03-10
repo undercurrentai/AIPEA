@@ -547,7 +547,11 @@ class ComplianceHandler:
             logger.debug("Configured for TACTICAL: 7yr retention, offline forced")
 
         elif self.mode == ComplianceMode.FEDRAMP:
-            # FEDRAMP: Government cloud requirements (future implementation)
+            # FEDRAMP: UNSUPPORTED STUB — configuration only, no behavioral enforcement.
+            # This mode provides basic config (retention, model allowlist) but does NOT
+            # enforce FedRAMP requirements such as: data residency checks, FedRAMP-authorized
+            # provider validation, FIPS 140-2 encryption verification, or continuous
+            # monitoring. Use at your own risk; full implementation is on the roadmap.
             self.audit_retention_days = 1095  # 3 years minimum for FedRAMP
             self.encryption_required = True
             self.allowed_models = [
@@ -556,7 +560,9 @@ class ComplianceHandler:
                 "gpt-5.2",
             ]  # FedRAMP authorized model families (prefix match via substring)
             self.phi_redaction_enabled = False
-            logger.debug("Configured for FEDRAMP: 3yr retention, encryption required")
+            logger.warning(
+                "FEDRAMP mode is an unsupported stub — config only, no behavioral enforcement"
+            )
 
         else:  # GENERAL
             # GENERAL: Standard use with minimal restrictions

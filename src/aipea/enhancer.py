@@ -65,7 +65,7 @@ from aipea.security import (
 )
 
 if TYPE_CHECKING:
-    from aipea.engine import OfflineTierProcessor
+    from aipea.engine import OfflineTierProcessor  # used as type hint for _ollama_processor
 
 logger = logging.getLogger(__name__)
 
@@ -375,6 +375,8 @@ class AIPEAEnhancer:
         security_level: SecurityLevel = SecurityLevel.UNCLASSIFIED,
         compliance_mode: ComplianceMode | None = None,
         force_offline: bool = False,
+        include_search: bool = True,
+        format_for_model: bool = True,
     ) -> EnhancementResult:
         """
         Enhance a query for optimal model consumption.
@@ -392,6 +394,10 @@ class AIPEAEnhancer:
             security_level: Classification level (forces offline if SECRET+)
             compliance_mode: HIPAA, GENERAL, or auto-detect
             force_offline: Force air-gapped mode regardless of security
+            include_search: Include search context in enhancement (default True).
+                           Set False to skip search/KB context gathering.
+            format_for_model: Apply model-specific formatting (default True).
+                             Set False for generic prompt structure.
 
         Returns:
             EnhancementResult with enhanced prompt and metadata
@@ -485,22 +491,15 @@ class AIPEAEnhancer:
         if offline_required:
             enhancement_notes.append("Processing in offline mode due to security/connectivity")
 
-        # Step 5: Gather context
-        search_context: SearchContext | None = None
-
-        if offline_required:
-            search_context = await self._gather_offline_context(query, analysis)
-            if search_context and not search_context.is_empty():
-                enhancement_notes.append(
-                    f"Offline context gathered: {len(search_context.results)} results"
-                )
-        else:
-            search_context = await self._gather_online_context(query, analysis, security_context)
-            if search_context and not search_context.is_empty():
-                enhancement_notes.append(
-                    f"Online context gathered from {search_context.source}: "
-                    f"{len(search_context.results)} results"
-                )
+        # Step 5: Gather context (skipped when include_search=False)
+        search_context = await self._gather_context_for_enhance(
+            query,
+            analysis,
+            security_context,
+            offline_required,
+            include_search,
+            enhancement_notes,
+        )
 
         # Step 6: Determine processing tier
         processing_tier = analysis.suggested_tier or ProcessingTier.OFFLINE
@@ -516,7 +515,7 @@ class AIPEAEnhancer:
             ollama_analysis = await self._try_ollama_enhancement(query, enhancement_notes)
 
         # Step 7: Formulate enhanced prompt
-        model_family = get_model_family(model_id)
+        model_family = get_model_family(model_id) if format_for_model else "general"
 
         # Determine complexity string from tier
         complexity_map = {
@@ -697,6 +696,104 @@ class AIPEAEnhancer:
             return True
 
         return compliance_mode == ComplianceMode.TACTICAL
+
+    async def _gather_context_for_enhance(
+        self,
+        query: str,
+        analysis: QueryAnalysis,
+        security_context: SecurityContext,
+        offline_required: bool,
+        include_search: bool,
+        enhancement_notes: list[str],
+    ) -> SearchContext | None:
+        """Gather search/KB context for the enhance pipeline.
+
+        Handles offline vs online routing, search result security scanning,
+        and enhancement notes. Returns None when search is disabled or no
+        results are found.
+
+        Args:
+            query: The user's query
+            analysis: Query analysis results
+            security_context: Active security context
+            offline_required: Whether offline mode is forced
+            include_search: Whether to gather search context
+            enhancement_notes: Mutable list for pipeline notes
+        """
+        if not include_search:
+            enhancement_notes.append("Search context skipped (include_search=False)")
+            return None
+
+        if offline_required:
+            search_context = await self._gather_offline_context(query, analysis)
+            if search_context and not search_context.is_empty():
+                enhancement_notes.append(
+                    f"Offline context gathered: {len(search_context.results)} results"
+                )
+            return search_context
+
+        search_context = await self._gather_online_context(query, analysis, security_context)
+        if search_context and not search_context.is_empty():
+            source = search_context.source
+            raw_count = len(search_context.results)
+            # Scan search results for injection attacks (Finding 5)
+            search_context = self._scan_search_results(search_context)
+            filtered_count = raw_count - len(search_context.results)
+            if filtered_count > 0:
+                enhancement_notes.append(
+                    f"Online context from {source}: {raw_count} results"
+                    f" ({filtered_count} filtered for security)"
+                )
+            else:
+                enhancement_notes.append(
+                    f"Online context gathered from {source}: {len(search_context.results)} results"
+                )
+        return search_context
+
+    def _scan_search_results(self, search_context: SearchContext) -> SearchContext:
+        """Scan search result snippets for injection attacks.
+
+        Filters out search results whose content triggers the security
+        scanner (e.g., prompt injection attempts in web pages).
+
+        Args:
+            search_context: Search context with results to scan
+
+        Returns:
+            Filtered SearchContext with dangerous results removed
+        """
+        if search_context.is_empty():
+            return search_context
+
+        safe_results: list[SearchResult] = []
+        dummy_security_ctx = SecurityContext(
+            compliance_mode=ComplianceMode.GENERAL,
+            security_level=SecurityLevel.UNCLASSIFIED,
+        )
+
+        for result in search_context.results:
+            snippet = result.snippet or ""
+            if snippet:
+                scan = self._security_scanner.scan(snippet, dummy_security_ctx)
+                if scan.is_blocked:
+                    logger.warning(
+                        "Search result filtered (injection detected): %s",
+                        result.title or result.url,
+                    )
+                    continue
+            safe_results.append(result)
+
+        if len(safe_results) < len(search_context.results):
+            filtered_count = len(search_context.results) - len(safe_results)
+            logger.info("Filtered %d search results for security", filtered_count)
+
+        return SearchContext(
+            query=search_context.query,
+            results=safe_results,
+            timestamp=search_context.timestamp,
+            source=search_context.source,
+            confidence=search_context.confidence,
+        )
 
     async def _gather_online_context(
         self,
@@ -1057,6 +1154,8 @@ async def enhance_prompt(
     security_level: SecurityLevel = SecurityLevel.UNCLASSIFIED,
     compliance_mode: ComplianceMode | None = None,
     force_offline: bool = False,
+    include_search: bool = True,
+    format_for_model: bool = True,
 ) -> EnhancementResult:
     """Convenience function for quick prompt enhancement.
 
@@ -1068,6 +1167,8 @@ async def enhance_prompt(
         security_level: Security classification level
         compliance_mode: Compliance mode (HIPAA, TACTICAL, etc.) or None for default
         force_offline: Force air-gapped mode regardless of security level
+        include_search: Include search context in enhancement (default True)
+        format_for_model: Apply model-specific formatting (default True)
 
     Returns:
         EnhancementResult with enhanced prompt and metadata
@@ -1080,7 +1181,13 @@ async def enhance_prompt(
         >>> print(result.enhanced_prompt)
     """
     return await get_enhancer().enhance(
-        query, model_id, security_level, compliance_mode, force_offline
+        query,
+        model_id,
+        security_level,
+        compliance_mode,
+        force_offline,
+        include_search=include_search,
+        format_for_model=format_for_model,
     )
 
 

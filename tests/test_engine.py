@@ -23,8 +23,6 @@ from aipea.engine import (
     OllamaOfflineClient,
     PromptEngine,
     SearchContext,
-    StrategicTierProcessor,
-    TacticalTierProcessor,
     get_ollama_client,
     get_prompt_engine,
 )
@@ -216,6 +214,7 @@ class TestPromptEngine:
         assert "AI Safety Research 2025" in prompt
         assert "ai-safety.org" in prompt
         assert "complex" in prompt.lower()
+        assert "[Supplementary Context from Web Search" in prompt
         assert mock_search_context.search_timestamp[:10] in prompt  # Date included
 
     @pytest.mark.asyncio
@@ -255,7 +254,7 @@ class TestPromptEngine:
 
     @pytest.mark.asyncio
     async def test_model_specific_optimization_openai(self, prompt_engine, mock_search_context):
-        """Test model-specific prompt optimization for OpenAI"""
+        """Test model-specific prompt returns base prompt with search context for OpenAI"""
         base_prompt = "Analyze the current state of artificial intelligence"
 
         optimized = await prompt_engine.create_model_specific_prompt(
@@ -264,13 +263,12 @@ class TestPromptEngine:
             search_context=mock_search_context,
         )
 
-        assert "System:" in optimized  # OpenAI system message format
-        assert "Clear headings and structure" in optimized
+        assert base_prompt in optimized
         assert "AI Safety Research 2025" in optimized  # Search context included
 
     @pytest.mark.asyncio
     async def test_model_specific_optimization_claude(self, prompt_engine, mock_search_context):
-        """Test model-specific prompt optimization for Claude"""
+        """Test model-specific prompt returns base prompt with search context for Claude"""
         base_prompt = "Evaluate ethical implications of AI development"
 
         optimized = await prompt_engine.create_model_specific_prompt(
@@ -279,13 +277,12 @@ class TestPromptEngine:
             search_context=mock_search_context,
         )
 
-        assert "sophisticated analysis" in optimized
-        assert "nuanced understanding" in optimized
+        assert base_prompt in optimized
         assert "<search_context>" in optimized  # Claude XML-formatted search context
 
     @pytest.mark.asyncio
     async def test_model_specific_optimization_gemini(self, prompt_engine, mock_search_context):
-        """Test model-specific prompt optimization for Gemini"""
+        """Test model-specific prompt returns base prompt with search context for Gemini"""
         base_prompt = "Create a comprehensive technology roadmap"
 
         optimized = await prompt_engine.create_model_specific_prompt(
@@ -294,13 +291,12 @@ class TestPromptEngine:
             search_context=mock_search_context,
         )
 
-        assert "comprehensive response" in optimized
-        assert "practical application" in optimized
+        assert base_prompt in optimized
         assert "Supporting Information:" in optimized  # Gemini-formatted search context
 
     def test_prompt_template_complexity_simple(self, prompt_engine):
         """Test prompt template for simple complexity"""
-        template = prompt_engine._get_prompt_template("simple", "general")
+        template = prompt_engine._get_prompt_template("simple")
 
         assert "straightforward query" in template
         assert "direct, accurate response" in template
@@ -308,33 +304,29 @@ class TestPromptEngine:
 
     def test_prompt_template_complexity_complex(self, prompt_engine):
         """Test prompt template for complex complexity"""
-        template = prompt_engine._get_prompt_template("complex", "general")
+        template = prompt_engine._get_prompt_template("complex")
 
         assert "complex query" in template
         assert "deep, systematic analysis" in template
         assert "comprehensive reasoning" in template
 
-    def test_prompt_template_model_specific_instructions(self, prompt_engine):
-        """Test model-specific instructions in templates"""
-        openai_template = prompt_engine._get_prompt_template("medium", "openai")
-        claude_template = prompt_engine._get_prompt_template("medium", "claude")
-        gemini_template = prompt_engine._get_prompt_template("medium", "gemini")
+    def test_prompt_template_query_type_instructions(self, prompt_engine):
+        """Test query-type-specific instructions in templates"""
+        technical_template = prompt_engine._get_prompt_template("medium", "technical")
+        research_template = prompt_engine._get_prompt_template("medium", "research")
 
-        # OpenAI specific
-        assert "structured, logical responses" in openai_template
-        assert "step-by-step reasoning" in openai_template
+        # Different query types should produce different instructions
+        assert technical_template != research_template
 
-        # Claude specific
-        assert "detailed, nuanced analysis" in claude_template
-        assert "sophisticated reasoning" in claude_template
+        # Technical type includes implementation-focused guidance
+        assert "implementation details" in technical_template
 
-        # Gemini specific
-        assert "comprehensive, well-structured" in gemini_template
-        assert "practical applications" in gemini_template
+        # Research type includes evidence-focused guidance
+        assert "evidence-based" in research_template
 
     def test_current_date_integration(self, prompt_engine):
         """Test that current date is properly integrated"""
-        template = prompt_engine._get_prompt_template("medium", "general")
+        template = prompt_engine._get_prompt_template("medium")
 
         assert str(datetime.now(UTC).year) in template  # Current year
         assert "Today's date is" in template
@@ -1225,243 +1217,15 @@ class TestProcessWithOllama:
 
 
 # ---------------------------------------------------------------------------
-# 14. TacticalTierProcessor (line 995)
+# 21. PromptEngine.classify_query (line 1509)
 # ---------------------------------------------------------------------------
 
 
-class TestTacticalTierProcessor:
-    """Tests for TacticalTierProcessor.tier, process, and _get_available_models."""
-
-    def test_tier_returns_tactical(self):
-        """tier property returns ProcessingTier.TACTICAL (line 998)."""
-        proc = TacticalTierProcessor()
-        assert proc.tier == ProcessingTier.TACTICAL
-
-    @pytest.mark.asyncio
-    async def test_process_without_orchestrator(self):
-        """Processes with template fallback when no orchestrator (lines 1014-1073)."""
-        proc = TacticalTierProcessor(orchestrator=None)
-        result = await proc.process("How to install python packages")
-
-        assert result.tier_used == ProcessingTier.TACTICAL
-        assert result.confidence == 0.85
-        assert "tactical analysis" in result.enhanced_query.lower()
-        assert result.enhancement_metadata["llm_assisted"] is False
-
-    @pytest.mark.asyncio
-    async def test_process_with_search_context(self):
-        """Includes search context when provided in context dict."""
-        proc = TacticalTierProcessor(orchestrator=None)
-        sc = SearchContext(
-            query="test",
-            results=[SearchResult(title="T", url="https://t.com", snippet="S", score=0.8)],
-            source="t.com",
-            confidence=0.8,
-        )
-        result = await proc.process("test", context={"search_context": sc})
-
-        assert result.search_context is sc
-        assert result.enhancement_metadata["has_search_context"] is True
-
-    @pytest.mark.asyncio
-    async def test_process_with_orchestrator_success(self):
-        """Uses orchestrator.consult for LLM disambiguation (lines 1051-1069)."""
-        mock_response = SimpleNamespace(content="Improved query: what are best practices?")
-        mock_orch = MagicMock()
-        mock_orch.consult = AsyncMock(return_value=[mock_response])
-        mock_orch.providers = {"openai": True}
-
-        proc = TacticalTierProcessor(orchestrator=mock_orch)
-        result = await proc.process("best practices")
-
-        assert result.enhancement_metadata["llm_assisted"] is True
-        assert result.confidence == 0.88
-        assert "Improved query" in result.enhanced_query
-
-    @pytest.mark.asyncio
-    async def test_process_with_orchestrator_exception_fallback(self):
-        """Falls back on orchestrator exception (line 1070-1071)."""
-        mock_orch = MagicMock()
-        mock_orch.consult = AsyncMock(side_effect=RuntimeError("API down"))
-        mock_orch.providers = {"openai": True}
-
-        proc = TacticalTierProcessor(orchestrator=mock_orch)
-        result = await proc.process("test query")
-
-        assert result.enhancement_metadata["llm_assisted"] is False
-        assert result.confidence == 0.85
-
-    @pytest.mark.asyncio
-    async def test_process_with_orchestrator_empty_response(self):
-        """Handles empty response content from orchestrator."""
-        mock_response = SimpleNamespace(content="")
-        mock_orch = MagicMock()
-        mock_orch.consult = AsyncMock(return_value=[mock_response])
-        mock_orch.providers = {"openai": True}
-
-        proc = TacticalTierProcessor(orchestrator=mock_orch)
-        result = await proc.process("test query")
-
-        # Empty content means llm_assisted stays False
-        assert result.enhancement_metadata["llm_assisted"] is False
-
-    def test_get_available_models_no_orchestrator(self):
-        """Returns empty list without orchestrator (line 1089)."""
-        proc = TacticalTierProcessor(orchestrator=None)
-        assert proc._get_available_models() == []
-
-    def test_get_available_models_with_providers(self):
-        """Returns at most 1 model tuple for tactical tier (lines 1091-1094)."""
-        mock_orch = MagicMock()
-        mock_orch.providers = {"openai": True, "anthropic": True}
-
-        proc = TacticalTierProcessor(orchestrator=mock_orch)
-        models = proc._get_available_models()
-        assert len(models) == 1
-        assert models[0][1] == "default"
-
-
-# ---------------------------------------------------------------------------
-# 17. StrategicTierProcessor (line 1133)
-# ---------------------------------------------------------------------------
-
-
-class TestStrategicTierProcessor:
-    """Tests for StrategicTierProcessor."""
-
-    def test_tier_returns_strategic(self):
-        """tier property returns ProcessingTier.STRATEGIC (line 1141)."""
-        proc = StrategicTierProcessor()
-        assert proc.tier == ProcessingTier.STRATEGIC
-
-    @pytest.mark.asyncio
-    async def test_process_without_orchestrator(self):
-        """Template-only strategic processing (lines 1157-1203)."""
-        proc = StrategicTierProcessor(orchestrator=None)
-        result = await proc.process("What is the future of quantum computing?")
-
-        assert result.tier_used == ProcessingTier.STRATEGIC
-        assert result.confidence == 0.92
-        assert "Strategic Analysis Required" in result.enhanced_query
-        assert result.enhancement_metadata["multi_agent"] is False
-        assert result.enhancement_metadata["critique_rounds"] == 0
-
-    @pytest.mark.asyncio
-    async def test_process_with_orchestrator_success(self):
-        """Multi-step reasoning when orchestrator provided (lines 1191-1199)."""
-        # Create mock responses for each stage
-        decompose_resp = SimpleNamespace(content="Sub Q1\nSub Q2")
-        analysis_resp = SimpleNamespace(content="Analysis for sub-question")
-        synthesis_resp = SimpleNamespace(content="Final synthesis")
-        critique_resp = SimpleNamespace(content="APPROVED")
-
-        mock_orch = MagicMock()
-        mock_orch.consult = AsyncMock(
-            side_effect=[
-                # Tactical process call (internal)
-                [],
-                # Decompose
-                [decompose_resp],
-                # Analyze sub Q1
-                [analysis_resp],
-                # Analyze sub Q2
-                [analysis_resp],
-                # Synthesis
-                [synthesis_resp],
-                # Critique (APPROVED on first round)
-                [critique_resp],
-            ]
-        )
-        mock_orch.providers = {"openai": True}
-
-        proc = StrategicTierProcessor(orchestrator=mock_orch)
-        result = await proc.process("Complex multi-domain question")
-
-        assert result.enhancement_metadata["multi_agent"] is True
-        assert result.enhancement_metadata["critique_rounds"] >= 1
-        assert result.tier_used == ProcessingTier.STRATEGIC
-
-    @pytest.mark.asyncio
-    async def test_process_with_orchestrator_exception_fallback(self):
-        """Falls back on orchestrator exception (line 1200-1201)."""
-        mock_orch = MagicMock()
-        mock_orch.consult = AsyncMock(side_effect=RuntimeError("API down"))
-        mock_orch.providers = {"openai": True}
-
-        proc = StrategicTierProcessor(orchestrator=mock_orch)
-        result = await proc.process("test")
-
-        assert result.enhancement_metadata["multi_agent"] is False
-        assert "Strategic Analysis Required" in result.enhanced_query
-
-    @pytest.mark.asyncio
-    async def test_run_strategic_reasoning_no_orchestrator_raises(self):
-        """Raises RuntimeError when orchestrator is None (line 1229-1230)."""
-        proc = StrategicTierProcessor(orchestrator=None)
-        with pytest.raises(RuntimeError, match="not initialized"):
-            await proc._run_strategic_reasoning("q", "ctx", [("openai", "default")])
-
-    @pytest.mark.asyncio
-    async def test_run_strategic_reasoning_critique_loop(self):
-        """Critique loop refines until APPROVED (lines 1279-1315)."""
-        critique_call_count = 0
-
-        async def mock_consult(prompt, **_kwargs):
-            nonlocal critique_call_count
-            if "Break the following" in prompt:
-                return [SimpleNamespace(content="Sub question 1")]
-            elif "concise analysis" in prompt:
-                return [SimpleNamespace(content="Analysis result")]
-            elif "Synthesize" in prompt:
-                return [SimpleNamespace(content="Initial synthesis")]
-            elif "Critically evaluate" in prompt:
-                critique_call_count += 1
-                if critique_call_count >= 2:
-                    return [SimpleNamespace(content="APPROVED")]
-                return [SimpleNamespace(content="Needs more detail on X")]
-            elif "Improve this response" in prompt:
-                return [SimpleNamespace(content="Refined synthesis")]
-            return []
-
-        mock_orch = MagicMock()
-        mock_orch.consult = AsyncMock(side_effect=mock_consult)
-
-        proc = StrategicTierProcessor(orchestrator=mock_orch)
-        proc._orchestrator = mock_orch
-
-        result_text, rounds = await proc._run_strategic_reasoning(
-            "complex query", "tactical context", [("openai", "default")]
-        )
-        assert rounds == 2
-        assert (
-            "Refined synthesis" in result_text or "APPROVED" in result_text or len(result_text) > 0
-        )
-
-    def test_get_available_models_no_orchestrator(self):
-        """Returns empty list without orchestrator (line 1319)."""
-        proc = StrategicTierProcessor(orchestrator=None)
-        assert proc._get_available_models() == []
-
-    def test_get_available_models_with_providers(self):
-        """Returns at most 2 model tuples for strategic tier (lines 1321-1324)."""
-        mock_orch = MagicMock()
-        mock_orch.providers = {"openai": True, "anthropic": True, "gemini": True}
-
-        proc = StrategicTierProcessor(orchestrator=mock_orch)
-        models = proc._get_available_models()
-        assert len(models) == 2
-
-
-# ---------------------------------------------------------------------------
-# 21-22. PromptEngine.classify_query and enhance_query (lines 1509, 1520)
-# ---------------------------------------------------------------------------
-
-
-class TestPromptEngineClassifyAndEnhance:
-    """Tests for PromptEngine.classify_query and enhance_query."""
+class TestPromptEngineClassifyQuery:
+    """Tests for PromptEngine.classify_query."""
 
     def test_classify_query_technical(self):
-        """classify_query delegates to offline processor (line 1428)."""
+        """classify_query delegates to offline processor."""
         engine = PromptEngine()
         qtype = engine.classify_query("How do I debug a python function?")
         assert qtype == QueryType.TECHNICAL
@@ -1477,39 +1241,6 @@ class TestPromptEngineClassifyAndEnhance:
         engine = PromptEngine()
         qtype = engine.classify_query("Hello there")
         assert qtype == QueryType.UNKNOWN
-
-    @pytest.mark.asyncio
-    async def test_enhance_query_offline_tier(self):
-        """enhance_query routes to offline processor (line 1447-1448)."""
-        engine = PromptEngine()
-        result = await engine.enhance_query("How to deploy code", ProcessingTier.OFFLINE)
-        assert result.tier_used == ProcessingTier.OFFLINE
-        assert isinstance(result, EnhancedQuery)
-
-    @pytest.mark.asyncio
-    async def test_enhance_query_tactical_tier(self):
-        """enhance_query routes to tactical processor (line 1449-1450)."""
-        engine = PromptEngine()
-        result = await engine.enhance_query("Analyze data metrics", ProcessingTier.TACTICAL)
-        assert result.tier_used == ProcessingTier.TACTICAL
-
-    @pytest.mark.asyncio
-    async def test_enhance_query_strategic_tier(self):
-        """enhance_query routes to strategic processor (line 1451-1452)."""
-        engine = PromptEngine()
-        result = await engine.enhance_query("Plan a long-term roadmap", ProcessingTier.STRATEGIC)
-        assert result.tier_used == ProcessingTier.STRATEGIC
-
-    @pytest.mark.asyncio
-    async def test_enhance_query_invalid_tier_raises(self):
-        """enhance_query raises ValueError for unsupported tier (line 1453-1454)."""
-        engine = PromptEngine()
-        # Create a mock enum value that doesn't match any case
-        fake_tier = MagicMock(spec=ProcessingTier)
-        fake_tier.value = "nonexistent"
-        fake_tier.name = "NONEXISTENT"
-        with pytest.raises(ValueError, match="Unsupported processing tier"):
-            await engine.enhance_query("test", fake_tier)
 
 
 # ---------------------------------------------------------------------------
