@@ -143,11 +143,11 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 
 ## Wave 11 — Deferred
 
-### 47. `TacticalTierProcessor.process` `has_search_context` metadata inconsistency — DEFERRED
-- **File**: `src/aipea/engine.py:1070-1132`
+### 47. `TacticalTierProcessor.process` `has_search_context` metadata inconsistency — RESOLVED (class deleted)
+- **File**: `src/aipea/engine.py` (formerly lines 1070-1132)
 - **Severity**: LOW | **Confidence**: MEDIUM
 - **Source**: Claude sweep agent
-- **Rationale**: When a wrong-typed `search_context` is passed via the `context` dict, `has_search_context` metadata reports `True` before `EnhancedQuery.__post_init__` silently resets it to `None`. No crash occurs (the type guard catches it), and the metadata field is informational only. Fixing requires restructuring the metadata computation order relative to dataclass construction.
+- **Resolution**: `TacticalTierProcessor` was removed as dead code in the gap analysis remediation (v1.2.0). The class was never called by the enhancer pipeline. Issue is moot.
 
 ## Quality Gate Ultrathink Fix (2026-02-18)
 

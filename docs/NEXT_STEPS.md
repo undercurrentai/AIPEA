@@ -222,7 +222,9 @@ Re-exports PromptEngine as PCWPromptEngine for backward compatibility.
 from aipea.engine import PromptEngine as PCWPromptEngine  # noqa: F401
 from aipea.engine import (  # noqa: F401
     SearchContext, EnhancedQuery, TierProcessor,
-    OfflineTierProcessor, TacticalTierProcessor, StrategicTierProcessor,
+    OfflineTierProcessor,
+    # TacticalTierProcessor — REMOVED in v1.2.0 (dead code)
+    # StrategicTierProcessor — REMOVED in v1.2.0 (dead code)
     OllamaOfflineClient, OllamaModelInfo, OfflineModel,
     get_ollama_client, get_prompt_engine,
     CLAUDE_CODE_AVAILABLE,

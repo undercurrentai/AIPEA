@@ -10,19 +10,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **enhancer**: Ollama LLM integration in offline enhancement path — `_try_ollama_enhancement()` uses local SLMs when available, falls back to templates gracefully
 - **enhancer**: Cached `OfflineTierProcessor` instance to avoid per-call 18-regex recompilation
-- **knowledge**: `SEED_KNOWLEDGE` (13 entries, 7 domains) and `seed_knowledge_base()` helper for populating offline KB
+- **enhancer**: `include_search` and `format_for_model` optional params on `enhance()` and `enhance_prompt()` — consumers can now skip search context or model-specific formatting independently
+- **enhancer**: `_scan_search_results()` filters web search results for prompt injection before inclusion in enhanced prompts (defense-in-depth)
+- **enhancer**: `_gather_context_for_enhance()` extracted from `enhance()` to reduce cyclomatic complexity
+- **knowledge**: `SEED_KNOWLEDGE` expanded from 13 to 20 entries across 7 domains — added MILITARY (2: COMSEC, tactical decision frameworks), LOGISTICS (1: field sustainment), COMMUNICATIONS (2: network architecture, secure messaging), MEDICAL (1: clinical decision support), GENERAL (1: data privacy by design)
+- **knowledge**: `seed_knowledge_base()` helper for populating offline KB
 - **cli**: `aipea seed-kb` command to populate knowledge base with seed data
 - **cli**: `_doctor_ollama()` diagnostic section — checks Ollama availability, model count, best model
 - **cli**: `_doctor_knowledge_base()` diagnostic section — checks KB node count, domain summary
 - **engine**: `gemma3:1b` (815MB, 1B params) added to `OfflineModel` enum and Tier 1 preference order
-- 77 new tests (610 total, 91.02% coverage)
+- 89 new tests (622 total, 91.97% coverage)
 
 ### Changed
 - **enhancer**: Offline tier now attempts Ollama LLM enhancement before falling back to template-only mode
 - **engine**: `get_best_available_model()` preference order updated: phi3:mini > gemma3:1b > gemma3:270m
+- **engine**: `_get_prompt_template()` no longer accepts `model_type` parameter — content-only enrichment, no behavioral directives
+- **engine**: `create_model_specific_prompt()` simplified to return base prompt with optional search context (no behavioral wrapping)
+- **engine**: Search context framing changed from "Relevant Search Context:" to provenance-aware "[Supplementary Context from Web Search — not part of the user's original query...]"
+
+### Removed
+- **engine**: `TacticalTierProcessor` class (~150 lines) — dead code, never called by enhancer
+- **engine**: `StrategicTierProcessor` class (~200 lines) — dead code, never called by enhancer
+- **engine**: `PromptEngine.enhance_query()` method (~30 lines) — unused router for deleted tier processors
+- **engine**: Model behavioral directives ("You excel at...") from prompt templates — preprocessor should enrich content, not prescribe response style
 
 ### Fixed
 - **enhancer**: `TYPE_CHECKING` import for `OfflineTierProcessor` resolves Pyright attribute access diagnostic
+- **security**: FEDRAMP compliance mode now logs explicit warning that it is an unsupported stub with config-only behavior (no data residency, no FIPS, no continuous monitoring)
 
 ## [1.1.0] - 2026-03-09
 

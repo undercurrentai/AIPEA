@@ -348,7 +348,7 @@ Key implementation details:
 - **Access tracking**: Every `search()` call increments `access_count` and updates
   `last_accessed` for retrieved nodes.
 - **Context manager**: Supports `with` statement for clean connection lifecycle.
-- **Seed data**: `SEED_KNOWLEDGE` (13 entries across 7 domains) provides baseline
+- **Seed data**: `SEED_KNOWLEDGE` (20 entries across 7 domains) provides baseline
   knowledge for offline mode. Populated via `seed_knowledge_base(kb)` helper or
   `aipea seed-kb` CLI command.
 
@@ -553,8 +553,14 @@ class QueryAnalysis:
 | Tier | Class | Latency | Confidence | Mechanism |
 |------|-------|---------|------------|-----------|
 | **OFFLINE** | `OfflineTierProcessor` | <2s | 0.70-0.82 | Pattern matching + templates, optional Ollama SLMs |
-| **TACTICAL** | `TacticalTierProcessor` | 2-5s | 0.85-0.88 | Template enhancement + search context + optional LLM disambiguation |
-| **STRATEGIC** | `StrategicTierProcessor` | 5-15s | 0.92-0.98 | Multi-step: decompose → parallel analyze → synthesize → critique loop |
+| **TACTICAL** | *(removed — see Note)* | — | — | — |
+| **STRATEGIC** | *(removed — see Note)* | — | — | — |
+
+> **Note (v1.2.0)**: `TacticalTierProcessor` and `StrategicTierProcessor` were removed as dead code.
+> The enhancer bypassed both classes, routing directly to `formulate_search_aware_prompt()`.
+> Enhancement depth is now determined by query complexity labeling and search routing,
+> not by tier processor classes. The tier *labels* (OFFLINE, TACTICAL, STRATEGIC) remain
+> as `ProcessingTier` enum values for metadata and routing purposes.
 
 #### 4.2.2 Offline Tier (Tier 0)
 
@@ -667,6 +673,8 @@ result = await enhance_prompt(
     security_level=SecurityLevel.UNCLASSIFIED,  # Optional, default UNCLASSIFIED
     compliance_mode=ComplianceMode.HIPAA,        # Optional, default None (uses enhancer default)
     force_offline=False,                         # Optional, default False
+    include_search=True,                         # Optional, default True — skip search context
+    format_for_model=True,                       # Optional, default True — skip model-specific formatting
 )
 
 # result.enhanced_prompt      → str (ready for LLM)
@@ -724,8 +732,10 @@ class AgoraPromptEnhancement:
 
 # Convenience functions remain for backward compatibility
 async def enhance_prompt(query, model_id, security_level=UNCLASSIFIED,
-                         compliance_mode=None, force_offline=False) -> EnhancementResult:
-    return await get_enhancer().enhance(query, model_id, security_level, compliance_mode, force_offline)
+                         compliance_mode=None, force_offline=False,
+                         include_search=True, format_for_model=True) -> EnhancementResult:
+    return await get_enhancer().enhance(query, model_id, security_level, compliance_mode,
+                                        force_offline, include_search, format_for_model)
 
 async def enhance_for_agora(query, model_ids, security_level) -> dict[str, EnhancedRequest]:
     return await get_enhancer().enhance_for_models(query, model_ids, security_level)
@@ -942,7 +952,7 @@ on `AIPEAConfig` tracks where each value was resolved from.
 | `aipea check [--connectivity]` | Verify config and test API keys |
 | `aipea doctor` | Full diagnostic (Python, deps, config, security, Ollama, knowledge base, connectivity) |
 | `aipea info` | Quick library summary |
-| `aipea seed-kb` | Populate offline knowledge base with 13 seed entries across 7 domains |
+| `aipea seed-kb` | Populate offline knowledge base with 20 seed entries across 7 domains |
 
 ### 8.3 Embedded Library Mode (Primary)
 
@@ -1160,8 +1170,8 @@ from aipea.analyzer import (
 from aipea.engine import (
     PromptEngine,
     OfflineTierProcessor,          # (not in __all__)
-    TacticalTierProcessor,         # (not in __all__)
-    StrategicTierProcessor,        # (not in __all__)
+    # TacticalTierProcessor — REMOVED in v1.2.0 (dead code)
+    # StrategicTierProcessor — REMOVED in v1.2.0 (dead code)
     TierProcessor,                 # (not in __all__)
     EnhancedQuery,                 # (not in __all__)
     SearchContext,                  # (not in __all__) — re-export of aipea.search.SearchContext
@@ -1200,6 +1210,8 @@ class AIPEAEnhancer:
         security_level: SecurityLevel = SecurityLevel.UNCLASSIFIED,
         compliance_mode: ComplianceMode | None = None,
         force_offline: bool = False,
+        include_search: bool = True,
+        format_for_model: bool = True,
     ) -> EnhancementResult: ...
 
     async def enhance_for_models(
