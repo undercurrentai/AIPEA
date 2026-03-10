@@ -12,7 +12,12 @@ systems:
     markets: ["US","EU"]
     classification:
       eu_ai_act: "assess-if-high-risk-per-Annex-III | transparency-only | GPAI"
-      notes: "TODO: complete formal classification analysis"
+      notes: >-
+        AIPEA is a prompt-preprocessing library — it does not make autonomous decisions,
+        perform biometric identification, operate safety-critical systems, or engage in social
+        scoring. Under the EU AI Act risk taxonomy it falls into the "minimal risk" category
+        (Title III, Chapter 1). No Annex III high-risk use case applies. Transparency obligations
+        (Art. 52) are met by documenting that outputs are AI-enriched prompts, not end-user content.
     model_type: "GPAI | task-specific | ensemble"
     data_categories: ["customer support transcripts", "product docs"]
     articles_applicable: ["9","10","11","12","13","14","15","17"]

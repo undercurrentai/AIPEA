@@ -799,7 +799,7 @@ class AIPEAEnhancer:
         self,
         query: str,
         analysis: QueryAnalysis,
-        _security_context: SecurityContext,
+        security_context: SecurityContext,
     ) -> SearchContext | None:
         """Gather context from online search providers.
 
@@ -809,11 +809,18 @@ class AIPEAEnhancer:
         Args:
             query: The user's query
             analysis: Query analysis with search strategy
-            security_context: Security context for filtering
+            security_context: Security context for filtering (reserved for
+                future security-level-aware search filtering)
 
         Returns:
             SearchContext with search results, or None if unavailable
         """
+        # Log security context for audit trail; future: filter results by level
+        logger.debug(
+            "Online context gather: security_level=%s, compliance=%s",
+            security_context.security_level.value,
+            security_context.compliance_mode.value,
+        )
         if analysis.search_strategy == SearchStrategy.NONE:
             logger.debug("Search strategy NONE, skipping online context")
             return None
@@ -948,7 +955,7 @@ class AIPEAEnhancer:
     def _create_passthrough_result(
         self,
         query: str,
-        _model_id: str,
+        model_id: str,
         security_level: SecurityLevel,
         compliance_mode: ComplianceMode,
         start_time: float,
@@ -990,16 +997,18 @@ class AIPEAEnhancer:
             search_context=None,
             enhancement_time_ms=enhancement_time_ms,
             was_enhanced=False,
-            enhancement_notes=["Enhancement disabled - query passed through unmodified"],
+            enhancement_notes=[
+                f"Enhancement disabled for model '{model_id}' - query passed through unmodified"
+            ],
         )
 
     def _create_blocked_result(
         self,
         query: str,
-        _model_id: str,
+        model_id: str,
         security_context: SecurityContext,
-        _scan_result: ScanResult,
-        _compliance_mode: ComplianceMode,
+        scan_result: ScanResult,
+        compliance_mode: ComplianceMode,
         start_time: float,
         enhancement_notes: list[str],
     ) -> EnhancementResult:
@@ -1009,7 +1018,7 @@ class AIPEAEnhancer:
             query: The original query
             model_id: Target model ID
             security_context: Security context
-            scan_result: Security scan result
+            scan_result: Security scan result with flags
             compliance_mode: Compliance mode
             start_time: Start time for timing calculation
             enhancement_notes: Notes to include
@@ -1017,6 +1026,12 @@ class AIPEAEnhancer:
         Returns:
             EnhancementResult indicating blocked query
         """
+        # Enrich notes with audit-trail metadata
+        enhancement_notes.append(f"Blocked for model '{model_id}'")
+        enhancement_notes.append(f"Compliance mode: {compliance_mode.value}")
+        if scan_result.flags:
+            enhancement_notes.append(f"Security flags: {', '.join(scan_result.flags)}")
+
         # Create minimal analysis
         analysis = QueryAnalysis(
             query=query,
