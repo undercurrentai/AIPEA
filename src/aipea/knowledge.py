@@ -697,10 +697,183 @@ class OfflineKnowledgeBase:
         return deleted
 
 
+# =============================================================================
+# SEED KNOWLEDGE
+# =============================================================================
+
+# Curated knowledge entries for bootstrapping the offline KB.
+# Each tuple: (content, domain, relevance_score)
+SEED_KNOWLEDGE: list[tuple[str, KnowledgeDomain, float]] = [
+    # TECHNICAL
+    (
+        "REST API security best practices: Always use HTTPS/TLS for all endpoints. "
+        "Implement authentication via OAuth 2.0 or API keys. Apply rate limiting to "
+        "prevent abuse. Validate and sanitize all input on the server side. Use CORS "
+        "headers to restrict cross-origin access. Never expose stack traces or internal "
+        "errors to clients. Implement proper logging and monitoring. Use short-lived "
+        "tokens with refresh mechanisms. Apply the principle of least privilege to all "
+        "API scopes and permissions.",
+        KnowledgeDomain.TECHNICAL,
+        0.90,
+    ),
+    (
+        "Python async/await patterns: Use asyncio.gather() for concurrent I/O operations. "
+        "Avoid blocking calls in async functions — use asyncio.to_thread() for CPU-bound "
+        "or legacy synchronous code. Use async context managers (async with) for resource "
+        "management. Prefer asyncio.TaskGroup (Python 3.11+) over gather() for structured "
+        "concurrency with proper error propagation. Use asyncio.Lock for shared mutable "
+        "state. Never mix sync and async without explicit bridging.",
+        KnowledgeDomain.TECHNICAL,
+        0.88,
+    ),
+    (
+        "Database optimization strategies: Index columns used in WHERE, JOIN, and ORDER BY "
+        "clauses. Use EXPLAIN ANALYZE to identify slow queries. Prefer batch operations over "
+        "row-by-row processing. Implement connection pooling to reduce overhead. Use read "
+        "replicas for read-heavy workloads. Partition large tables by date or category. "
+        "Avoid SELECT *; specify only needed columns. Use prepared statements to prevent "
+        "SQL injection and improve plan caching.",
+        KnowledgeDomain.TECHNICAL,
+        0.85,
+    ),
+    (
+        "Container security hardening: Run containers as non-root users. Use minimal base "
+        "images (distroless or Alpine). Scan images for vulnerabilities with Trivy or Grype. "
+        "Set resource limits (CPU, memory) to prevent denial of service. Use read-only "
+        "filesystems where possible. Never store secrets in images; use runtime injection "
+        "via environment variables or secret managers. Implement network policies to restrict "
+        "inter-container communication.",
+        KnowledgeDomain.TECHNICAL,
+        0.85,
+    ),
+    # CYBERSECURITY
+    (
+        "OWASP Top 10 (2025 edition) key mitigations: Broken Access Control — enforce "
+        "server-side authorization checks. Cryptographic Failures — use TLS 1.3, AES-256, "
+        "and avoid deprecated algorithms. Injection — use parameterized queries and input "
+        "validation. Insecure Design — threat model during design phase. Security "
+        "Misconfiguration — automate hardening with IaC. Vulnerable Components — maintain "
+        "SBOM and patch regularly. Authentication Failures — implement MFA and credential "
+        "stuffing protection. SSRF — validate and allowlist outbound URLs.",
+        KnowledgeDomain.CYBERSECURITY,
+        0.92,
+    ),
+    (
+        "Zero Trust Architecture principles: Never trust, always verify. Authenticate and "
+        "authorize every access request regardless of network location. Apply least-privilege "
+        "access with just-in-time and just-enough-access (JIT/JEA). Assume breach — segment "
+        "networks, encrypt data in transit and at rest, use microsegmentation. Continuously "
+        "monitor and validate security posture. Use identity as the primary security "
+        "perimeter instead of network boundaries.",
+        KnowledgeDomain.CYBERSECURITY,
+        0.88,
+    ),
+    # ENGINEERING
+    (
+        "CI/CD pipeline best practices: Keep builds fast (under 10 minutes for unit tests). "
+        "Run tests in parallel where possible. Use caching for dependencies and build "
+        "artifacts. Implement trunk-based development with short-lived feature branches. "
+        "Require all tests to pass before merging. Automate security scanning (SAST, DAST, "
+        "SCA) in the pipeline. Use environment promotion (dev → staging → production) with "
+        "approval gates. Implement rollback mechanisms for every deployment.",
+        KnowledgeDomain.ENGINEERING,
+        0.87,
+    ),
+    (
+        "Microservices communication patterns: Synchronous — REST/HTTP for simple request-"
+        "response, gRPC for high-performance inter-service calls. Asynchronous — message "
+        "queues (SQS, RabbitMQ) for decoupled processing, event streaming (Kafka) for "
+        "real-time data pipelines. Use circuit breakers (e.g., resilience4j) to handle "
+        "downstream failures gracefully. Implement retries with exponential backoff and "
+        "jitter. Use service mesh (Istio, Linkerd) for observability and traffic management.",
+        KnowledgeDomain.ENGINEERING,
+        0.85,
+    ),
+    # GENERAL
+    (
+        "Effective prompt engineering techniques: Be specific and provide context about the "
+        "desired output format. Use system prompts to set the model's role and constraints. "
+        "Break complex tasks into smaller, focused prompts. Provide examples (few-shot "
+        "learning) for consistent output formatting. Use chain-of-thought prompting for "
+        "reasoning tasks. Specify the audience and technical level. Include negative "
+        "constraints (what NOT to do). Iterate and refine based on output quality.",
+        KnowledgeDomain.GENERAL,
+        0.90,
+    ),
+    (
+        "Technical writing best practices: Lead with the most important information. Use "
+        "active voice and concrete language. Structure content with clear headings and "
+        "logical hierarchy. Include code examples with comments explaining key decisions. "
+        "Define technical terms on first use. Use lists for sequential steps or parallel "
+        "items. Keep paragraphs focused on a single idea. Include diagrams for complex "
+        "architectures. Version your documentation alongside the code it describes.",
+        KnowledgeDomain.GENERAL,
+        0.82,
+    ),
+    # MEDICAL
+    (
+        "HIPAA compliance essentials for software systems: Implement access controls with "
+        "role-based permissions. Encrypt PHI at rest (AES-256) and in transit (TLS 1.2+). "
+        "Maintain audit logs of all PHI access. Implement automatic session timeouts. "
+        "Conduct regular risk assessments. Establish Business Associate Agreements (BAAs) "
+        "with all vendors handling PHI. Implement breach notification procedures (72-hour "
+        "reporting window). Apply minimum necessary standard — only access PHI needed for "
+        "the task at hand.",
+        KnowledgeDomain.MEDICAL,
+        0.88,
+    ),
+    # MILITARY / LOGISTICS
+    (
+        "Operational security (OPSEC) fundamentals: Identify critical information that could "
+        "compromise operations. Analyze potential adversary intelligence collection "
+        "capabilities. Assess vulnerabilities in information handling processes. Apply "
+        "countermeasures: need-to-know access, compartmentalization, secure communications. "
+        "Use classification markings consistently. Conduct regular OPSEC assessments. "
+        "Train personnel on social engineering awareness. Implement physical security "
+        "controls for sensitive workspaces.",
+        KnowledgeDomain.MILITARY,
+        0.85,
+    ),
+    (
+        "Supply chain risk management: Map the full supply chain to identify single points "
+        "of failure. Diversify suppliers across geographies. Implement real-time tracking "
+        "and visibility tools. Maintain safety stock for critical components. Develop "
+        "contingency plans for supplier disruptions. Conduct regular supplier audits and "
+        "assessments. Use predictive analytics for demand forecasting. Establish clear "
+        "escalation procedures for supply chain incidents.",
+        KnowledgeDomain.LOGISTICS,
+        0.83,
+    ),
+]
+
+
+async def seed_knowledge_base(kb: OfflineKnowledgeBase) -> int:
+    """Populate an OfflineKnowledgeBase with curated seed knowledge.
+
+    Adds domain-specific knowledge entries covering technical, security,
+    engineering, medical, military, and general topics. Existing entries
+    with the same content hash are updated (upsert behavior).
+
+    Args:
+        kb: The knowledge base to populate
+
+    Returns:
+        Number of knowledge entries added/updated
+    """
+    count = 0
+    for content, domain, relevance in SEED_KNOWLEDGE:
+        await kb.add_knowledge(content, domain, relevance_score=relevance)
+        count += 1
+    logger.info("Seeded %d knowledge entries across %d domains", count, len(KnowledgeDomain))
+    return count
+
+
 __all__ = [
+    "SEED_KNOWLEDGE",
     "KnowledgeDomain",
     "KnowledgeNode",
     "KnowledgeSearchResult",
     "OfflineKnowledgeBase",
     "StorageTier",
+    "seed_knowledge_base",
 ]

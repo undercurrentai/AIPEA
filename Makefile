@@ -1,4 +1,4 @@
-.PHONY: install fmt lint type test sec all ci mut sbom score deps perf
+.PHONY: install fmt lint type test sec all ci mut sbom score deps perf live
 
 install:
 	pip install -e ".[dev]"
@@ -23,6 +23,9 @@ sec:
 all: fmt lint type test
 
 ci: lint type test
+
+live:
+	pytest tests/test_live.py -v
 
 mut:
 	mutmut run --paths-to-mutate src --simple-output

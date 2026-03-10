@@ -1275,7 +1275,7 @@ class TestMultiSourceConcurrency:
         exa_called = False
         firecrawl_called = False
 
-        async def mock_exa_search(query: str, num_results: int = 5) -> SearchContext:
+        async def mock_exa_search(query: str, _num_results: int = 5) -> SearchContext:
             nonlocal exa_called
             exa_called = True
             return SearchContext(
@@ -1285,7 +1285,7 @@ class TestMultiSourceConcurrency:
                 confidence=0.8,
             )
 
-        async def mock_firecrawl_search(query: str, num_results: int = 5) -> SearchContext:
+        async def mock_firecrawl_search(query: str, _num_results: int = 5) -> SearchContext:
             nonlocal firecrawl_called
             firecrawl_called = True
             return SearchContext(

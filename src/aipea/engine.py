@@ -76,6 +76,7 @@ class OfflineModel(Enum):
     """
 
     # Tier 1: Currently available and tested
+    GEMMA3_1B = "gemma3:1b"  # Google 1B params, 815MB, good quality/size balance
     GEMMA3_270M = "gemma3:270m"  # Google 270M params, 291MB, edge-friendly
     PHI3_MINI = "phi3:mini"  # Microsoft 3.8B params, 2.2GB, good quality
 
@@ -86,7 +87,7 @@ class OfflineModel(Enum):
     @classmethod
     def tier1_models(cls) -> list[OfflineModel]:
         """Return Tier 1 models (tested and available)."""
-        return [cls.GEMMA3_270M, cls.PHI3_MINI]
+        return [cls.GEMMA3_1B, cls.GEMMA3_270M, cls.PHI3_MINI]
 
     @classmethod
     def tier2_models(cls) -> list[OfflineModel]:
@@ -240,7 +241,7 @@ class OllamaOfflineClient:
     async def get_best_available_model(self) -> OfflineModel | None:
         """Get the best available Tier 1 model.
 
-        Prefers phi3:mini (better quality) over gemma3:270m (faster).
+        Preference order: phi3:mini (best quality) > gemma3:1b > gemma3:270m (fastest).
 
         Returns:
             Best available OfflineModel, or None if none available
@@ -253,8 +254,12 @@ class OllamaOfflineClient:
 
         available_names = [m.name for m in self._available_models]
 
-        # Prefer phi3:mini for quality, fallback to gemma3:270m for speed
-        preference_order = [OfflineModel.PHI3_MINI, OfflineModel.GEMMA3_270M]
+        # Prefer phi3:mini for quality, then gemma3:1b, fallback to gemma3:270m
+        preference_order = [
+            OfflineModel.PHI3_MINI,
+            OfflineModel.GEMMA3_1B,
+            OfflineModel.GEMMA3_270M,
+        ]
         for model in preference_order:
             if model.value in available_names:
                 logger.info(f"Selected best available offline model: {model.value}")
@@ -1261,12 +1266,43 @@ class PromptEngine:
         self._strategic_processor = StrategicTierProcessor()
         logger.info("PromptEngine initialized with all tier processors")
 
-    def _get_prompt_template(self, complexity: str, model_type: str) -> str:
-        """Get a prompt template based on complexity and model type.
+    # Query-type-specific instructions injected into prompts
+    _QUERY_TYPE_INSTRUCTIONS: ClassVar[dict[str, str]] = {
+        "technical": (
+            "Focus on implementation details, code patterns, and technical accuracy. "
+            "Include concrete examples where appropriate."
+        ),
+        "research": (
+            "Prioritize evidence-based analysis with citations and data. "
+            "Distinguish established findings from emerging hypotheses."
+        ),
+        "creative": (
+            "Emphasize originality, varied perspectives, and creative expression. "
+            "Explore unconventional angles and novel approaches."
+        ),
+        "analytical": (
+            "Use structured comparison, data-driven reasoning, and clear criteria. "
+            "Present trade-offs and quantify differences where possible."
+        ),
+        "operational": (
+            "Provide step-by-step procedures with concrete actionable guidance. "
+            "Include prerequisites, potential pitfalls, and verification steps."
+        ),
+        "strategic": (
+            "Consider long-term implications, trade-offs, and decision frameworks. "
+            "Evaluate risks and present alternatives with their consequences."
+        ),
+    }
+
+    def _get_prompt_template(
+        self, complexity: str, model_type: str, query_type: str = "unknown"
+    ) -> str:
+        """Get a prompt template based on complexity, model type, and query type.
 
         Args:
             complexity: Query complexity level (simple, medium, complex)
             model_type: Target model type (openai, claude, gemini, general)
+            query_type: Classified query type (technical, research, etc.)
 
         Returns:
             Prompt template string with placeholders
@@ -1317,7 +1353,14 @@ class PromptEngine:
                 "Please provide a well-organized response appropriate to the query complexity."
             )
 
-        return f"{base_intro}\n\n{complexity_instructions}\n\n{model_instructions}"
+        # Query-type-specific instructions
+        type_instructions = self._QUERY_TYPE_INSTRUCTIONS.get(query_type.lower(), "")
+
+        parts = [base_intro, "", complexity_instructions, "", model_instructions]
+        if type_instructions:
+            parts.extend(["", type_instructions])
+
+        return "\n".join(parts)
 
     def classify_query(self, query: str) -> QueryType:
         """Classify a query into a query type.
@@ -1362,6 +1405,7 @@ class PromptEngine:
         complexity: str,
         search_context: SearchContext | None,
         model_type: str = "general",
+        query_type: str = "unknown",
     ) -> str:
         """Formulate a search-aware enhanced prompt.
 
@@ -1369,6 +1413,8 @@ class PromptEngine:
         - Current year for temporal awareness
         - Complexity-appropriate instructions
         - Model-specific optimization
+        - Query-type-specific guidance
+        - Model-aware query formatting
         - Search context when available
 
         Args:
@@ -1376,25 +1422,38 @@ class PromptEngine:
             complexity: Query complexity (simple, medium, complex)
             search_context: Optional search context to include
             model_type: Target model type for optimization
+            query_type: Classified query type (technical, research, etc.)
 
         Returns:
             Enhanced prompt string ready for model consumption
         """
         logger.debug(
-            "Formulating search-aware prompt: query='%s...', complexity=%s, model=%s",
+            "Formulating search-aware prompt: query='%s...', complexity=%s, model=%s, type=%s",
             query[:30],
             complexity,
             model_type,
+            query_type,
         )
 
-        # Get base template
-        template = self._get_prompt_template(complexity, model_type)
+        # Get base template (now includes query-type instructions)
+        template = self._get_prompt_template(complexity, model_type, query_type)
+
+        # Model-aware query formatting (Defect 3)
+        model_lower = model_type.lower()
+        if "openai" in model_lower or "gpt" in model_lower:
+            query_section = f"## Query\n{query}"
+        elif "claude" in model_lower or "anthropic" in model_lower:
+            query_section = f"<query>\n{query}\n</query>"
+        elif "gemini" in model_lower or "google" in model_lower:
+            query_section = f"Query:\n1. {query}"
+        else:
+            query_section = f"Query ({complexity} complexity): {query}"
 
         # Build prompt parts
         parts = [
             template,
             "",
-            f"Query ({complexity} complexity): {query}",
+            query_section,
         ]
 
         # Add search context if available

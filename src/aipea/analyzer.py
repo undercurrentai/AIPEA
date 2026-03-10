@@ -135,19 +135,32 @@ class QueryRouter:
             len(self._compiled_complexity),
         )
 
+    # Query types that indicate substantive queries deserving higher tiers.
+    # Boost must overcome the 0.1 base complexity + 0.3 OFFLINE ceiling,
+    # so TECHNICAL/RESEARCH need >=0.25 to reach TACTICAL.
+    _QUERY_TYPE_COMPLEXITY_BOOST: ClassVar[dict[QueryType, float]] = {
+        QueryType.TECHNICAL: 0.25,
+        QueryType.RESEARCH: 0.25,
+        QueryType.ANALYTICAL: 0.2,
+        QueryType.STRATEGIC: 0.3,
+        QueryType.OPERATIONAL: 0.15,
+    }
+
     def route(
         self,
         query: str,
         security_context: SecurityContext,
+        query_type: QueryType = QueryType.UNKNOWN,
     ) -> ProcessingTier:
         """Determine the optimal processing tier for a query.
 
-        Considers query complexity, temporal needs, domain, and security
-        context to select the appropriate processing tier.
+        Considers query complexity, temporal needs, domain, query type,
+        and security context to select the appropriate processing tier.
 
         Args:
             query: The query to route
             security_context: Security context for routing decisions
+            query_type: Classified query type for complexity boosting
 
         Returns:
             Recommended ProcessingTier
@@ -166,8 +179,20 @@ class QueryRouter:
         # Calculate complexity
         complexity = self._calculate_complexity(query)
 
+        # Apply query-type complexity boost so substantive queries
+        # (TECHNICAL, RESEARCH, etc.) escape the OFFLINE tier.
+        type_boost = self._QUERY_TYPE_COMPLEXITY_BOOST.get(query_type, 0.0)
+        if type_boost > 0:
+            complexity = min(1.0, complexity + type_boost)
+            logger.debug(
+                "Applied query-type boost: type=%s, boost=+%.2f, new_complexity=%.2f",
+                query_type.value,
+                type_boost,
+                complexity,
+            )
+
         # Detect temporal needs
-        needs_temporal, _temporal_markers = self._detect_temporal_needs(query)
+        needs_temporal, _ = self._detect_temporal_needs(query)
 
         # Identify domain
         domains = self._identify_domain(query)
@@ -501,8 +526,8 @@ class QueryAnalyzer:
         else:
             analysis.search_strategy = SearchStrategy.NONE
 
-        # Suggest processing tier
-        analysis.suggested_tier = self._router.route(query, security_context)
+        # Suggest processing tier (pass query_type for complexity boosting)
+        analysis.suggested_tier = self._router.route(query, security_context, query_type=query_type)
 
         logger.info(
             "Query analysis complete: type=%s, complexity=%.2f, tier=%s, search=%s",
@@ -789,6 +814,9 @@ def route_query(
 ) -> ProcessingTier:
     """Convenience function to route a query to appropriate tier.
 
+    Classifies the query type first so that complexity boosting
+    is applied during routing.
+
     Args:
         query: The query to route
         security_context: Optional security context
@@ -799,8 +827,11 @@ def route_query(
     if security_context is None:
         security_context = SecurityContext()
 
+    analyzer = QueryAnalyzer()
+    query_type = analyzer._classify_query_type(query)
+
     router = QueryRouter()
-    return router.route(query, security_context)
+    return router.route(query, security_context, query_type=query_type)
 
 
 # Module-level singleton for easy access

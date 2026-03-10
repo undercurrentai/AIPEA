@@ -264,7 +264,7 @@ class TestAIPEAEnhancerInit:
     @pytest.mark.unit
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
-    def test_default_init(self, mock_search_orch: MagicMock, mock_kb: MagicMock) -> None:
+    def test_default_init(self, _mock_search_orch: MagicMock, _mock_kb: MagicMock) -> None:
         """Default init enables enhancement with expected subsystems."""
         enhancer = AIPEAEnhancer()
         assert enhancer._enable_enhancement is True
@@ -276,7 +276,7 @@ class TestAIPEAEnhancerInit:
     @pytest.mark.unit
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
-    def test_disabled_enhancement(self, mock_search_orch: MagicMock, mock_kb: MagicMock) -> None:
+    def test_disabled_enhancement(self, _mock_search_orch: MagicMock, _mock_kb: MagicMock) -> None:
         """Disabled enhancement skips search orchestrator and offline KB."""
         enhancer = AIPEAEnhancer(enable_enhancement=False)
         assert enhancer._enable_enhancement is False
@@ -287,7 +287,7 @@ class TestAIPEAEnhancerInit:
     @patch("aipea.enhancer.OfflineKnowledgeBase", side_effect=RuntimeError("db fail"))
     @patch("aipea.enhancer.SearchOrchestrator")
     def test_kb_init_failure_is_graceful(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """Offline KB init failure is caught and logged, not raised."""
         enhancer = AIPEAEnhancer()
@@ -297,7 +297,7 @@ class TestAIPEAEnhancerInit:
     @pytest.mark.unit
     @patch.dict(os.environ, {"EXA_API_KEY": "", "FIRECRAWL_API_KEY": ""}, clear=False)
     @patch("aipea.enhancer.OfflineKnowledgeBase")
-    def test_explicit_api_keys_enable_providers_without_env(self, mock_kb: MagicMock) -> None:
+    def test_explicit_api_keys_enable_providers_without_env(self, _mock_kb: MagicMock) -> None:
         """Constructor API key parameters should be used even when env vars are unset."""
         enhancer = AIPEAEnhancer(
             exa_api_key="explicit-exa-key",
@@ -332,7 +332,7 @@ class TestAIPEAEnhancerEnhance:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_passthrough_when_disabled(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """Enhancement disabled returns passthrough result."""
         enhancer = AIPEAEnhancer(enable_enhancement=False)
@@ -346,7 +346,9 @@ class TestAIPEAEnhancerEnhance:
     @pytest.mark.asyncio
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
-    async def test_basic_enhancement(self, mock_search_orch: MagicMock, mock_kb: MagicMock) -> None:
+    async def test_basic_enhancement(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
         """Basic enhancement path produces a result with was_enhanced=True."""
         enhancer = AIPEAEnhancer()
 
@@ -374,30 +376,22 @@ class TestAIPEAEnhancerEnhance:
     @pytest.mark.asyncio
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
-    async def test_forbidden_model_blocked_before_security_scan(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    async def test_all_frontier_models_allowed_in_general_mode(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
-        """Globally forbidden models should be blocked by enhancer compliance checks."""
+        """All frontier models are allowed in GENERAL mode (no global forbidden list)."""
         enhancer = AIPEAEnhancer()
+        result = await enhancer.enhance("safe query", "gpt-4o")
 
-        with patch.object(enhancer._security_scanner, "scan") as mock_scan:
-            result = await enhancer.enhance("safe query", "gpt-4o")
-
-        assert result.was_enhanced is False
-        assert "blocked" in result.enhanced_prompt.lower()
-        assert any(
-            "model" in note.lower() and "not allowed" in note.lower()
-            for note in result.enhancement_notes
-        )
-        assert enhancer._stats["queries_blocked"] == 1
-        mock_scan.assert_not_called()
+        assert result.was_enhanced is True
+        assert enhancer._stats["queries_enhanced"] == 1
 
     @pytest.mark.unit
     @pytest.mark.asyncio
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_blocked_by_security_scan(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """Blocked scan result returns blocked message and increments counter."""
         enhancer = AIPEAEnhancer()
@@ -415,7 +409,7 @@ class TestAIPEAEnhancerEnhance:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_security_flags_added_to_notes(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """Non-blocking security flags appear in enhancement_notes."""
         enhancer = AIPEAEnhancer()
@@ -441,7 +435,7 @@ class TestAIPEAEnhancerEnhance:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_force_offline_routes_to_offline(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """force_offline=True triggers offline context gathering."""
         enhancer = AIPEAEnhancer()
@@ -472,7 +466,7 @@ class TestAIPEAEnhancerEnhance:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_secret_level_forces_offline(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """SecurityLevel.SECRET forces offline processing."""
         enhancer = AIPEAEnhancer()
@@ -502,7 +496,7 @@ class TestAIPEAEnhancerEnhance:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_tactical_compliance_forces_offline(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """ComplianceMode.TACTICAL forces offline processing."""
         enhancer = AIPEAEnhancer()
@@ -515,7 +509,7 @@ class TestAIPEAEnhancerEnhance:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_scan_result_force_offline_propagated(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """Scanner's force_offline recommendation is propagated to offline check."""
         enhancer = AIPEAEnhancer()
@@ -552,7 +546,7 @@ class TestAIPEAEnhancerEnhanceForModels:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_search_context_not_duplicated_in_model_prompt(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """Model-specific prompt generation should not re-inject existing context."""
         enhancer = AIPEAEnhancer()
@@ -601,10 +595,10 @@ class TestAIPEAEnhancerEnhanceForModels:
     @pytest.mark.asyncio
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
-    async def test_forbidden_model_skipped_in_enhance_for_models(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+    async def test_all_models_included_in_enhance_for_models(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
-        """Forbidden models are excluded from enhance_for_models results."""
+        """All provided models are included in enhance_for_models results."""
         enhancer = AIPEAEnhancer()
         base_result = EnhancementResult(
             original_query="q",
@@ -624,14 +618,14 @@ class TestAIPEAEnhancerEnhanceForModels:
             requests = await enhancer.enhance_for_models("q", ["gpt-4", "gpt-4o"])
 
         assert "gpt-4" in requests
-        assert "gpt-4o" not in requests
+        assert "gpt-4o" in requests
 
     @pytest.mark.unit
     @pytest.mark.asyncio
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_enhance_for_models_passthrough_returns_formatted_prompts(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """Disabled enhancement: enhance_for_models returns formatted prompts."""
         enhancer = AIPEAEnhancer(enable_enhancement=False)
@@ -654,7 +648,7 @@ class TestIsOfflineRequired:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     def test_force_offline_returns_true(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         enhancer = AIPEAEnhancer()
         assert enhancer._is_offline_required(
@@ -665,7 +659,7 @@ class TestIsOfflineRequired:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     def test_secret_level_returns_true(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         enhancer = AIPEAEnhancer()
         assert enhancer._is_offline_required(SecurityLevel.SECRET, ComplianceMode.GENERAL, False)
@@ -674,7 +668,7 @@ class TestIsOfflineRequired:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     def test_general_unclassified_returns_false(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         enhancer = AIPEAEnhancer()
         assert not enhancer._is_offline_required(
@@ -694,7 +688,7 @@ class TestSingleton:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     def test_get_enhancer_returns_singleton(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """get_enhancer() returns the same instance on repeated calls."""
         reset_enhancer()
@@ -706,7 +700,9 @@ class TestSingleton:
     @pytest.mark.unit
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
-    def test_reset_clears_singleton(self, mock_search_orch: MagicMock, mock_kb: MagicMock) -> None:
+    def test_reset_clears_singleton(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
         """reset_enhancer() clears the singleton so a new instance is created."""
         reset_enhancer()
         e1 = get_enhancer()
@@ -724,7 +720,7 @@ class TestEnhancePromptConvenience:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_enhance_prompt_delegates_to_singleton(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """enhance_prompt() delegates to get_enhancer().enhance()."""
         reset_enhancer()
@@ -760,7 +756,7 @@ class TestEnhancePromptConvenience:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_enhance_prompt_with_compliance_mode(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """enhance_prompt() forwards compliance_mode to enhance()."""
         reset_enhancer()
@@ -795,7 +791,7 @@ class TestEnhancePromptConvenience:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_enhance_prompt_with_force_offline(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """enhance_prompt() forwards force_offline to enhance()."""
         reset_enhancer()
@@ -830,7 +826,7 @@ class TestEnhancePromptConvenience:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_enhance_prompt_backward_compat(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """enhance_prompt() works with only 2 args (backward compatible)."""
         reset_enhancer()
@@ -873,7 +869,7 @@ class TestGetStatusAndResetStats:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     def test_get_status_returns_expected_keys(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         enhancer = AIPEAEnhancer()
         status = enhancer.get_status()
@@ -887,7 +883,7 @@ class TestGetStatusAndResetStats:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     def test_reset_stats_zeroes_counters(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         enhancer = AIPEAEnhancer()
         enhancer._stats["queries_enhanced"] = 42
@@ -909,7 +905,7 @@ class TestEnhanceForModelsHIPAABase:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_enhance_for_models_hipaa_returns_results(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """In HIPAA mode, enhance_for_models should return results for valid models."""
         enhancer = AIPEAEnhancer(default_compliance=ComplianceMode.HIPAA)
@@ -928,7 +924,7 @@ class TestEnhanceForModelsHIPAABase:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_enhance_for_models_blocked_base_returns_empty(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """If base enhancement is blocked (injection), enhance_for_models returns empty."""
         enhancer = AIPEAEnhancer()
@@ -960,7 +956,7 @@ class TestEnhanceForModelsHIPAABase:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_enhance_for_models_propagates_tactical_force_offline(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """enhance_for_models must propagate force_offline for TACTICAL compliance."""
         enhancer = AIPEAEnhancer(default_compliance=ComplianceMode.TACTICAL)
@@ -987,7 +983,7 @@ class TestEnhanceForModelsHIPAABase:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_enhance_for_models_hipaa_passes_compliance_to_base(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """enhance_for_models must pass HIPAA compliance_mode to base enhance() call.
 
@@ -1017,7 +1013,7 @@ class TestEnhanceForModelsHIPAABase:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_enhance_for_models_uses_first_valid_model_for_base(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """enhance_for_models must use a compliant model_id for the base enhance() call.
 
@@ -1047,7 +1043,7 @@ class TestEnhanceForModelsHIPAABase:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_enhance_for_models_with_no_compliant_models_is_noop(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """If no model is compliant, function should return empty without mutating stats."""
         enhancer = AIPEAEnhancer(default_compliance=ComplianceMode.HIPAA)
@@ -1075,7 +1071,7 @@ class TestComplianceDistributionStats:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_passthrough_increments_compliance_distribution(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """When enhancement is disabled, compliance_distribution should still be incremented."""
         enhancer = AIPEAEnhancer(enable_enhancement=False)
@@ -1088,7 +1084,7 @@ class TestComplianceDistributionStats:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_blocked_model_increments_compliance_distribution(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """When model is blocked by compliance, compliance_distribution should be incremented."""
         enhancer = AIPEAEnhancer(default_compliance=ComplianceMode.HIPAA)
@@ -1104,7 +1100,7 @@ class TestComplianceDistributionStats:
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
     async def test_security_blocked_increments_compliance_distribution(
-        self, mock_search_orch: MagicMock, mock_kb: MagicMock
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
         """When security scan blocks, compliance_distribution should be incremented."""
         enhancer = AIPEAEnhancer()
@@ -1156,3 +1152,180 @@ class TestNaNQueryAnalysis:
             ambiguity_score=float("nan"),
         )
         assert analysis.ambiguity_score == 0.0
+
+
+# =============================================================================
+# OLLAMA ENHANCEMENT INTEGRATION (enhancer-level)
+# =============================================================================
+
+
+class TestTryOllamaEnhancement:
+    """Tests for AIPEAEnhancer._try_ollama_enhancement()."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_ollama_enhancement_returns_analysis_on_success(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """When Ollama returns llm_enhanced=True, analysis text is returned."""
+        from aipea.engine import EnhancedQuery, OfflineTierProcessor
+
+        enhancer = AIPEAEnhancer()
+        notes: list[str] = []
+
+        mock_result = EnhancedQuery(
+            original_query="test",
+            enhanced_query="LLM analysis text here",
+            tier_used=ProcessingTier.OFFLINE,
+            confidence=0.82,
+            query_type=QueryType.TECHNICAL,
+            enhancement_metadata={"llm_enhanced": True, "ollama_model": "gemma3:1b"},
+        )
+
+        mock_proc = MagicMock(
+            spec=OfflineTierProcessor, process=AsyncMock(return_value=mock_result)
+        )
+        # Inject the mock processor directly (simulating cached state)
+        enhancer._ollama_processor = mock_proc
+        result = await enhancer._try_ollama_enhancement("test query", notes)
+
+        assert result == "LLM analysis text here"
+        assert any("gemma3:1b" in n for n in notes)
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_ollama_enhancement_returns_none_when_not_enhanced(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """When Ollama returns llm_enhanced=False, None is returned."""
+        from aipea.engine import EnhancedQuery, OfflineTierProcessor
+
+        enhancer = AIPEAEnhancer()
+        notes: list[str] = []
+
+        mock_result = EnhancedQuery(
+            original_query="test",
+            enhanced_query="template fallback",
+            tier_used=ProcessingTier.OFFLINE,
+            confidence=0.75,
+            query_type=QueryType.UNKNOWN,
+            enhancement_metadata={"llm_enhanced": False},
+        )
+
+        mock_proc = MagicMock(
+            spec=OfflineTierProcessor, process=AsyncMock(return_value=mock_result)
+        )
+        enhancer._ollama_processor = mock_proc
+        result = await enhancer._try_ollama_enhancement("test query", notes)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_ollama_enhancement_returns_none_on_exception(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """When processor.process() raises, None is returned gracefully."""
+        from aipea.engine import OfflineTierProcessor
+
+        enhancer = AIPEAEnhancer()
+        notes: list[str] = []
+
+        mock_proc = MagicMock(
+            spec=OfflineTierProcessor,
+            process=AsyncMock(side_effect=RuntimeError("Ollama crashed")),
+        )
+        enhancer._ollama_processor = mock_proc
+        result = await enhancer._try_ollama_enhancement("test query", notes)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_ollama_enhancement_caches_processor(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """Processor instance is cached and reused across calls."""
+        from aipea.engine import EnhancedQuery, OfflineTierProcessor
+
+        enhancer = AIPEAEnhancer()
+        notes: list[str] = []
+
+        mock_result = EnhancedQuery(
+            original_query="test",
+            enhanced_query="cached response",
+            tier_used=ProcessingTier.OFFLINE,
+            confidence=0.75,
+            query_type=QueryType.UNKNOWN,
+            enhancement_metadata={"llm_enhanced": False},
+        )
+
+        mock_proc = MagicMock(
+            spec=OfflineTierProcessor, process=AsyncMock(return_value=mock_result)
+        )
+        # Inject the mock as cached processor
+        enhancer._ollama_processor = mock_proc
+
+        await enhancer._try_ollama_enhancement("q1", notes)
+        await enhancer._try_ollama_enhancement("q2", notes)
+
+        # Same processor instance reused — process called twice
+        assert mock_proc.process.await_count == 2
+        # Processor attribute should still be the same object
+        assert enhancer._ollama_processor is mock_proc
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_enhance_prepends_ollama_analysis_to_query(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """When Ollama returns analysis, it is prepended to the effective query."""
+        enhancer = AIPEAEnhancer()
+        analysis = QueryAnalysis(
+            query="test",
+            query_type=QueryType.TECHNICAL,
+            complexity=0.5,
+            confidence=0.8,
+            needs_current_info=False,
+        )
+
+        captured_queries: list[str] = []
+
+        async def capture_formulate(**kwargs: object) -> str:
+            captured_queries.append(str(kwargs.get("query", "")))
+            return "enhanced result"
+
+        with (
+            patch.object(enhancer._security_scanner, "scan", return_value=ScanResult()),
+            patch.object(enhancer._query_analyzer, "analyze", return_value=analysis),
+            patch.object(
+                enhancer, "_gather_offline_context", new_callable=AsyncMock, return_value=None
+            ),
+            patch.object(
+                enhancer,
+                "_try_ollama_enhancement",
+                new_callable=AsyncMock,
+                return_value="Ollama says: good question",
+            ),
+            patch.object(
+                enhancer._prompt_engine,
+                "formulate_search_aware_prompt",
+                side_effect=capture_formulate,
+            ),
+        ):
+            result = await enhancer.enhance("What is X?", "gpt-4", force_offline=True)
+
+        assert result.was_enhanced
+        assert len(captured_queries) == 1
+        assert "[Offline LLM Analysis]" in captured_queries[0]
+        assert "Ollama says: good question" in captured_queries[0]

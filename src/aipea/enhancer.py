@@ -47,7 +47,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from aipea._types import ProcessingTier, QueryType, SearchStrategy
 from aipea.analyzer import QueryAnalyzer
@@ -63,6 +63,9 @@ from aipea.security import (
     SecurityLevel,
     SecurityScanner,
 )
+
+if TYPE_CHECKING:
+    from aipea.engine import OfflineTierProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -345,6 +348,9 @@ class AIPEAEnhancer:
                 logger.warning("Failed to initialize offline knowledge base: %s", e)
                 self._offline_kb = None
 
+        # Ollama processor (lazily initialized, reused across calls)
+        self._ollama_processor: OfflineTierProcessor | None = None
+
         # Statistics tracking
         self._stats: dict[str, Any] = {
             "queries_enhanced": 0,
@@ -427,16 +433,16 @@ class AIPEAEnhancer:
                 f"Model '{model_id}' is not allowed in compliance mode '{compliance_mode.value}'"
             )
             return self._create_blocked_result(
-                query=query,
-                model_id=model_id,
-                security_context=security_context,
-                scan_result=ScanResult(
+                query,
+                model_id,
+                security_context,
+                ScanResult(
                     flags=[f"model_not_allowed:{model_id}"],
                     is_blocked=True,
                 ),
-                compliance_mode=compliance_mode,
-                start_time=start_time,
-                enhancement_notes=enhancement_notes,
+                compliance_mode,
+                start_time,
+                enhancement_notes,
             )
 
         # Step 2: Security scan
@@ -502,6 +508,13 @@ class AIPEAEnhancer:
             # Offline-required requests must report OFFLINE tier for consistency
             processing_tier = ProcessingTier.OFFLINE
 
+        # Step 6b: Ollama LLM enhancement (offline mode only)
+        # When Ollama models are available, use OfflineTierProcessor for
+        # real LLM-assisted query analysis before final prompt formulation.
+        ollama_analysis: str | None = None
+        if offline_required:
+            ollama_analysis = await self._try_ollama_enhancement(query, enhancement_notes)
+
         # Step 7: Formulate enhanced prompt
         model_family = get_model_family(model_id)
 
@@ -513,12 +526,18 @@ class AIPEAEnhancer:
         }
         complexity = complexity_map.get(processing_tier, "medium")
 
+        # If Ollama provided LLM analysis, prepend it to the query for richer context
+        effective_query = query
+        if ollama_analysis:
+            effective_query = f"{query}\n\n[Offline LLM Analysis]\n{ollama_analysis}"
+
         # Formulate the enhanced prompt
         enhanced_prompt = await self._prompt_engine.formulate_search_aware_prompt(
-            query=query,
+            query=effective_query,
             complexity=complexity,
             search_context=search_context,
             model_type=model_family,
+            query_type=analysis.query_type.value,
         )
 
         # Calculate timing
@@ -683,7 +702,7 @@ class AIPEAEnhancer:
         self,
         query: str,
         analysis: QueryAnalysis,
-        security_context: SecurityContext,
+        _security_context: SecurityContext,
     ) -> SearchContext | None:
         """Gather context from online search providers.
 
@@ -791,10 +810,48 @@ class AIPEAEnhancer:
             logger.warning("Offline search failed: %s", e)
             return None
 
+    async def _try_ollama_enhancement(
+        self,
+        query: str,
+        enhancement_notes: list[str],
+    ) -> str | None:
+        """Attempt LLM-enhanced analysis via Ollama in offline mode.
+
+        Uses the OfflineTierProcessor to run a local Ollama model for
+        real LLM-assisted query analysis. Gracefully returns None if
+        Ollama is unavailable or processing fails.
+
+        Args:
+            query: The user's query
+            enhancement_notes: List to append status notes to
+
+        Returns:
+            LLM analysis text, or None if Ollama is not available
+        """
+        try:
+            from aipea.engine import OfflineTierProcessor
+
+            if self._ollama_processor is None:
+                self._ollama_processor = OfflineTierProcessor(use_ollama=True)
+            result = await self._ollama_processor.process(query)
+
+            if result.enhancement_metadata.get("llm_enhanced"):
+                model_name = result.enhancement_metadata.get("ollama_model", "unknown")
+                enhancement_notes.append(f"Ollama LLM enhancement via {model_name}")
+                logger.info("Ollama LLM enhancement succeeded with model %s", model_name)
+                return result.enhanced_query
+
+            logger.debug("Ollama not available, skipping LLM enhancement")
+            return None
+
+        except Exception as e:
+            logger.debug("Ollama enhancement skipped: %s", e)
+            return None
+
     def _create_passthrough_result(
         self,
         query: str,
-        model_id: str,
+        _model_id: str,
         security_level: SecurityLevel,
         compliance_mode: ComplianceMode,
         start_time: float,
@@ -842,10 +899,10 @@ class AIPEAEnhancer:
     def _create_blocked_result(
         self,
         query: str,
-        model_id: str,
+        _model_id: str,
         security_context: SecurityContext,
-        scan_result: ScanResult,
-        compliance_mode: ComplianceMode,
+        _scan_result: ScanResult,
+        _compliance_mode: ComplianceMode,
         start_time: float,
         enhancement_notes: list[str],
     ) -> EnhancementResult:

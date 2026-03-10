@@ -56,6 +56,7 @@ markers = [
     "unit: Unit tests (fast, no external deps)",
     "integration: Integration tests (may need network/services)",
     "slow: Slow tests (inference, large models)",
+    "live: Live end-to-end tests (real components, no mocks)",
 ]
 
 [tool.ruff]
@@ -84,7 +85,7 @@ select = [
 max-complexity = 15
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "S105", "S106", "S607"]  # Allow assert, hardcoded passwords, partial paths in tests
+"tests/*" = ["S101", "S105", "S106", "S603", "S607"]  # Allow assert, hardcoded passwords, subprocess, partial paths in tests
 "src/aipea/cli.py" = ["T20"]  # CLI uses Rich console.print, not stdlib print
 "src/aipea/__main__.py" = ["T20"]  # Entry point
 

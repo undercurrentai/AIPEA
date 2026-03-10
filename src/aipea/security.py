@@ -24,9 +24,6 @@ from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
-# Explicitly forbidden models (global policy)
-FORBIDDEN_MODEL_SUBSTRINGS = ("gpt-4o", "gpt-4o-mini")
-
 
 # =============================================================================
 # ENUMS
@@ -581,16 +578,11 @@ class ComplianceHandler:
         Note:
             An empty allowed_models list means all models are permitted.
         """
-        model_lower = model_id.lower()
-        for forbidden in FORBIDDEN_MODEL_SUBSTRINGS:
-            if forbidden in model_lower:
-                logger.warning("Model '%s' is forbidden by policy", model_id)
-                return False
-
         if not self.allowed_models:
             return True  # No restrictions in GENERAL mode
 
         # Check if any allowed model is a substring of the model_id (case-insensitive)
+        model_lower = model_id.lower()
         allowed_models = [allowed.lower() for allowed in self.allowed_models]
         is_allowed = any(allowed in model_lower for allowed in allowed_models)
 

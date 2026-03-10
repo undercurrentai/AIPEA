@@ -9,6 +9,7 @@ Commands:
     aipea info                     — Quick library/config summary
 """
 
+# pyright: reportPossiblyUnboundVariable=false
 from __future__ import annotations
 
 import sys
@@ -297,6 +298,66 @@ else:
         else:
             chk.ok(".env permissions", "n/a (no .env file)")
 
+    def _doctor_ollama(chk: _DoctorChecks) -> None:
+        """Check Ollama availability and models."""
+        import shutil
+        import subprocess as _sp
+
+        if shutil.which("ollama") is None:
+            chk.warn("Ollama", "not installed — offline LLM enhancement unavailable")
+            return
+
+        chk.ok("Ollama binary", str(shutil.which("ollama")))
+
+        try:
+            result = _sp.run(
+                ["ollama", "list"],  # noqa: S607  # verified via shutil.which above
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode != 0:
+                chk.warn("Ollama service", "not running — start with 'ollama serve'")
+                return
+
+            lines = result.stdout.strip().split("\n")
+            model_count = max(0, len(lines) - 1)  # minus header line
+            if model_count > 0:
+                model_names = [line.split()[0] for line in lines[1:] if line.strip()]
+                chk.ok("Ollama models", f"{model_count} available: {', '.join(model_names)}")
+            else:
+                chk.warn("Ollama models", "none downloaded — run 'ollama pull gemma3:1b'")
+        except _sp.TimeoutExpired:
+            chk.warn("Ollama service", "timed out (may not be running)")
+        except Exception as exc:
+            chk.warn("Ollama", str(exc))
+
+    def _doctor_knowledge_base(chk: _DoctorChecks) -> None:
+        """Check offline knowledge base status."""
+        db_path = Path.cwd() / "aipea_knowledge.db"
+        if not db_path.exists():
+            chk.warn(
+                "Knowledge base",
+                f"not found at {db_path} — run 'aipea seed-kb' to create",
+            )
+            return
+
+        try:
+            from aipea.knowledge import OfflineKnowledgeBase, StorageTier
+
+            kb = OfflineKnowledgeBase(str(db_path), StorageTier.STANDARD)
+            count = kb._get_node_count_sync()
+            domains = kb._get_domains_summary_sync()
+            kb.close()
+
+            if count > 0:
+                domain_str = ", ".join(f"{d}={c}" for d, c in sorted(domains.items()))
+                chk.ok("Knowledge base", f"{count} entries ({domain_str})")
+            else:
+                chk.warn("Knowledge base", "exists but empty — run 'aipea seed-kb'")
+        except Exception as exc:
+            chk.warn("Knowledge base", f"error reading: {exc}")
+
     @app.command()
     def doctor() -> None:
         """Run a full diagnostic check of the AIPEA installation."""
@@ -344,6 +405,14 @@ else:
                 chk.failed += 1
         else:
             console.print("  [dim]Firecrawl: skipped (no key)[/dim]")
+
+        # 8. Ollama (offline LLM)
+        console.print("\n[bold]8. Ollama (Offline LLM)[/bold]")
+        _doctor_ollama(chk)
+
+        # 9. Offline Knowledge Base
+        console.print("\n[bold]9. Offline Knowledge Base[/bold]")
+        _doctor_knowledge_base(chk)
 
         # Summary
         total = chk.passed + chk.warned + chk.failed
@@ -464,3 +533,41 @@ else:
         table.add_row("HTTP Timeout", f"{cfg.http_timeout}s")
         table.add_row("Saved to", str(target))
         console.print(table)
+
+    # ================================================================
+    # aipea seed-kb
+    # ================================================================
+
+    @app.command("seed-kb")
+    def seed_kb(
+        db_path: str = typer.Option(
+            "aipea_knowledge.db", "--db", "-d", help="Path to SQLite knowledge base file"
+        ),
+    ) -> None:
+        """Populate the offline knowledge base with curated seed knowledge."""
+        import asyncio
+
+        from aipea.knowledge import (
+            OfflineKnowledgeBase,
+            StorageTier,
+            seed_knowledge_base,
+        )
+
+        console.print(Panel("[bold]AIPEA Knowledge Base Seeding[/bold]", border_style="blue"))
+
+        kb = OfflineKnowledgeBase(db_path=db_path, tier=StorageTier.STANDARD)
+        try:
+            count = asyncio.run(seed_knowledge_base(kb))
+            stats = asyncio.run(kb.get_domains_summary())
+
+            table = Table(title="Seed Results", border_style="green")
+            table.add_column("Domain", style="bold")
+            table.add_column("Count", justify="right")
+            for domain_name, domain_count in sorted(stats.items()):
+                table.add_row(domain_name, str(domain_count))
+            table.add_row("[bold]Total[/bold]", f"[bold]{count}[/bold]")
+            console.print(table)
+
+            console.print(f"\n[green]Seeded {count} entries to {db_path}[/green]")
+        finally:
+            kb.close()

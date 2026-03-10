@@ -515,11 +515,12 @@ class TestOfflineModelEnum:
     """Tests for OfflineModel.tier1_models() and tier2_models()."""
 
     def test_tier1_models_returns_tested_models(self):
-        """tier1_models returns Gemma3 and Phi3."""
+        """tier1_models returns Gemma3 1B, Gemma3 270M, and Phi3."""
         tier1 = OfflineModel.tier1_models()
+        assert OfflineModel.GEMMA3_1B in tier1
         assert OfflineModel.GEMMA3_270M in tier1
         assert OfflineModel.PHI3_MINI in tier1
-        assert len(tier1) == 2
+        assert len(tier1) == 3
 
     def test_tier2_models_returns_future_models(self):
         """tier2_models returns GPT-OSS and Llama 3.3."""

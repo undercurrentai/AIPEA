@@ -140,9 +140,9 @@ class TestOllamaClientIntegration:
         client = OllamaOfflineClient()
         best = await client.get_best_available_model()
 
-        # Should return either phi3:mini (preferred) or gemma3:270m
+        # Should return one of the tier 1 models in preference order
         assert best is not None
-        assert best in [OfflineModel.PHI3_MINI, OfflineModel.GEMMA3_270M]
+        assert best in [OfflineModel.PHI3_MINI, OfflineModel.GEMMA3_1B, OfflineModel.GEMMA3_270M]
 
 
 @pytest.mark.integration
@@ -288,9 +288,10 @@ class TestOfflineModelTiers:
     def test_tier1_models(self) -> None:
         """Test Tier 1 model classification."""
         tier1 = OfflineModel.tier1_models()
+        assert OfflineModel.GEMMA3_1B in tier1
         assert OfflineModel.GEMMA3_270M in tier1
         assert OfflineModel.PHI3_MINI in tier1
-        assert len(tier1) == 2
+        assert len(tier1) == 3
 
     def test_tier2_models(self) -> None:
         """Test Tier 2/3 model classification."""
