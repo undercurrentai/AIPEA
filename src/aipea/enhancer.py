@@ -784,6 +784,12 @@ class AIPEAEnhancer:
                 enhancement_notes.append(
                     f"Offline context gathered: {len(search_context.results)} results"
                 )
+            else:
+                if self._offline_kb is None:
+                    enhancement_notes.append(
+                        "Offline knowledge base not initialized — "
+                        "run 'aipea seed-kb' to populate it"
+                    )
             return search_context
 
         search_context = await self._gather_online_context(query, analysis, security_context)
@@ -802,6 +808,11 @@ class AIPEAEnhancer:
                 enhancement_notes.append(
                     f"Online context gathered from {source}: {len(search_context.results)} results"
                 )
+        elif analysis.search_strategy != SearchStrategy.NONE:
+            enhancement_notes.append(
+                "No search context available — configure API keys "
+                "with 'aipea configure' to enable web search"
+            )
         return search_context
 
     def _scan_search_results(self, search_context: SearchContext) -> SearchContext:
@@ -1006,10 +1017,18 @@ class AIPEAEnhancer:
                 return result.enhanced_query
 
             logger.debug("Ollama not available, skipping LLM enhancement")
+            enhancement_notes.append(
+                "Offline LLM enhancement skipped (Ollama not available) — "
+                "using template-based enhancement"
+            )
             return None
 
         except (RuntimeError, OSError) as e:
             logger.debug("Ollama enhancement skipped: %s", e)
+            enhancement_notes.append(
+                "Offline LLM enhancement skipped (Ollama not available) — "
+                "using template-based enhancement"
+            )
             return None
 
     def _create_passthrough_result(

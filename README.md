@@ -52,9 +52,54 @@ pip install aipea[cli]
 pip install -e ".[dev]"
 ```
 
+## Getting Started
+
+AIPEA works out of the box with zero configuration. API keys and Ollama are entirely optional — they unlock richer enhancement when available.
+
+**Path 1: Minimal (no setup needed)**
+
+```bash
+pip install aipea
+```
+
+```python
+from aipea import enhance_prompt
+result = await enhance_prompt("What is quantum computing?", model_id="gpt-4")
+# Works immediately with template-based enhancement — no API keys required
+```
+
+**Path 2: With Search Providers (real-time web context)**
+
+[Exa](https://exa.ai) provides AI-powered web search; [Firecrawl](https://firecrawl.dev) provides structured web content retrieval. Both offer free tiers.
+
+```bash
+pip install aipea[cli]
+aipea configure          # interactive wizard — press Enter to skip any key
+```
+
+**Path 3: With Ollama (local LLM enhancement)**
+
+Ollama runs open-source LLMs locally for richer offline enhancement. AIPEA auto-detects it when available.
+
+```bash
+# macOS
+brew install ollama
+
+# Linux
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Pull a lightweight model
+ollama pull gemma3:1b
+
+# Populate the offline knowledge base
+aipea seed-kb
+```
+
+Run `aipea doctor` at any time to see what capabilities are active and what you can add.
+
 ## Configuration
 
-AIPEA can be configured via environment variables, a `.env` file, or `~/.aipea/config.toml`. Priority: env vars > `.env` > global TOML > defaults.
+All API keys are optional. AIPEA can be configured via environment variables, a `.env` file, or `~/.aipea/config.toml`. Priority: env vars > `.env` > global TOML > defaults.
 
 ```bash
 # Interactive setup wizard (requires [cli] extra)

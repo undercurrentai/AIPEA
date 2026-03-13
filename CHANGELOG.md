@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **enhancer**: Degradation feedback in `enhancement_notes` — reports when offline KB is missing ("run 'aipea seed-kb'"), when no search providers are configured ("aipea configure"), and when Ollama is unavailable ("using template-based enhancement")
+- **cli**: Provider descriptions with signup URLs in `aipea configure` (Exa, Firecrawl) and skip hints showing API keys are optional
+- **cli**: "Next Steps" panel after `aipea configure` with context-aware guidance
+- **cli**: "Recommendations" panel after `aipea doctor` summary with actionable next steps
+- **cli**: Platform-specific Ollama install hints in doctor (macOS: brew, Linux: curl, other: URL)
+- **README**: "Getting Started" section with 3 paths (Minimal, Search Providers, Ollama) emphasizing zero-config baseline
+- 7 new tests (698 total, 91.42% coverage)
+
+### Changed
+- **cli**: `_ollama_install_hint()` helper extracted for DRY platform-specific install commands (3 call sites)
+
 ## [1.3.0] - 2026-03-13
 
 ### Added

@@ -1798,3 +1798,59 @@ class TestGenerateClarifications:
         assert isinstance(result.clarifications, list)
         # Might still have 0 or few clarifications for a clear query
         assert len(result.clarifications) <= 1
+
+
+# =============================================================================
+# ONBOARDING UX — ENHANCEMENT FEEDBACK NOTES
+# =============================================================================
+
+
+class TestEnhancementFeedbackNotes:
+    """Tests for degradation feedback in enhancement_notes."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_notes_report_no_api_keys(
+        self, mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """Enhancement without API keys reports that search context is unavailable."""
+        # Make search orchestrator return None (no providers configured)
+        mock_orch_instance = mock_search_orch.return_value
+        mock_orch_instance.search = AsyncMock(return_value=None)
+
+        enhancer = AIPEAEnhancer()
+        result = await enhancer.enhance("What are the latest AI advances?", model_id="gpt-4")
+        notes_str = " ".join(result.enhancement_notes)
+        assert "aipea configure" in notes_str
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_notes_report_kb_missing(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """Offline enhancement with no KB reports seed-kb instruction."""
+        enhancer = AIPEAEnhancer()
+        # Simulate KB not initialized
+        enhancer._offline_kb = None
+        # Force offline so it goes through the offline branch
+        result = await enhancer.enhance("What is AI?", model_id="gpt-4", force_offline=True)
+        notes_str = " ".join(result.enhancement_notes)
+        assert "seed-kb" in notes_str
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_notes_report_ollama_skip(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """Offline enhancement with Ollama unavailable reports the skip."""
+        enhancer = AIPEAEnhancer()
+        enhancer._offline_kb = None
+        result = await enhancer.enhance("What is AI?", model_id="gpt-4", force_offline=True)
+        notes_str = " ".join(result.enhancement_notes)
+        assert "Ollama" in notes_str or "template-based" in notes_str

@@ -202,6 +202,15 @@ else:
             console.print(f"  Firecrawl: [red]Error — {exc}[/red]")
             return False
 
+    def _ollama_install_hint() -> str:
+        """Return a platform-specific Ollama install command."""
+        system = platform.system()
+        if system == "Darwin":
+            return "brew install ollama"
+        if system == "Linux":
+            return "curl -fsSL https://ollama.ai/install.sh | sh"
+        return "https://ollama.ai"
+
     # ================================================================
     # aipea doctor
     # ================================================================
@@ -307,7 +316,11 @@ else:
         import subprocess as _sp
 
         if shutil.which("ollama") is None:
-            chk.warn("Ollama", "not installed — offline LLM enhancement unavailable")
+            chk.warn(
+                "Ollama",
+                f"not installed — offline LLM enhancement unavailable. "
+                f"Install with: {_ollama_install_hint()}",
+            )
             return
 
         chk.ok("Ollama binary", str(shutil.which("ollama")))
@@ -439,6 +452,32 @@ else:
             )
         )
 
+        # Recommendations (based on findings)
+        import shutil
+
+        recommendations: list[str] = []
+        if not cfg.has_exa() and not cfg.has_firecrawl():
+            recommendations.append(
+                "Configure API keys for web search: [bold]aipea configure[/bold]"
+            )
+        if shutil.which("ollama") is None:
+            recommendations.append(
+                f"Install Ollama for offline LLM enhancement: [bold]{_ollama_install_hint()}[/bold]"
+            )
+        db_path = Path.cwd() / "aipea_knowledge.db"
+        if not db_path.exists():
+            recommendations.append("Populate offline knowledge base: [bold]aipea seed-kb[/bold]")
+
+        if recommendations:
+            console.print()
+            console.print(
+                Panel(
+                    "\n".join(f"  {r}" for r in recommendations),
+                    title="Recommendations",
+                    border_style="cyan",
+                )
+            )
+
     # ================================================================
     # aipea configure
     # ================================================================
@@ -460,6 +499,9 @@ else:
         # Prompt for each key
         console.print("\nEnter values (press Enter to keep existing):\n")
 
+        console.print("  [bold]Exa[/bold] — AI-powered web search for real-time context enrichment")
+        console.print("  Get a free API key at: [link=https://exa.ai]https://exa.ai[/link]")
+        console.print("  [dim](Press Enter to skip — AIPEA works without it)[/dim]")
         exa_display = AIPEAConfig.redact_key(cfg.exa_api_key) if cfg.has_exa() else "(not set)"
         exa_input = typer.prompt(
             f"  Exa API Key [{exa_display}]",
@@ -469,6 +511,14 @@ else:
         if exa_input:
             cfg.exa_api_key = exa_input
 
+        console.print()
+        console.print(
+            "  [bold]Firecrawl[/bold] — Web scraping and search for structured content retrieval"
+        )
+        console.print(
+            "  Get a free API key at: [link=https://firecrawl.dev]https://firecrawl.dev[/link]"
+        )
+        console.print("  [dim](Press Enter to skip — AIPEA works without it)[/dim]")
         fc_display = (
             AIPEAConfig.redact_key(cfg.firecrawl_api_key) if cfg.has_firecrawl() else "(not set)"
         )
@@ -538,6 +588,29 @@ else:
         table.add_row("HTTP Timeout", f"{cfg.http_timeout}s")
         table.add_row("Saved to", str(target))
         console.print(table)
+
+        # Next steps
+        import shutil
+
+        next_steps: list[str] = []
+        if not cfg.has_exa() and not cfg.has_firecrawl():
+            next_steps.append("AIPEA will use offline/template mode (no API keys configured)")
+        if shutil.which("ollama") is None:
+            next_steps.append(
+                f"Optional: Install Ollama for richer offline enhancement — "
+                f"{_ollama_install_hint()}"
+            )
+        next_steps.append("Run 'aipea seed-kb' to populate the offline knowledge base")
+        next_steps.append("Run 'aipea doctor' to verify your full setup")
+
+        console.print()
+        console.print(
+            Panel(
+                "\n".join(f"  {step}" for step in next_steps),
+                title="Next Steps",
+                border_style="blue",
+            )
+        )
 
     # ================================================================
     # aipea seed-kb

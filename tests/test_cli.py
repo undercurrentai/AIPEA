@@ -218,6 +218,78 @@ class TestConfigureCommand:
 # ============================================================================
 
 
+class TestConfigureUX:
+    """Tests for configure UX improvements (provider descriptions + next steps)."""
+
+    def test_configure_shows_provider_descriptions(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Configure output contains provider descriptions with signup URLs."""
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(
+            app,
+            ["configure", "--no-validate"],
+            input="\n\n\n",
+        )
+        assert "exa.ai" in result.output
+        assert "firecrawl.dev" in result.output
+
+    def test_configure_shows_next_steps(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Configure output contains Next Steps panel."""
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(
+            app,
+            ["configure", "--no-validate"],
+            input="\n\n\n",
+        )
+        assert "Next Steps" in result.output
+        assert "aipea doctor" in result.output
+        assert "aipea seed-kb" in result.output
+
+
+# ============================================================================
+# aipea doctor — Recommendations
+# ============================================================================
+
+
+class TestDoctorRecommendations:
+    """Tests for doctor recommendations section."""
+
+    def test_doctor_shows_recommendations(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Doctor output contains Recommendations when items are missing."""
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["doctor"])
+        assert "Recommendations" in result.output
+
+    def test_doctor_ollama_install_hint(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Doctor with no Ollama shows platform-specific install command."""
+        with patch("shutil.which", return_value=None):
+            result = runner.invoke(app, ["doctor"])
+        # Should show an install hint (brew or curl or ollama.ai)
+        assert "ollama" in result.output.lower()
+
+
+# ============================================================================
+# No-args shows help
+# ============================================================================
+
+
 class TestNoArgs:
     def test_no_args_shows_help(self) -> None:
         result = runner.invoke(app, [])
