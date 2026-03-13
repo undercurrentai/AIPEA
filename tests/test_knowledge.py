@@ -784,5 +784,117 @@ class TestSearchSemantic:
             assert isinstance(result, KnowledgeSearchResult)
 
 
+class TestFTSCleanupOnDelete:
+    """Regression tests: FTS index must be cleaned up when nodes are deleted."""
+
+    @pytest.fixture
+    def temp_db(self) -> Generator[str, None, None]:
+        import contextlib
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        yield db_path
+        with contextlib.suppress(OSError):
+            os.unlink(db_path)
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_delete_node_cleans_fts(self, temp_db: str) -> None:
+        """Deleting a node must also remove its FTS entry."""
+        with OfflineKnowledgeBase(temp_db, StorageTier.STANDARD) as kb:
+            await kb.add_knowledge("Unique quantum entanglement content", KnowledgeDomain.TECHNICAL)
+            # Verify it's searchable
+            result = await kb.search_semantic("quantum entanglement")
+            assert result.total_matches >= 1
+            node_id = result.nodes[0].id
+
+            # Delete the node
+            deleted = await kb.delete_node(node_id)
+            assert deleted is True
+
+            # FTS should no longer find the deleted content
+            result_after = await kb.search_semantic("quantum entanglement")
+            assert result_after.total_matches == 0
+
+            # Verify FTS row count matches node count
+            with kb._with_db_lock() as conn:
+                node_count = conn.execute("SELECT COUNT(*) FROM knowledge_nodes").fetchone()[0]
+                fts_count = conn.execute("SELECT COUNT(*) FROM knowledge_fts").fetchone()[0]
+                assert fts_count == node_count
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_prune_cleans_fts(self, temp_db: str) -> None:
+        """Pruning low-relevance nodes must also remove their FTS entries."""
+        with OfflineKnowledgeBase(temp_db, StorageTier.STANDARD) as kb:
+            # Add a low-relevance node
+            await kb.add_knowledge(
+                "Low relevance pruning test content",
+                KnowledgeDomain.GENERAL,
+                relevance_score=0.1,
+            )
+            # Add a high-relevance node
+            await kb.add_knowledge(
+                "High relevance keeper content",
+                KnowledgeDomain.GENERAL,
+                relevance_score=0.9,
+            )
+
+            # Prune nodes with relevance < 0.5
+            pruned = await kb.prune_low_relevance(threshold=0.5, max_delete=10)
+            assert pruned == 1
+
+            # FTS should no longer find the pruned content
+            result = await kb.search_semantic("pruning test")
+            assert result.total_matches == 0
+
+            # High-relevance content should still be searchable
+            result2 = await kb.search_semantic("keeper content")
+            assert result2.total_matches >= 1
+
+            # Verify FTS row count matches node count
+            with kb._with_db_lock() as conn:
+                node_count = conn.execute("SELECT COUNT(*) FROM knowledge_nodes").fetchone()[0]
+                fts_count = conn.execute("SELECT COUNT(*) FROM knowledge_fts").fetchone()[0]
+                assert fts_count == node_count
+
+
+class TestSemanticSearchAccessTracking:
+    """Regression test: semantic search must update access counts like regular search."""
+
+    @pytest.fixture
+    def temp_db(self) -> Generator[str, None, None]:
+        import contextlib
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        yield db_path
+        with contextlib.suppress(OSError):
+            os.unlink(db_path)
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_semantic_search_updates_access_count(self, temp_db: str) -> None:
+        """search_semantic must increment access_count for retrieved nodes."""
+        with OfflineKnowledgeBase(temp_db, StorageTier.STANDARD) as kb:
+            await kb.add_knowledge("Unique neural network content", KnowledgeDomain.TECHNICAL)
+
+            # Search twice via semantic search
+            result1 = await kb.search_semantic("neural network")
+            assert result1.total_matches >= 1
+            node_id = result1.nodes[0].id
+
+            result2 = await kb.search_semantic("neural network")
+            assert result2.total_matches >= 1
+
+            # Verify access count was incremented
+            with kb._with_db_lock() as conn:
+                row = conn.execute(
+                    "SELECT access_count FROM knowledge_nodes WHERE id = ?", (node_id,)
+                ).fetchone()
+                assert row is not None
+                assert row[0] >= 2, f"Expected access_count >= 2, got {row[0]}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

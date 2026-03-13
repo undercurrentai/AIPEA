@@ -368,8 +368,12 @@ class AIPEAEnhancer:
             for suggestion in suggestions:
                 if len(clarifications) >= 3:
                     break
-                # Skip suggestions already covered by our clarifications
-                if any(s.lower() in c.lower() for c in clarifications for s in suggestion.split()):
+                # Skip suggestions that substantially overlap with existing clarifications
+                suggestion_lower = suggestion.lower()
+                if any(
+                    suggestion_lower in c.lower() or c.lower() in suggestion_lower
+                    for c in clarifications
+                ):
                     continue
                 # Reformulate suggestion as a question if not already one
                 if not suggestion.endswith("?"):
@@ -1023,7 +1027,7 @@ class AIPEAEnhancer:
             )
             return None
 
-        except (RuntimeError, OSError) as e:
+        except (RuntimeError, OSError, ValueError) as e:
             logger.debug("Ollama enhancement skipped: %s", e)
             enhancement_notes.append(
                 "Offline LLM enhancement skipped (Ollama not available) — "

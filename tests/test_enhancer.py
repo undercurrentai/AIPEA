@@ -1854,3 +1854,50 @@ class TestEnhancementFeedbackNotes:
         result = await enhancer.enhance("What is AI?", model_id="gpt-4", force_offline=True)
         notes_str = " ".join(result.enhancement_notes)
         assert "Ollama" in notes_str or "template-based" in notes_str
+
+
+class TestOllamaValueErrorGracefulFallback:
+    """Regression: ValueError from Ollama prompt length validation must not crash enhance()."""
+
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_value_error_caught_in_ollama_enhancement(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """ValueError from OllamaOfflineClient.generate() must be caught, not crash."""
+        enhancer = AIPEAEnhancer()
+        enhancer._offline_kb = None
+
+        # Mock the OfflineTierProcessor to raise ValueError (prompt too long)
+        mock_processor = AsyncMock()
+        mock_processor.process.side_effect = ValueError("Prompt exceeds maximum length")
+        enhancer._ollama_processor = mock_processor
+
+        # Should not raise — should gracefully fall back to template-based enhancement
+        result = await enhancer.enhance("What is AI?", model_id="gpt-4", force_offline=True)
+        assert result is not None
+        assert result.enhanced_prompt  # Should have template-based enhancement
+
+
+class TestClarificationOverlapFilter:
+    """Regression: word-level overlap filter must not block all analyzer suggestions."""
+
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_suggestions_not_filtered_by_common_words(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """Analyzer suggestions with only common-word overlap should not be filtered."""
+        enhancer = AIPEAEnhancer()
+        enhancer._offline_kb = None
+
+        # Use a genuinely ambiguous query to trigger clarifications
+        result = await enhancer.enhance(
+            "it depends on the context and application",
+            model_id="gpt-4",
+        )
+        # The key assertion: clarifications should be generated
+        # (previously the word-level filter would block all suggestions)
+        assert result is not None

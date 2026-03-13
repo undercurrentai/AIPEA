@@ -1,6 +1,50 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-12 + Quality Gate: 2026-03-09)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-13 + Quality Gate: 2026-03-13)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Wave 13 Fixes (2026-03-13) — 7 issues resolved
+
+### 57. FTS index not cleaned up on node deletion — FIXED
+- **File**: `src/aipea/knowledge.py:841`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (foundation modules)
+- **Fix**: `_delete_node_sync` deleted from `knowledge_nodes` but not from `knowledge_fts`, leaving orphaned FTS entries. Added rowid lookup before DELETE + FTS cleanup with `contextlib.suppress(sqlite3.OperationalError)`.
+
+### 58. `prune_low_relevance` does not clean up FTS entries for pruned nodes — FIXED
+- **File**: `src/aipea/knowledge.py:941`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (foundation modules)
+- **Fix**: Same class as #57. `_prune_low_relevance_sync` now fetches rowids before deletion and cleans up corresponding FTS entries. Regression test verifies FTS count matches node count after pruning.
+
+### 59. Uncaught `ValueError` from Ollama prompt length validation crashes enhancement pipeline — FIXED
+- **File**: `src/aipea/enhancer.py:1030`, `src/aipea/engine.py:688`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (facade/entry points)
+- **Fix**: `OllamaOfflineClient.generate()` raises `ValueError` when prompt exceeds `_MAX_PROMPT_BYTES`, but both `OfflineTierProcessor.process()` and `_try_ollama_enhancement()` only caught `(RuntimeError, OSError)`. Added `ValueError` to both exception tuples for graceful template-based fallback.
+
+### 60. `seed-kb` command ignores configured `AIPEA_DB_PATH` — FIXED
+- **File**: `src/aipea/cli.py:623-626`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (facade/entry points)
+- **Fix**: The `--db` option had hardcoded default `"aipea_knowledge.db"` instead of reading `load_config().db_path`. Changed to empty string default with `if not db_path: db_path = load_config().db_path` fallback. Backward compatible (same default when no custom config).
+
+### 61. `search_semantic` does not update access counts for retrieved nodes — FIXED
+- **File**: `src/aipea/knowledge.py:400-459`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Claude sweep agent (foundation modules)
+- **Fix**: `_search_semantic_sync` never incremented `access_count` or updated `last_accessed`, unlike `_search_sync`. Nodes retrieved only via semantic search appeared "less accessed" and were pruned more aggressively. Added matching access tracking logic.
+
+### 62. Overly broad word-level overlap check filters out nearly all analyzer suggestions — FIXED
+- **File**: `src/aipea/enhancer.py:372`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Claude sweep agent (facade/entry points)
+- **Fix**: The dedup check `any(s.lower() in c.lower() for c in clarifications for s in suggestion.split())` split suggestions into individual words, causing common words like "more", "to", "could" to match existing clarifications. Changed to whole-string containment check: `suggestion_lower in c.lower() or c.lower() in suggestion_lower`.
+
+### 63. Resource leak — KB connection not closed on exception in `_doctor_knowledge_base` — FIXED
+- **File**: `src/aipea/cli.py:366-369`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Claude sweep agent (facade/entry points)
+- **Fix**: `OfflineKnowledgeBase` was created and `close()` called only on the success path. If `_get_node_count_sync()` or `_get_domains_summary_sync()` raised, the connection leaked. Changed to `with` context manager.
 
 ## Spec-Code Drift (2026-03-09 docs-sync audit) — 11 items
 
@@ -389,3 +433,6 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 ## Deferred Findings (1 bug remaining)
 
 - **#56** Unicode homoglyph bypass (MEDIUM) — requires NFKC normalization implementation
+
+---
+*Last updated: 2026-03-13 (Wave 13 — 7 fixes, 6 regression tests, 704 total tests, 91.48% coverage)*

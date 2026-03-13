@@ -363,10 +363,9 @@ else:
         try:
             from aipea.knowledge import OfflineKnowledgeBase, StorageTier
 
-            kb = OfflineKnowledgeBase(str(db_path), StorageTier.STANDARD)
-            count = kb._get_node_count_sync()
-            domains = kb._get_domains_summary_sync()
-            kb.close()
+            with OfflineKnowledgeBase(str(db_path), StorageTier.STANDARD) as kb:
+                count = kb._get_node_count_sync()
+                domains = kb._get_domains_summary_sync()
 
             if count > 0:
                 domain_str = ", ".join(f"{d}={c}" for d, c in sorted(domains.items()))
@@ -622,7 +621,7 @@ else:
     @app.command("seed-kb")
     def seed_kb(
         db_path: str = typer.Option(
-            "aipea_knowledge.db", "--db", "-d", help="Path to SQLite knowledge base file"
+            "", "--db", "-d", help="Path to SQLite knowledge base file (default: from config)"
         ),
     ) -> None:
         """Populate the offline knowledge base with curated seed knowledge."""
@@ -633,6 +632,9 @@ else:
             StorageTier,
             seed_knowledge_base,
         )
+
+        if not db_path:
+            db_path = load_config().db_path
 
         console.print(Panel("[bold]AIPEA Knowledge Base Seeding[/bold]", border_style="blue"))
 

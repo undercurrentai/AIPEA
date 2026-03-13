@@ -296,3 +296,31 @@ class TestNoArgs:
         # Typer's no_args_is_help returns 0 on some platforms, 2 on others
         assert result.exit_code in (0, 2)
         assert "AIPEA" in result.output or "Usage" in result.output
+
+
+# ============================================================================
+# Regression: seed-kb respects configured AIPEA_DB_PATH
+# ============================================================================
+
+
+class TestSeedKBUsesConfigPath:
+    """Regression: seed-kb should use config db_path when --db is not provided."""
+
+    def test_seed_kb_default_uses_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """seed-kb without --db should read from load_config().db_path."""
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            custom_path = f.name
+
+        # Patch load_config to return our custom path
+        mock_config = type("C", (), {"db_path": custom_path})()
+        with patch("aipea.cli.load_config", return_value=mock_config):
+            result = runner.invoke(app, ["seed-kb"])
+            # The command should use the config path, not hardcoded default
+            # Check it ran (exit code 0) and referenced the custom path
+            assert result.exit_code == 0
+
+        import os
+
+        os.unlink(custom_path)

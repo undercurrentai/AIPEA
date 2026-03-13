@@ -427,6 +427,7 @@ class OfflineKnowledgeBase:
                 return []
 
             results: list[KnowledgeNode] = []
+            node_ids: list[str] = []
             for row in rows:
                 try:
                     compressed_content = row["compressed_content"]
@@ -451,9 +452,25 @@ class OfflineKnowledgeBase:
                         access_count=row["access_count"],
                     )
                     results.append(node)
+                    node_ids.append(row["id"])
                 except (zlib.error, UnicodeDecodeError, ValueError) as e:
                     logger.warning("Failed to reconstruct node %s: %s", row["id"], e)
                     continue
+
+            # Update access counts for retrieved nodes (matches _search_sync behavior)
+            if node_ids:
+                now = datetime.now(UTC).isoformat()
+                for nid in node_ids:
+                    conn.execute(
+                        """
+                        UPDATE knowledge_nodes
+                        SET access_count = access_count + 1,
+                            last_accessed = ?
+                        WHERE id = ?
+                        """,
+                        (now, nid),
+                    )
+                conn.commit()
 
         logger.debug("Semantic search found %d nodes for query", len(results))
         return results
@@ -824,10 +841,17 @@ class OfflineKnowledgeBase:
     def _delete_node_sync(self, node_id: str) -> bool:
         """Synchronous implementation of delete_node (runs in thread pool)."""
         with self._with_db_lock() as conn:
+            # Get rowid before deleting so we can clean up FTS index
+            row = conn.execute(
+                "SELECT rowid FROM knowledge_nodes WHERE id = ?", (node_id,)
+            ).fetchone()
             cursor = conn.execute(
                 "DELETE FROM knowledge_nodes WHERE id = ?",
                 (node_id,),
             )
+            if row is not None:
+                with contextlib.suppress(sqlite3.OperationalError):
+                    conn.execute("DELETE FROM knowledge_fts WHERE rowid = ?", (row[0],))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -917,6 +941,17 @@ class OfflineKnowledgeBase:
     def _prune_low_relevance_sync(self, threshold: float, max_delete: int) -> int:
         """Synchronous implementation of prune_low_relevance (runs in thread pool)."""
         with self._with_db_lock() as conn:
+            # Get rowids before deletion for FTS cleanup
+            rows_to_prune = conn.execute(
+                """
+                SELECT rowid FROM knowledge_nodes
+                WHERE relevance_score < ?
+                ORDER BY relevance_score ASC, last_accessed ASC
+                LIMIT ?
+                """,
+                (threshold, max_delete),
+            ).fetchall()
+
             cursor = conn.execute(
                 """
                 DELETE FROM knowledge_nodes
@@ -929,6 +964,10 @@ class OfflineKnowledgeBase:
                 """,
                 (threshold, max_delete),
             )
+            # Clean up orphaned FTS entries
+            for row in rows_to_prune:
+                with contextlib.suppress(sqlite3.OperationalError):
+                    conn.execute("DELETE FROM knowledge_fts WHERE rowid = ?", (row[0],))
             conn.commit()
             deleted = cursor.rowcount
 

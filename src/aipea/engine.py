@@ -685,7 +685,7 @@ class OfflineTierProcessor(TierProcessor):
         if use_llm and self._ollama_client and self._ollama_model:
             try:
                 return await self._process_with_ollama(query, query_type)
-            except (RuntimeError, OSError) as e:
+            except (RuntimeError, OSError, ValueError) as e:
                 logger.warning("Ollama processing failed: %s, falling back to templates", e)
 
         # Fall back to template-based enhancement
