@@ -2,8 +2,8 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-612%20passing-brightgreen)]()
-[![Coverage](https://img.shields.io/badge/coverage-91.06%25-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-691%20passing-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-90.94%25-brightgreen)]()
 [![PyPI](https://img.shields.io/pypi/v/aipea)](https://pypi.org/project/aipea/)
 
 A standalone Python library for prompt preprocessing, security screening, query analysis, and context enrichment for LLM systems. Extracted from [Agora IV](https://github.com/undercurrentai/agora-iv) production (v4.1.49).
@@ -158,7 +158,7 @@ async def main():
 
     # Search knowledge base
     results = await kb.search("attention mechanism", limit=5)
-    for node in results:
+    for node in results.nodes:
         print(f"[{node.relevance_score:.2f}] {node.content[:100]}")
 
     kb.close()

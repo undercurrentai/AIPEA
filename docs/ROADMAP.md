@@ -7,9 +7,9 @@ for what IS implemented, and this document as a living roadmap for what's PLANNE
 
 ---
 
-## P1: Dialogical Clarification (advisory mode)
+## P1: Dialogical Clarification (advisory mode) — IMPLEMENTED in v1.3.0
 
-**Target version**: v1.1.0
+**Implemented in**: v1.3.0
 
 **Origin**: Production observation — AIPEA's analyzer already computes signals
 that indicate a query needs clarification, but those signals are consumed silently
@@ -70,9 +70,9 @@ you improve specificity at the source.
 
 ---
 
-## P2: Named Enhancement Strategies (6 types)
+## P2a: Named Enhancement Strategies (6 types) — IMPLEMENTED in v1.3.0
 
-**Origin**: `aipea-enhancement-engine.py` lines 78-503
+**Implemented in**: v1.3.0 | **Origin**: `aipea-enhancement-engine.py` lines 78-503
 
 Expand from template-based classification to named strategies with technique
 libraries:
@@ -95,9 +95,9 @@ Techniques to implement:
 
 ---
 
-## P2: Embedding Search in Offline KB
+## P2b: Semantic Search in Offline KB — IMPLEMENTED in v1.3.0
 
-**Origin**: `aipea-offline-knowledge.py` lines 632-747
+**Implemented in**: v1.3.0 | **Origin**: `aipea-offline-knowledge.py` lines 632-747
 
 Add semantic similarity search using SQLite FTS5 or lightweight embeddings:
 
@@ -112,9 +112,9 @@ search would enable content-based similarity without external dependencies
 
 ---
 
-## P3: Quality Assessor
+## P3a: Quality Assessor — IMPLEMENTED in v1.3.0
 
-**Origin**: `aipea-enhancement-engine.py` lines 562-589
+**Implemented in**: v1.3.0 | **Origin**: `aipea-enhancement-engine.py` lines 562-589
 
 Measure enhancement effectiveness:
 
@@ -134,7 +134,7 @@ class QualityScore:
 
 ---
 
-## P3: Adaptive Learning Engine
+## P3b: Adaptive Learning Engine (planned for v1.4.0)
 
 **Origin**: `aipea-offline-knowledge.py` AdaptiveLearningEngine class
 
@@ -168,21 +168,20 @@ AIPEA needs to:
 
 ---
 
-## Planned Environment Variables
+## Environment Variables (v1.3.0)
 
-These variables are specified but not yet implemented in the codebase:
+All planned environment variables are now implemented. Each follows the standard
+priority chain: env var > `.env` file > `~/.aipea/config.toml` > default.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AIPEA_DB_PATH` | `aipea_knowledge.db` | Path to offline knowledge SQLite database |
-| `AIPEA_STORAGE_TIER` | `standard` | Storage tier: ultra_compact, compact, standard, extended |
-| `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode |
-| `AIPEA_OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL for offline models |
-
-Currently, `AIPEA_DB_PATH` defaults to `aipea_knowledge.db` in the working directory,
-`AIPEA_OLLAMA_HOST` is hardcoded to `http://localhost:11434`, and the other two have
-no runtime effect.
+| Variable | Default | Description | Since |
+|----------|---------|-------------|-------|
+| `AIPEA_DB_PATH` | `aipea_knowledge.db` | Path to offline knowledge SQLite database | v1.3.0 |
+| `AIPEA_STORAGE_TIER` | `standard` | Storage tier: ultra_compact, compact, standard, extended | v1.3.0 |
+| `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode | v1.3.0 |
+| `AIPEA_OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL for offline models | v1.3.0 |
+| `AIPEA_EXA_API_URL` | `https://api.exa.ai/search` | Exa API endpoint URL | v1.3.0 |
+| `AIPEA_FIRECRAWL_API_URL` | `https://api.firecrawl.dev/v1/search` | Firecrawl API endpoint URL | v1.3.0 |
 
 ---
 
-*AIPEA Roadmap | Extracted from SPECIFICATION.md Section 10 | 2026-02-16*
+*AIPEA Roadmap | Extracted from SPECIFICATION.md Section 10 | Updated 2026-03-13*

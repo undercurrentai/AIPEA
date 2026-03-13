@@ -1,5 +1,5 @@
 # AIPEA Specification
-> **AI Prompt Engineer Agent** | Version 1.0.1 | 2026-03-09
+> **AI Prompt Engineer Agent** | Version 1.3.0 | 2026-03-13
 
 ```yaml
 status: ACCEPTED
@@ -138,10 +138,12 @@ aipea/
 ├── knowledge.py         # ZERO imports from other aipea modules
 ├── search.py            # ZERO imports from other aipea modules (only httpx)
 ├── config.py            # ZERO imports from other aipea modules (stdlib only)
+├── quality.py           # ZERO imports from other aipea modules (stdlib only)
+├── strategies.py        # Imports: _types.py (QueryType enum only)
 ├── _types.py            # Shared enums (ProcessingTier, QueryType, SearchStrategy)
 ├── models.py            # Shared data models (QueryAnalysis)
 ├── analyzer.py          # Imports: security.py, _types.py
-├── engine.py            # Imports: search.py, _types.py
+├── engine.py            # Imports: search.py, _types.py; lazy-imports strategies.py
 ├── enhancer.py          # Imports: ALL above (facade)
 ├── cli.py               # Imports: config.py, aipea (requires [cli] extra)
 └── __main__.py          # Entry point: python -m aipea
@@ -620,41 +622,74 @@ Today's date is 2026-02-14 (year 2026).
 Complexity instructions (simple/medium/complex) + model-specific style guidance
 (structured for GPT, nuanced for Claude, comprehensive for Gemini).
 
-### 4.3 Enhancement Strategies (Expansion)
+### 4.3 Named Enhancement Strategies (v1.3.0)
 
-The original design specified 6 named strategies. Production implements
-template-based classification (effectively 1 strategy with 7 type templates).
+The `strategies.py` module implements 6 named strategies with 6 pure-function
+techniques. Strategies are selected automatically by `QueryType` or specified
+explicitly via the `strategy` parameter on `enhance()` and `enhance_prompt()`.
 
-**Current state** (shipped):
+**Strategies** (all shipped in v1.3.0):
 
-| Strategy | Status |
-|----------|--------|
-| Template classification (7 types) | Shipped |
+| Strategy | Techniques | Auto-selected for |
+|----------|-----------|-------------------|
+| general | specification_extraction, constraint_identification | UNKNOWN |
+| technical | specification_extraction, constraint_identification, metric_definition, task_decomposition | TECHNICAL, OPERATIONAL |
+| research | specification_extraction, hypothesis_clarification, metric_definition | RESEARCH |
+| creative | specification_extraction, hypothesis_clarification | CREATIVE |
+| analytical | specification_extraction, constraint_identification, metric_definition, task_decomposition | ANALYTICAL |
+| strategic | specification_extraction, constraint_identification, objective_hierarchy_construction, task_decomposition | STRATEGIC |
 
-**Expansion roadmap** (from original design, Section 10):
+**Techniques** (pure functions, stdlib only):
 
-| Strategy | Techniques | Priority |
-|----------|-----------|----------|
-| Technical | specification_extraction, constraint_identification | P2 |
-| Research | hypothesis_clarification, evidence_gathering | P2 |
-| Creative | lateral_thinking, constraint_relaxation | P3 |
-| Analytical | metric_definition, data_decomposition | P2 |
-| Operational | task_decomposition, prerequisite_identification | P3 |
-| Strategic | objective_hierarchy_construction, scenario_planning | P3 |
+| Technique | Purpose |
+|-----------|---------|
+| `specification_extraction` | Extract implicit requirements (comparisons, evaluations, implementations) |
+| `constraint_identification` | Identify time, resource, scope, and technology constraints |
+| `hypothesis_clarification` | Reformulate vague qualifiers and generalizations |
+| `metric_definition` | Define measurable success criteria (performance, quality, scale) |
+| `task_decomposition` | Break multi-concern queries into sub-tasks |
+| `objective_hierarchy_construction` | Build goal trees for strategic/planning queries |
 
-### 4.4 Quality Assessor (Future)
+### 4.4 Quality Assessor (v1.3.0)
 
-Not yet built. Planned to measure enhancement effectiveness:
+The `quality.py` module provides heuristic quality scoring for prompt
+enhancements. `QualityAssessor.assess(original, enhanced)` returns a
+`QualityScore` with 4 sub-scores and a weighted composite.
 
 ```python
-class QualityAssessor:
-    def assess(self, original: str, enhanced: str) -> QualityScore:
-        """Compare original vs enhanced query for improvement metrics."""
-        ...
+from aipea.quality import QualityAssessor
+
+score = QualityAssessor().assess(original_query, enhanced_prompt)
+# score.clarity_improvement   — readability delta (0.0–1.0)
+# score.specificity_gain      — unique content-word growth (0.0–1.0)
+# score.information_density   — content-word ratio delta (0.0–1.0)
+# score.instruction_quality   — step markers + constraint keywords (0.0–1.0)
+# score.overall               — weighted composite (0.0–1.0)
 ```
 
-Metrics: clarity improvement, specificity gain, information density,
-instruction quality. See Section 10.3.
+Weights: clarity 0.25, specificity 0.30, density 0.20, instruction 0.25.
+
+Quality scores are computed automatically in `enhance()` and attached to
+`EnhancementResult.quality_score`.
+
+### 4.5 Dialogical Clarification (v1.3.0)
+
+`EnhancementResult.clarifications` provides advisory clarifying questions
+(max 3) for ambiguous queries. The enhancement still proceeds best-effort.
+
+Clarification triggers:
+- `ambiguity_score > 0.6` → "Could you be more specific...?"
+- No detected entities → "What specific [domain] topic...?"
+- High complexity + no search strategy → "Summary or deep dive?"
+- Short query (< 4 words) → "Could you provide more context?"
+- Low confidence (< 0.4) → "Could you rephrase...?"
+
+### 4.6 Semantic Search (v1.3.0)
+
+`OfflineKnowledgeBase.search_semantic(query, top_k)` provides BM25-ranked
+full-text search using the SQLite FTS5 index. The enhancement pipeline
+prefers semantic search over domain-filtered search, falling back to
+`search()` when BM25 returns no results.
 
 ---
 
@@ -676,6 +711,7 @@ result = await enhance_prompt(
     force_offline=False,                         # Optional, default False
     include_search=True,                         # Optional, default True — skip search context
     format_for_model=True,                       # Optional, default True — skip model-specific formatting
+    strategy="research",                         # Optional, default None (auto-select by QueryType)
 )
 
 # result.enhanced_prompt      → str (ready for LLM)
@@ -734,7 +770,8 @@ class AgoraPromptEnhancement:
 # Convenience functions remain for backward compatibility
 async def enhance_prompt(query, model_id, security_level=UNCLASSIFIED,
                          compliance_mode=None, force_offline=False,
-                         include_search=True, format_for_model=True) -> EnhancementResult:
+                         include_search=True, format_for_model=True,
+                         strategy=None) -> EnhancementResult:
     return await get_enhancer().enhance(query, model_id, security_level, compliance_mode,
                                         force_offline, include_search, format_for_model)
 
@@ -1122,8 +1159,13 @@ from aipea.enhancer import (
 # Shared data models
 from aipea.models import QueryAnalysis
 
-# Shared enums
-from aipea._types import ProcessingTier, QueryType, SearchStrategy
+# Shared enums and canonical helpers
+from aipea._types import (
+    ProcessingTier, QueryType, SearchStrategy,
+    QUERY_TYPE_PATTERNS,       # canonical query-type regex dict
+    MODEL_FAMILY_MAP,          # model-id → family mapping
+    get_model_family,          # canonical model family detector
+)
 
 # Security
 from aipea.security import (
@@ -1240,6 +1282,8 @@ class EnhancementResult:
     enhancement_time_ms: float = 0.0
     was_enhanced: bool = True
     enhancement_notes: list[str] = field(default_factory=list)
+    clarifications: list[str] = field(default_factory=list)     # v1.3.0
+    quality_score: QualityScore | None = None                   # v1.3.0
 
     def to_dict(self) -> dict[str, Any]: ...
 ```
@@ -1250,12 +1294,12 @@ class EnhancementResult:
 # Model ID → family mapping (used for formatting)
 MODEL_FAMILY_MAP = {
     "gpt-4": "openai",
-    "gpt-5.2": "gpt",
+    "gpt-5.2": "openai",
     "claude-opus-4-6": "claude",
     "claude-sonnet-4-5": "claude",
     "gemini-3-pro-preview": "gemini",
     "llama-3.3-70b": "llama",
-    # ... (full list in enhancer.py)
+    # ... (full list in _types.py)
 }
 
 OFFLINE_MODELS = {"gpt-oss-20b", "llama-3.3-70b", "llama-3.2-3b", "gemma-3n"}

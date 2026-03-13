@@ -4,7 +4,7 @@
 ```yaml
 version: 3.0.0
 status: ACTIVE
-tier: 2  # Standard (~7K LOC, 2 contributors, internal consumers)
+tier: 2  # Standard (~8.5K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
 inherits_from: ../../CLAUDE.md  # Undercurrent Holdings root
 maintainer: joshuakirby
@@ -26,8 +26,8 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~7,363 |
-| **Exports** | 34 symbols in `__all__` |
+| **Source LOC** | ~8,492 |
+| **Exports** | 36 symbols in `__all__` |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
 ---
@@ -126,7 +126,7 @@ Inherited from parent: secrets in code, force push to main.
 
 - **Framework**: pytest + pytest-asyncio (asyncio_mode = auto)
 - **Minimum Coverage**: 75% (`--cov-fail-under=75`)
-- **Markers**: `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.slow`
+- **Markers**: `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.slow`, `@pytest.mark.live`
 - **Run**: `make test`
 
 ### 3.3 Dependencies
@@ -153,10 +153,12 @@ security.py    <- ZERO aipea imports (stdlib only)
 knowledge.py   <- ZERO aipea imports (stdlib only)
 search.py      <- ZERO aipea imports (stdlib + httpx); lazy-imports config
 config.py      <- ZERO aipea imports (stdlib only, tomllib for TOML)
-_types.py      <- Shared enums (ProcessingTier, QueryType, SearchStrategy)
+quality.py     <- ZERO aipea imports (stdlib only: re, math, logging)
+strategies.py  <- imports _types (QueryType enum only)
+_types.py      <- Shared enums + canonical helpers (ProcessingTier, QueryType, SearchStrategy, QUERY_TYPE_PATTERNS, get_model_family)
 models.py      <- Shared data models (QueryAnalysis)
 analyzer.py    <- imports security, _types, models
-engine.py      <- imports search, _types
+engine.py      <- imports search, _types; lazy-imports strategies
 enhancer.py    <- imports ALL (facade)
 cli.py         <- imports config (optional: typer, rich, httpx)
 __main__.py    <- imports cli.app (CLI entry point)
@@ -211,6 +213,12 @@ __main__.py    <- imports cli.app (CLI entry point)
 | `EXA_API_KEY` | (none) | Exa search provider API key |
 | `FIRECRAWL_API_KEY` | (none) | Firecrawl provider API key |
 | `AIPEA_HTTP_TIMEOUT` | `30.0` | HTTP timeout for search providers (seconds) |
+| `AIPEA_OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL for offline models |
+| `AIPEA_DB_PATH` | `aipea_knowledge.db` | Path to offline knowledge SQLite database |
+| `AIPEA_STORAGE_TIER` | `standard` | Storage tier: ultra_compact, compact, standard, extended |
+| `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode: general, hipaa, tactical, fedramp |
+| `AIPEA_EXA_API_URL` | `https://api.exa.ai/search` | Exa API endpoint URL |
+| `AIPEA_FIRECRAWL_API_URL` | `https://api.firecrawl.dev/v1/search` | Firecrawl API endpoint URL |
 
 ### 5.5 Research & Documentation Tools
 
@@ -275,12 +283,11 @@ Before using or modifying code that depends on external libraries, verify curren
 8. `.github/workflows/publish.yml` triggers automatically on release
 9. Verify: `pip install aipea==X.Y.Z` from PyPI
 
-**One-time setup** (not yet done):
-- Create PyPI account at pypi.org
-- Register package name with initial manual upload: `hatch build && hatch publish`
-- Configure Trusted Publisher on PyPI: Settings > Publishing > Add GitHub Actions
-  - Owner: `undercurrentai`, Repository: `AIPEA`, Workflow: `publish.yml`, Environment: `release`
-- Create GitHub Environment `release` with protection rules (optional: require approval)
+**One-time setup** (completed in v1.2.0):
+- PyPI account: `undercurrentai` (`josh@undercurrentholdings.com`)
+- Trusted Publisher configured: Owner `undercurrentai`, Repo `AIPEA`, Workflow `publish.yml`, Environment `release`
+- GitHub Environment `release` created on the AIPEA repo
+- 2FA (TOTP) enabled on PyPI account
 
 ---
 
