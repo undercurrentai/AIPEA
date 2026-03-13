@@ -316,7 +316,7 @@ class OfflineKnowledgeBase:
         try:
             fts_count = conn.execute("SELECT COUNT(*) FROM knowledge_fts").fetchone()[0]
             node_count = conn.execute("SELECT COUNT(*) FROM knowledge_nodes").fetchone()[0]
-            if fts_count < node_count:
+            if fts_count != node_count:
                 logger.info(
                     "FTS index out of sync (%d vs %d rows), rebuilding", fts_count, node_count
                 )
@@ -716,7 +716,6 @@ class OfflineKnowledgeBase:
                     domain = excluded.domain,
                     content_hash = excluded.content_hash,
                     compressed_content = excluded.compressed_content,
-                    relevance_score = excluded.relevance_score,
                     security_classification = excluded.security_classification
                 """,
                 (

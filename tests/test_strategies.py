@@ -221,3 +221,27 @@ class TestSelectStrategy:
         for qt in QueryType:
             result = select_strategy_for_query_type(qt)
             assert result in STRATEGY_REGISTRY
+
+
+# =============================================================================
+# REGRESSION TESTS (bug-hunt wave 14)
+# =============================================================================
+
+
+class TestTaskDecompositionRegression:
+    """Regression: counting pattern included 'plus'/'as well as' but split did not."""
+
+    @pytest.mark.unit
+    def test_plus_conjunction_splits_correctly(self) -> None:
+        result = task_decomposition("Build an API plus deploy it plus test it")
+        assert "sub-task" in result.lower()
+        # Must produce multiple sub-tasks, not just one
+        assert result.count("Sub-task") >= 2
+
+    @pytest.mark.unit
+    def test_as_well_as_conjunction_splits(self) -> None:
+        result = task_decomposition(
+            "Design the schema as well as build the API as well as write tests"
+        )
+        assert "sub-task" in result.lower()
+        assert result.count("Sub-task") >= 2

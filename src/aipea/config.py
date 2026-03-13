@@ -350,7 +350,15 @@ def load_config(
 
 def _escape_config_value(value: str) -> str:
     """Escape a value for safe inclusion in double-quoted .env or TOML strings."""
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+    result = (
+        value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+    )
+
+    def _is_control(c: str) -> bool:
+        o = ord(c)
+        return o <= 0x08 or o in (0x0B, 0x0C) or 0x0E <= o <= 0x1F or o == 0x7F
+
+    return "".join(f"\\u{ord(c):04x}" if _is_control(c) else c for c in result)
 
 
 def save_dotenv(path: Path, config: AIPEAConfig) -> None:

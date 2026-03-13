@@ -1416,5 +1416,36 @@ class TestEscapePlaintextRegression:
         assert result.startswith("\\")
 
 
+# =============================================================================
+# REGRESSION TESTS (bug-hunt wave 14)
+# =============================================================================
+
+
+class TestExaEmptyQueryGuard:
+    """Regression: ExaSearchProvider.search() lacked empty query guard."""
+
+    @pytest.mark.unit
+    async def test_empty_query_returns_empty_context(self) -> None:
+        provider = ExaSearchProvider(api_key="test-key")
+        result = await provider.search("")
+        assert result.results == []
+        assert result.confidence == 0.0
+
+    @pytest.mark.unit
+    async def test_whitespace_query_returns_empty_context(self) -> None:
+        provider = ExaSearchProvider(api_key="test-key")
+        result = await provider.search("   ")
+        assert result.results == []
+        assert result.confidence == 0.0
+
+    @pytest.mark.unit
+    async def test_none_like_empty_query(self) -> None:
+        """Ensure the guard handles falsy query values."""
+        provider = ExaSearchProvider(api_key="test-key")
+        # Empty string is the main case (None would fail type check)
+        result = await provider.search("")
+        assert result.source == "exa"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -1901,3 +1901,31 @@ class TestClarificationOverlapFilter:
         # The key assertion: clarifications should be generated
         # (previously the word-level filter would block all suggestions)
         assert result is not None
+
+
+# =============================================================================
+# REGRESSION TESTS (bug-hunt wave 14)
+# =============================================================================
+
+
+class TestOfflineModelsSync:
+    """Regression: OFFLINE_MODELS set was inconsistent with OfflineModel enum."""
+
+    @pytest.mark.unit
+    def test_ollama_tier1_models_in_offline_set(self) -> None:
+        from aipea.engine import OfflineModel
+        from aipea.enhancer import OFFLINE_MODELS, is_offline_model
+
+        for model in OfflineModel.tier1_models():
+            assert model.value in OFFLINE_MODELS, (
+                f"Tier 1 model {model.value} missing from OFFLINE_MODELS"
+            )
+            assert is_offline_model(model.value)
+
+    @pytest.mark.unit
+    def test_gemma3_1b_recognized_as_offline(self) -> None:
+        from aipea.enhancer import is_offline_model
+
+        assert is_offline_model("gemma3:1b")
+        assert is_offline_model("gemma3:270m")
+        assert is_offline_model("phi3:mini")

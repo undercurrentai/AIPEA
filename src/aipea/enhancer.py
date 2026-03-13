@@ -198,6 +198,9 @@ OFFLINE_MODELS: set[str] = {
     "llama-3.3-70b",
     "llama-3.2-3b",
     "gemma-3n",
+    "gemma3:1b",
+    "gemma3:270m",
+    "phi3:mini",
 }
 
 

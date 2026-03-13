@@ -825,3 +825,51 @@ class TestSaveNewConfigFields:
         assert loaded.db_path == "/data/test.db"
         assert loaded.storage_tier == "extended"
         assert loaded.default_compliance == "tactical"
+
+
+# =============================================================================
+# REGRESSION TESTS (bug-hunt wave 14)
+# =============================================================================
+
+
+class TestEscapeConfigValueControlChars:
+    """Regression: _escape_config_value did not escape TOML-illegal control chars."""
+
+    @pytest.mark.unit
+    def test_null_byte_escaped(self) -> None:
+        from aipea.config import _escape_config_value
+
+        result = _escape_config_value("abc\x00def")
+        assert "\x00" not in result
+        assert "\\u0000" in result
+
+    @pytest.mark.unit
+    def test_backspace_escaped(self) -> None:
+        from aipea.config import _escape_config_value
+
+        result = _escape_config_value("abc\x08def")
+        assert "\x08" not in result
+        assert "\\u0008" in result
+
+    @pytest.mark.unit
+    def test_form_feed_escaped(self) -> None:
+        from aipea.config import _escape_config_value
+
+        result = _escape_config_value("abc\x0cdef")
+        assert "\x0c" not in result
+        assert "\\u000c" in result
+
+    @pytest.mark.unit
+    def test_normal_chars_unaffected(self) -> None:
+        from aipea.config import _escape_config_value
+
+        result = _escape_config_value("normal ASCII key 12345")
+        assert result == "normal ASCII key 12345"
+
+    @pytest.mark.unit
+    def test_tab_preserved(self) -> None:
+        from aipea.config import _escape_config_value
+
+        result = _escape_config_value("has\ttab")
+        # Tab (U+0009) is allowed in TOML basic strings
+        assert "\t" in result

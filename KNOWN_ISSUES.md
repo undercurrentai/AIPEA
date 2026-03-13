@@ -1,6 +1,76 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-13 + Quality Gate: 2026-03-13)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-14 + Quality Gate: 2026-03-13)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Wave 14 Fixes (2026-03-13) — 10 issues resolved
+
+### 64. `task_decomposition` counting/splitting pattern mismatch — FIXED
+- **File**: `src/aipea/strategies.py:176,186`
+- **Severity**: MEDIUM | **Confidence**: 0.90
+- **Source**: Claude sweep agent (types/strategies/CLI)
+- **Fix**: Counting regex included `plus` and `as well as` but split regex did not, causing queries like "Build X plus deploy Y plus test Z" to produce a single "Sub-task 1" with the entire query. Added `plus|as\s+well\s+as` to the split pattern. 2 regression tests added.
+
+### 65. `ExaSearchProvider.search()` missing empty query guard — FIXED
+- **File**: `src/aipea/search.py:501-520`
+- **Severity**: MEDIUM | **Confidence**: 0.85
+- **Source**: Claude sweep agent (core modules)
+- **Fix**: `FirecrawlProvider.search()` guarded against empty/whitespace queries but `ExaSearchProvider.search()` did not, causing wasteful API calls. Added matching guard. 3 regression tests added.
+
+### 66. `.env` permissions check misses write/execute bits — FIXED
+- **File**: `src/aipea/cli.py:306`
+- **Severity**: MEDIUM | **Confidence**: 0.85
+- **Source**: Claude sweep agent (types/strategies/CLI)
+- **Fix**: Doctor security check only tested `S_IRGRP | S_IROTH` (group/other read), missing write and execute bits. A file with mode `0o620` would pass as "safe". Now checks all 6 group/other permission bits.
+
+### 67. `.gitignore` check uses substring match — FIXED
+- **File**: `src/aipea/cli.py:296`
+- **Severity**: LOW | **Confidence**: 0.80
+- **Source**: Claude sweep agent (types/strategies/CLI)
+- **Fix**: `if ".env" in content` matched `.env.example`, `.env.local`, or comments mentioning `.env`. Changed to line-by-line parsing that only matches exact `.env` or `/.env` entries.
+
+### 68. Connectivity tests hardcode API URLs — FIXED
+- **File**: `src/aipea/cli.py:167-168,186-187`
+- **Severity**: LOW | **Confidence**: 0.75
+- **Source**: Claude sweep agent (types/strategies/CLI)
+- **Fix**: `_test_exa_connectivity` and `_test_firecrawl_connectivity` hardcoded the default API URLs, ignoring `AIPEA_EXA_API_URL` and `AIPEA_FIRECRAWL_API_URL` env vars. Now reads from `os.environ.get()` with same defaults.
+
+### 69. `_sync_fts_index` only rebuilds when fts_count < node_count — FIXED
+- **File**: `src/aipea/knowledge.py:319`
+- **Severity**: LOW | **Confidence**: 0.75
+- **Source**: Claude sweep agent (core modules)
+- **Fix**: Orphan FTS entries (fts_count > node_count) never triggered a rebuild. Changed `<` to `!=`. 1 regression test added.
+
+### 70. `add_knowledge` upsert overwrites user-tuned `relevance_score` — FIXED
+- **File**: `src/aipea/knowledge.py:715-720`
+- **Severity**: MEDIUM | **Confidence**: 0.75
+- **Source**: Claude sweep agent (core modules)
+- **Fix**: `ON CONFLICT(id) DO UPDATE SET` included `relevance_score = excluded.relevance_score`, silently overwriting manually tuned scores during re-seed. Removed `relevance_score` from the UPDATE SET clause. 1 regression test added.
+
+### 71. `OFFLINE_MODELS` set inconsistent with `OfflineModel` enum — FIXED
+- **File**: `src/aipea/enhancer.py:196-201`
+- **Severity**: LOW | **Confidence**: 0.85
+- **Source**: Claude sweep agent (engine/enhancer)
+- **Fix**: `OFFLINE_MODELS` lacked Ollama Tier 1 models (`gemma3:1b`, `gemma3:270m`, `phi3:mini`). `is_offline_model("gemma3:1b")` returned `False` despite the model being available offline via Ollama. Added all 3 Tier 1 models to the set. 2 regression tests added.
+
+### 72. `_escape_config_value` does not escape TOML-illegal control characters — FIXED
+- **File**: `src/aipea/config.py:351-353`
+- **Severity**: LOW | **Confidence**: 0.70
+- **Source**: Claude sweep agent (core modules)
+- **Fix**: Control characters U+0000-U+0008, U+000B-U+000C, U+000E-U+001F, U+007F were not escaped, potentially producing unparsable TOML files. Added `\uXXXX` escaping for illegal control chars while preserving allowed tab (U+0009). 5 regression tests added.
+
+### 73. API URL env vars frozen at import time — DEFERRED
+- **File**: `src/aipea/search.py:40-41`
+- **Severity**: MEDIUM | **Confidence**: 0.80
+- **Source**: Claude sweep agent (core modules)
+- **Rationale**: `EXA_API_URL` and `FIRECRAWL_API_URL` resolve from `os.environ.get()` at module import time, bypassing `.env`/TOML config. Fixing requires routing through the config system (`load_config()`), which would add a cross-module dependency to a zero-deps module. Low real-world impact since custom API URLs are rare.
+
+## Wave 14 — Deferred
+
+### 74. `enhance_for_models()` gives all models the same prompt formatted for the first model — DEFERRED (updates #36)
+- **File**: `src/aipea/enhancer.py:672-711`
+- **Severity**: MEDIUM | **Confidence**: 0.90
+- **Source**: Claude sweep agent (engine/enhancer)
+- **Rationale**: Same as deferred #36 (D10). `enhance()` is called once with the first model's family, producing family-specific formatting (markdown headers for OpenAI, XML tags for Claude). `create_model_specific_prompt()` with `search_context=None` is a no-op, so all models get the first model's formatting. Fix requires per-model `formulate_search_aware_prompt()` calls or a generic format intermediate. Impact is cosmetic (soft formatting preferences, not functional).
 
 ## Wave 13 Fixes (2026-03-13) — 7 issues resolved
 
@@ -430,9 +500,11 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 - **File**: `src/aipea/search.py:166-182`
 - **Rationale**: Clamping already handles this; log noise is minor and useful for monitoring.
 
-## Deferred Findings (1 bug remaining)
+## Deferred Findings (3 bugs remaining)
 
 - **#56** Unicode homoglyph bypass (MEDIUM) — requires NFKC normalization implementation
+- **#73** API URL env vars frozen at import time (MEDIUM) — requires config system wiring
+- **#74** enhance_for_models all-same-prompt (MEDIUM) — cosmetic, updates #36
 
 ---
-*Last updated: 2026-03-13 (Wave 13 — 7 fixes, 6 regression tests, 704 total tests, 91.48% coverage)*
+*Last updated: 2026-03-13 (Wave 14 — 10 fixes, 2 deferred, 14 regression tests, 718 total tests, 91.88% coverage)*

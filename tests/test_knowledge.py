@@ -896,5 +896,83 @@ class TestSemanticSearchAccessTracking:
                 assert row[0] >= 2, f"Expected access_count >= 2, got {row[0]}"
 
 
+# =============================================================================
+# REGRESSION TESTS (bug-hunt wave 14)
+# =============================================================================
+
+
+class TestFtsSyncBothDirections:
+    """Regression: _sync_fts_index only rebuilt when fts_count < node_count."""
+
+    @pytest.mark.unit
+    async def test_sync_triggers_on_orphan_fts_entries(self, tmp_path: Any) -> None:
+        """FTS rebuild should trigger when fts_count > node_count."""
+        db_path = str(tmp_path / "fts_sync_test.db")
+        kb = OfflineKnowledgeBase(db_path, StorageTier.COMPACT)
+        try:
+            await kb.add_knowledge("Test content for FTS sync", KnowledgeDomain.TECHNICAL)
+
+            # Manually insert an orphan FTS row
+            with kb._with_db_lock() as conn:
+                conn.execute(
+                    "INSERT INTO knowledge_fts(rowid, content, domain) "
+                    "VALUES (99999, 'orphan', 'test')"
+                )
+                conn.commit()
+                fts_before = conn.execute("SELECT COUNT(*) FROM knowledge_fts").fetchone()[0]
+                node_count = conn.execute("SELECT COUNT(*) FROM knowledge_nodes").fetchone()[0]
+                assert fts_before > node_count, "Precondition: orphan FTS entry exists"
+
+            # Trigger sync — should detect mismatch and rebuild
+            with kb._with_db_lock() as conn:
+                kb._sync_fts_index(conn)
+                fts_after = conn.execute("SELECT COUNT(*) FROM knowledge_fts").fetchone()[0]
+                node_count = conn.execute("SELECT COUNT(*) FROM knowledge_nodes").fetchone()[0]
+                assert fts_after == node_count, "FTS should be in sync after rebuild"
+        finally:
+            kb.close()
+
+
+class TestUpsertPreservesRelevanceScore:
+    """Regression: add_knowledge upsert overwrote user-tuned relevance_score."""
+
+    @pytest.mark.unit
+    async def test_reseed_preserves_tuned_score(self, tmp_path: Any) -> None:
+        """Re-adding same content should NOT overwrite manually tuned relevance."""
+        import hashlib
+
+        db_path = str(tmp_path / "upsert_score_test.db")
+        kb = OfflineKnowledgeBase(db_path, StorageTier.COMPACT)
+        try:
+            content = "Important knowledge about quantum computing"
+            node_id = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+            await kb.add_knowledge(content, KnowledgeDomain.TECHNICAL, relevance_score=0.5)
+
+            # Manually tune the relevance score higher using the hash-based node_id
+            updated = await kb.update_relevance(node_id, 0.95)
+            assert updated, "update_relevance should succeed"
+
+            # Verify the score was updated
+            with kb._with_db_lock() as conn:
+                row = conn.execute(
+                    "SELECT relevance_score FROM knowledge_nodes WHERE id = ?", (node_id,)
+                ).fetchone()
+                assert row is not None
+                assert row[0] == pytest.approx(0.95, abs=0.01)
+
+            # Re-add the same content (simulating seed-kb re-run)
+            await kb.add_knowledge(content, KnowledgeDomain.TECHNICAL, relevance_score=0.5)
+
+            # Score should be preserved at 0.95, not reset to 0.5
+            with kb._with_db_lock() as conn:
+                row = conn.execute(
+                    "SELECT relevance_score FROM knowledge_nodes WHERE id = ?", (node_id,)
+                ).fetchone()
+                assert row is not None
+                assert row[0] == pytest.approx(0.95, abs=0.01)
+        finally:
+            kb.close()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -510,6 +510,15 @@ class ExaSearchProvider(SearchProvider):
         Returns:
             SearchContext with results from Exa
         """
+        if not query or not query.strip():
+            logger.debug("Empty query provided to ExaSearchProvider.search()")
+            return SearchContext(
+                query=query or "",
+                results=[],
+                source=self.provider_name,
+                confidence=0.0,
+            )
+
         if not self.enabled:
             logger.debug("ExaSearchProvider disabled, returning empty context")
             return SearchContext(

@@ -183,7 +183,9 @@ def task_decomposition(query: str) -> str:
 
     parts: list[str] = []
     # Split on conjunctions for sub-task identification
-    segments = re.split(r"\b(?:and|also|additionally)\b|,", query, flags=re.IGNORECASE)
+    segments = re.split(
+        r"\b(?:and|also|additionally|plus|as\s+well\s+as)\b|,", query, flags=re.IGNORECASE
+    )
     for i, segment in enumerate(segments, 1):
         segment = segment.strip()
         if segment and len(segment) > 5:

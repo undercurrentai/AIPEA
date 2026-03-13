@@ -163,9 +163,11 @@ else:
 
     def _test_exa_connectivity(api_key: str) -> bool:
         """Ping Exa API to verify the key works."""
+        import os as _os
+
         try:
             resp = httpx.post(
-                "https://api.exa.ai/search",
+                _os.environ.get("AIPEA_EXA_API_URL", "https://api.exa.ai/search"),
                 headers={"x-api-key": api_key, "Content-Type": "application/json"},
                 json={"query": "test", "numResults": 1},
                 timeout=10.0,
@@ -182,9 +184,11 @@ else:
 
     def _test_firecrawl_connectivity(api_key: str) -> bool:
         """Ping Firecrawl API to verify the key works."""
+        import os as _os
+
         try:
             resp = httpx.post(
-                "https://api.firecrawl.dev/v1/search",
+                _os.environ.get("AIPEA_FIRECRAWL_API_URL", "https://api.firecrawl.dev/v1/search"),
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
@@ -293,7 +297,12 @@ else:
         gitignore_path = Path.cwd() / ".gitignore"
         if gitignore_path.exists():
             content = gitignore_path.read_text(encoding="utf-8")
-            if ".env" in content:
+            gitignore_entries = [
+                ln.strip()
+                for ln in content.splitlines()
+                if ln.strip() and not ln.strip().startswith("#")
+            ]
+            if any(entry in (".env", "/.env") for entry in gitignore_entries):
                 chk.ok(".gitignore", ".env is listed")
             else:
                 chk.warn(".gitignore", ".env is NOT listed — secrets may be committed!")
@@ -303,10 +312,21 @@ else:
         dotenv_file = Path.cwd() / ".env"
         if dotenv_file.exists():
             mode = dotenv_file.stat().st_mode
-            if not (mode & stat_mod.S_IRGRP) and not (mode & stat_mod.S_IROTH):
-                chk.ok(".env permissions", "0o600 (owner only)")
+            group_other_bits = (
+                stat_mod.S_IRGRP
+                | stat_mod.S_IWGRP
+                | stat_mod.S_IXGRP
+                | stat_mod.S_IROTH
+                | stat_mod.S_IWOTH
+                | stat_mod.S_IXOTH
+            )
+            if not (mode & group_other_bits):
+                chk.ok(".env permissions", "owner-only access (0o600)")
             else:
-                chk.warn(".env permissions", "file is readable by group/others")
+                chk.warn(
+                    ".env permissions",
+                    f"non-owner permissions detected (mode={oct(mode & 0o777)})",
+                )
         else:
             chk.ok(".env permissions", "n/a (no .env file)")
 
@@ -561,7 +581,12 @@ else:
             gitignore = Path.cwd() / ".gitignore"
             if gitignore.exists():
                 content = gitignore.read_text(encoding="utf-8")
-                if ".env" not in content:
+                gi_entries = [
+                    ln.strip()
+                    for ln in content.splitlines()
+                    if ln.strip() and not ln.strip().startswith("#")
+                ]
+                if not any(entry in (".env", "/.env") for entry in gi_entries):
                     console.print(
                         "[yellow]Warning: .env is not in .gitignore — "
                         "add it to prevent committing secrets![/yellow]"
