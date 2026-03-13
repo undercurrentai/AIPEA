@@ -30,7 +30,13 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, ClassVar
 
-from aipea._types import QUERY_TYPE_PRIORITY, ProcessingTier, QueryType, SearchStrategy
+from aipea._types import (
+    QUERY_TYPE_PATTERNS,
+    QUERY_TYPE_PRIORITY,
+    ProcessingTier,
+    QueryType,
+    SearchStrategy,
+)
 from aipea.search import (
     ModelType,
     SearchOrchestrator,
@@ -289,6 +295,21 @@ class OllamaOfflineClient:
         """
         import subprocess
 
+        # Warn when callers pass non-default values for parameters that
+        # the ollama CLI does not support (will be used after REST API migration).
+        if max_tokens != 512:
+            logger.warning(
+                "max_tokens=%d ignored (ollama CLI does not support it; "
+                "will be used when REST API migration completes)",
+                max_tokens,
+            )
+        if temperature != 0.7:
+            logger.warning(
+                "temperature=%.2f ignored (ollama CLI does not support it; "
+                "will be used when REST API migration completes)",
+                temperature,
+            )
+
         # Validate prompt length to prevent resource exhaustion
         prompt_bytes = len(prompt.encode("utf-8"))
         if prompt_bytes > self._MAX_PROMPT_BYTES:
@@ -426,6 +447,10 @@ class TierProcessor(ABC):
 
     Each tier processor implements a specific level of query enhancement
     with different complexity, latency, and capability characteristics.
+
+    Currently only OfflineTierProcessor exists. TacticalTierProcessor and
+    StrategicTierProcessor are planned (see docs/ROADMAP.md P2/P3) and will
+    extend this ABC.
     """
 
     @abstractmethod
@@ -475,39 +500,7 @@ class OfflineTierProcessor(TierProcessor):
     - Confidence range: 0.70-0.80
     """
 
-    # Query type patterns for classification
-    QUERY_PATTERNS: ClassVar[dict[QueryType, list[str]]] = {
-        QueryType.TECHNICAL: [
-            r"\b(code|program|api|function|class|method|debug|error|exception)\b",
-            r"\b(python|javascript|java|c\+\+|rust|golang|typescript)\b",
-            r"\b(database|sql|query|schema|table|index)\b",
-        ],
-        QueryType.RESEARCH: [
-            r"\b(research|study|paper|journal|academic|scientific)\b",
-            r"\b(analysis|investigate|examine|explore|hypothesis)\b",
-            r"\b(data|statistics|findings|results|evidence)\b",
-        ],
-        QueryType.CREATIVE: [
-            r"\b(create|design|write|compose|brainstorm|ideate)\b",
-            r"\b(story|article|content|copy|creative|artistic)\b",
-            r"\b(imagine|innovate|original|unique|novel)\b",
-        ],
-        QueryType.ANALYTICAL: [
-            r"\b(analyze|evaluate|compare|assess|measure)\b",
-            r"\b(problem|solve|solution|strategy|approach)\b",
-            r"\b(data|metrics|kpi|performance|benchmark)\b",
-        ],
-        QueryType.OPERATIONAL: [
-            r"\b(how\s+to|steps|procedure|process|workflow)\b",
-            r"\b(install|configure|setup|deploy|implement)\b",
-            r"\b(guide|tutorial|instructions|manual)\b",
-        ],
-        QueryType.STRATEGIC: [
-            r"\b(plan|strategy|roadmap|vision|goals)\b",
-            r"\b(decision|choose|option|alternative|trade-off)\b",
-            r"\b(long-term|future|forecast|predict|scenario)\b",
-        ],
-    }
+    # Query type patterns sourced from canonical QUERY_TYPE_PATTERNS in _types.py
 
     # Enhancement templates by query type
     ENHANCEMENT_TEMPLATES: ClassVar[dict[QueryType, str]] = {
@@ -572,9 +565,9 @@ class OfflineTierProcessor(TierProcessor):
             use_ollama: If True, attempt to use Ollama for real LLM processing
                        when models are available. Falls back to templates if not.
         """
-        # Compile patterns for efficiency
+        # Compile canonical patterns from _types.py
         self._compiled_patterns: dict[QueryType, list[re.Pattern[str]]] = {}
-        for qtype, patterns in self.QUERY_PATTERNS.items():
+        for qtype, patterns in QUERY_TYPE_PATTERNS.items():
             self._compiled_patterns[qtype] = [re.compile(p, re.IGNORECASE) for p in patterns]
 
         self._use_ollama = use_ollama
@@ -585,7 +578,7 @@ class OfflineTierProcessor(TierProcessor):
 
         logger.debug(
             "OfflineTierProcessor initialized with %d query types, ollama=%s",
-            len(self.QUERY_PATTERNS),
+            len(QUERY_TYPE_PATTERNS),
             use_ollama,
         )
 

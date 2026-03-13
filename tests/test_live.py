@@ -498,11 +498,12 @@ class TestLiveConfig:
 
 
 class TestLiveComplianceHandler:
-    def test_general_allows_all_models(self):
+    def test_general_blocks_forbidden_allows_others(self):
         handler = ComplianceHandler(ComplianceMode.GENERAL)
-        assert handler.validate_model("gpt-4o") is True
-        assert handler.validate_model("gpt-4o-mini") is True
+        assert handler.validate_model("gpt-4o") is False
+        assert handler.validate_model("gpt-4o-mini") is False
         assert handler.validate_model("claude-opus-4-6") is True
+        assert handler.validate_model("gpt-5.2") is True
         assert handler.validate_model("gemini-2") is True
 
     def test_hipaa_restricts_to_baa_only(self):
@@ -618,8 +619,8 @@ class TestLiveFullPipeline:
         )
         assert result.processing_tier == ProcessingTier.OFFLINE
 
-    async def test_gpt4o_model_enhances_normally(self):
-        result = await enhance_prompt("What is Python?", model_id="gpt-4o")
+    async def test_gpt52_model_enhances_normally(self):
+        result = await enhance_prompt("What is Python?", model_id="gpt-5.2")
         assert result.was_enhanced is True
         assert "Python" in result.enhanced_prompt or "python" in result.enhanced_prompt.lower()
 
@@ -664,9 +665,9 @@ class TestLiveFullPipeline:
         enhancer = AIPEAEnhancer()
         results = await enhancer.enhance_for_models(
             "Explain containerization",
-            model_ids=["gpt-4o", "claude-opus-4-6"],
+            model_ids=["gpt-5.2", "claude-opus-4-6"],
         )
-        assert "gpt-4o" in results
+        assert "gpt-5.2" in results
         assert "claude-opus-4-6" in results
 
     async def test_to_dict_contains_all_key_fields(self):

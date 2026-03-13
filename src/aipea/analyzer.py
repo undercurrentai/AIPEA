@@ -28,7 +28,13 @@ import re
 import threading
 from typing import ClassVar
 
-from aipea._types import QUERY_TYPE_PRIORITY, ProcessingTier, QueryType, SearchStrategy
+from aipea._types import (
+    QUERY_TYPE_PATTERNS,
+    QUERY_TYPE_PRIORITY,
+    ProcessingTier,
+    QueryType,
+    SearchStrategy,
+)
 from aipea.models import QueryAnalysis
 from aipea.security import SecurityContext, SecurityScanner
 
@@ -177,7 +183,7 @@ class QueryRouter:
             return ProcessingTier.OFFLINE
 
         # Calculate complexity
-        complexity = self._calculate_complexity(query)
+        complexity = self.calculate_complexity(query)
 
         # Apply query-type complexity boost so substantive queries
         # (TECHNICAL, RESEARCH, etc.) escape the OFFLINE tier.
@@ -192,13 +198,13 @@ class QueryRouter:
             )
 
         # Detect temporal needs
-        needs_temporal, _ = self._detect_temporal_needs(query)
+        needs_temporal, _ = self.detect_temporal_needs(query)
 
         # Identify domain
-        domains = self._identify_domain(query)
+        domains = self.identify_domain(query)
 
         # Determine confidence (affected by ambiguity)
-        confidence = self._calculate_confidence(query, complexity, domains)
+        confidence = self.calculate_confidence(query, complexity, domains)
 
         logger.debug(
             "Query analysis: complexity=%.2f, temporal=%s, domains=%s, confidence=%.2f",
@@ -224,7 +230,7 @@ class QueryRouter:
         logger.info("Routed query to tier: %s", tier.value)
         return tier
 
-    def _calculate_complexity(self, query: str) -> float:
+    def calculate_complexity(self, query: str) -> float:
         """Calculate complexity score for a query.
 
         Scoring factors:
@@ -264,7 +270,7 @@ class QueryRouter:
         # Cap at 1.0
         return min(1.0, complexity)
 
-    def _detect_temporal_needs(self, query: str) -> tuple[bool, list[str]]:
+    def detect_temporal_needs(self, query: str) -> tuple[bool, list[str]]:
         """Detect if query requires current/real-time information.
 
         Args:
@@ -296,7 +302,7 @@ class QueryRouter:
 
         return len(unique_markers) > 0, unique_markers
 
-    def _identify_domain(self, query: str) -> list[str]:
+    def identify_domain(self, query: str) -> list[str]:
         """Identify domain indicators in the query.
 
         Args:
@@ -316,7 +322,7 @@ class QueryRouter:
 
         return detected_domains
 
-    def _calculate_confidence(
+    def calculate_confidence(
         self,
         query: str,
         complexity: float,
@@ -399,49 +405,14 @@ class QueryAnalyzer:
         >>> print(analysis.search_strategy)  # SearchStrategy.QUICK_FACTS
     """
 
-    # Query type patterns (more comprehensive than QueryRouter)
-    QUERY_TYPE_PATTERNS: ClassVar[dict[QueryType, list[str]]] = {
-        QueryType.TECHNICAL: [
-            r"\b(code|program|api|function|class|method|debug|error|exception)\b",
-            r"\b(python|javascript|java|c\+\+|rust|golang|typescript)\b",
-            r"\b(database|sql|query|schema|table|index)\b",
-            r"\b(implement|develop|build|create|design)\b",
-        ],
-        QueryType.RESEARCH: [
-            r"\b(research|study|paper|journal|academic|scientific)\b",
-            r"\b(analysis|investigate|examine|explore|hypothesis)\b",
-            r"\b(data|statistics|findings|results|evidence)\b",
-        ],
-        QueryType.CREATIVE: [
-            r"\b(create|design|write|compose|brainstorm|ideate)\b",
-            r"\b(story|article|content|copy|creative|artistic)\b",
-            r"\b(imagine|innovate|original|unique|novel)\b",
-        ],
-        QueryType.ANALYTICAL: [
-            r"\b(analyze|evaluate|compare|assess|measure)\b",
-            r"\b(problem|solve|solution|strategy|approach)\b",
-            r"\b(data|metrics|kpi|performance|benchmark)\b",
-        ],
-        QueryType.OPERATIONAL: [
-            r"\b(how\s+to|steps|procedure|process|workflow)\b",
-            r"\b(install|configure|setup|deploy|implement)\b",
-            r"\b(guide|tutorial|instructions|manual)\b",
-        ],
-        QueryType.STRATEGIC: [
-            r"\b(plan|strategy|roadmap|vision|goals)\b",
-            r"\b(decision|choose|option|alternative|trade-off)\b",
-            r"\b(long-term|future|forecast|predict|scenario)\b",
-        ],
-    }
-
     def __init__(self) -> None:
         """Initialize the query analyzer."""
         self._router = QueryRouter()
         self._scanner = SecurityScanner()
 
-        # Compile query type patterns
+        # Compile canonical query type patterns from _types.py
         self._compiled_query_types: dict[QueryType, list[re.Pattern[str]]] = {}
-        for qtype, patterns in self.QUERY_TYPE_PATTERNS.items():
+        for qtype, patterns in QUERY_TYPE_PATTERNS.items():
             self._compiled_query_types[qtype] = [re.compile(p, re.IGNORECASE) for p in patterns]
 
         # Pre-compile entity detection patterns (avoid recompilation per call)
@@ -489,16 +460,16 @@ class QueryAnalyzer:
         query_type = self._classify_query_type(query)
 
         # Calculate complexity
-        complexity = self._router._calculate_complexity(query)
+        complexity = self._router.calculate_complexity(query)
 
         # Detect temporal needs
-        needs_temporal, temporal_markers = self._router._detect_temporal_needs(query)
+        needs_temporal, temporal_markers = self._router.detect_temporal_needs(query)
 
         # Identify domains
-        domains = self._router._identify_domain(query)
+        domains = self._router.identify_domain(query)
 
         # Calculate confidence
-        confidence = self._router._calculate_confidence(query, complexity, domains)
+        confidence = self._router.calculate_confidence(query, complexity, domains)
 
         # Detect entities (simplified)
         entities = self._detect_entities(query)

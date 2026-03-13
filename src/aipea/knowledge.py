@@ -125,6 +125,16 @@ class KnowledgeSearchResult:
     total_matches: int = 0
 
 
+class _RowList:
+    """Lightweight wrapper around a list of sqlite3.Row to mimic cursor.fetchall()."""
+
+    def __init__(self, rows: list[sqlite3.Row]) -> None:
+        self._rows = rows
+
+    def fetchall(self) -> list[sqlite3.Row]:
+        return self._rows
+
+
 class OfflineKnowledgeBase:
     """SQLite-based offline knowledge storage for air-gapped operation.
 
@@ -276,7 +286,17 @@ class OfflineKnowledgeBase:
                     "ON knowledge_nodes(domain, relevance_score DESC)"
                 )
 
+                # FTS5 virtual table for full-text search
+                conn.execute("""
+                    CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts
+                    USING fts5(content, domain)
+                """)
+
                 conn.commit()
+
+                # Rebuild FTS index from existing data if out of sync (migration)
+                self._sync_fts_index(conn)
+
                 logger.debug("Database schema initialized")
             except Exception:
                 # Close failed connection and reset so _get_connection() creates fresh one
@@ -284,31 +304,163 @@ class OfflineKnowledgeBase:
                 self._conn = None
                 raise
 
+    def _sync_fts_index(self, conn: sqlite3.Connection) -> None:
+        """Ensure FTS index is in sync with knowledge_nodes table.
+
+        Rebuilds the FTS index if the row counts diverge (e.g. after migration
+        from a pre-FTS database).
+        """
+        try:
+            fts_count = conn.execute("SELECT COUNT(*) FROM knowledge_fts").fetchone()[0]
+            node_count = conn.execute("SELECT COUNT(*) FROM knowledge_nodes").fetchone()[0]
+            if fts_count < node_count:
+                logger.info(
+                    "FTS index out of sync (%d vs %d rows), rebuilding", fts_count, node_count
+                )
+                self._rebuild_fts_index(conn)
+        except sqlite3.OperationalError:
+            # FTS table might not exist yet on very first init
+            pass
+
+    def _rebuild_fts_index(self, conn: sqlite3.Connection) -> None:
+        """Rebuild the FTS index from all rows in knowledge_nodes."""
+        conn.execute("DELETE FROM knowledge_fts")
+        rows = conn.execute(
+            "SELECT rowid, compressed_content, domain FROM knowledge_nodes"
+        ).fetchall()
+        for row in rows:
+            try:
+                content = zlib.decompress(row["compressed_content"]).decode("utf-8")
+                conn.execute(
+                    "INSERT INTO knowledge_fts(rowid, content, domain) VALUES (?, ?, ?)",
+                    (row["rowid"], content, row["domain"]),
+                )
+            except (zlib.error, UnicodeDecodeError) as e:
+                logger.warning("Skipping corrupt row %s during FTS rebuild: %s", row["rowid"], e)
+        conn.commit()
+        logger.info("FTS index rebuilt with %d rows", len(rows))
+
     async def search(
         self,
         query: str,
         domain: KnowledgeDomain | None = None,
         limit: int = 5,
-    ) -> list[KnowledgeNode]:
+    ) -> KnowledgeSearchResult:
         """Search the offline knowledge base.
 
-        Retrieves knowledge nodes matching the optional domain filter,
-        ordered by relevance score. Updates access counts and timestamps
-        for retrieved nodes.
-
-        Note: This is a simple relevance-based search. In production,
-        a more sophisticated text search (FTS5) or embedding-based
-        similarity search would be used.
+        Retrieves knowledge nodes matching the query using FTS5 full-text
+        search, falling back to relevance_score ordering if FTS returns no
+        matches. Updates access counts and timestamps for retrieved nodes.
 
         Args:
-            query: Search query (currently used for logging only)
+            query: Search query (used for FTS matching and logging)
             domain: Optional domain filter to restrict results
             limit: Maximum number of results to return
 
         Returns:
-            List of KnowledgeNode objects ordered by relevance
+            KnowledgeSearchResult with matching nodes and metadata
         """
-        return await asyncio.to_thread(self._search_sync, query, domain, limit)
+        nodes = await asyncio.to_thread(self._search_sync, query, domain, limit)
+        return KnowledgeSearchResult(
+            nodes=nodes,
+            query=query,
+            domain_filter=domain,
+            total_matches=len(nodes),
+        )
+
+    @staticmethod
+    def _fts_escape(query: str) -> str:
+        """Escape a user query for safe use in FTS5 MATCH expressions.
+
+        Wraps each token in double-quotes so that special FTS5 characters
+        (*, ^, OR, AND, NEAR, etc.) are treated as literals.  Embedded
+        double-quotes inside tokens are doubled per FTS5 quoting rules.
+        """
+        tokens = query.split()
+        if not tokens:
+            return ""
+        return " ".join(f'"{t.replace(chr(34), chr(34) + chr(34))}"' for t in tokens)
+
+    def _fts_search(
+        self,
+        conn: sqlite3.Connection,
+        query: str,
+        domain: KnowledgeDomain | None,
+        limit: int,
+    ) -> sqlite3.Cursor | None:
+        """Attempt an FTS5 search. Returns a cursor or None if no results."""
+        if not query.strip():
+            return None
+        fts_query = self._fts_escape(query)
+        if not fts_query:
+            return None
+        try:
+            if domain is not None:
+                cursor = conn.execute(
+                    """
+                    SELECT kn.id, kn.domain, kn.compressed_content, kn.relevance_score,
+                           kn.security_classification, kn.created_at, kn.access_count
+                    FROM knowledge_nodes kn
+                    JOIN knowledge_fts fts ON kn.rowid = fts.rowid
+                    WHERE knowledge_fts MATCH ? AND kn.domain = ?
+                    ORDER BY fts.rank
+                    LIMIT ?
+                    """,
+                    (fts_query, domain.value, limit),
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    SELECT kn.id, kn.domain, kn.compressed_content, kn.relevance_score,
+                           kn.security_classification, kn.created_at, kn.access_count
+                    FROM knowledge_nodes kn
+                    JOIN knowledge_fts fts ON kn.rowid = fts.rowid
+                    WHERE knowledge_fts MATCH ?
+                    ORDER BY fts.rank
+                    LIMIT ?
+                    """,
+                    (fts_query, limit),
+                )
+            # Peek at results — if empty, return None to trigger fallback
+            rows = cursor.fetchall()
+            if not rows:
+                return None
+            # Re-wrap rows in a lightweight object that exposes fetchall()
+            # so the caller's loop works unchanged.
+            return _RowList(rows)  # type: ignore[return-value]
+        except sqlite3.OperationalError as e:
+            logger.debug("FTS search failed, falling back: %s", e)
+            return None
+
+    def _fallback_search(
+        self,
+        conn: sqlite3.Connection,
+        domain: KnowledgeDomain | None,
+        limit: int,
+    ) -> sqlite3.Cursor:
+        """Fallback search ordered by relevance_score (no FTS)."""
+        if domain is not None:
+            return conn.execute(
+                """
+                SELECT id, domain, compressed_content, relevance_score,
+                       security_classification, created_at, access_count
+                FROM knowledge_nodes
+                WHERE domain = ?
+                ORDER BY relevance_score DESC
+                LIMIT ?
+                """,
+                (domain.value, limit),
+            )
+        return conn.execute(
+            """
+            SELECT id, domain, compressed_content, relevance_score,
+                   security_classification, created_at, access_count
+            FROM knowledge_nodes
+            ORDER BY relevance_score DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
 
     def _search_sync(
         self,
@@ -316,36 +468,20 @@ class OfflineKnowledgeBase:
         domain: KnowledgeDomain | None,
         limit: int,
     ) -> list[KnowledgeNode]:
-        """Synchronous implementation of search (runs in thread pool)."""
+        """Synchronous implementation of search (runs in thread pool).
+
+        Uses FTS5 full-text search when a query is provided. Falls back to
+        relevance_score ordering if FTS returns no matches or is unavailable.
+        """
         limit = max(1, limit)
         logger.debug(
             f"Searching knowledge base: query_len={len(query)}, domain={domain}, limit={limit}"
         )
 
         with self._with_db_lock() as conn:
-            if domain is not None:
-                cursor = conn.execute(
-                    """
-                    SELECT id, domain, compressed_content, relevance_score,
-                           security_classification, created_at, access_count
-                    FROM knowledge_nodes
-                    WHERE domain = ?
-                    ORDER BY relevance_score DESC
-                    LIMIT ?
-                    """,
-                    (domain.value, limit),
-                )
-            else:
-                cursor = conn.execute(
-                    """
-                    SELECT id, domain, compressed_content, relevance_score,
-                           security_classification, created_at, access_count
-                    FROM knowledge_nodes
-                    ORDER BY relevance_score DESC
-                    LIMIT ?
-                    """,
-                    (limit,),
-                )
+            cursor = self._fts_search(conn, query, domain, limit)
+            if cursor is None:
+                cursor = self._fallback_search(conn, domain, limit)
 
             results: list[KnowledgeNode] = []
             node_ids: list[str] = []
@@ -488,6 +624,21 @@ class OfflineKnowledgeBase:
                 ),
             )
             conn.commit()
+
+            # Update FTS index: delete old entry (if upsert) then insert plaintext
+            try:
+                rowid = conn.execute(
+                    "SELECT rowid FROM knowledge_nodes WHERE id = ?", (node_id,)
+                ).fetchone()
+                if rowid:
+                    conn.execute("DELETE FROM knowledge_fts WHERE rowid = ?", (rowid[0],))
+                    conn.execute(
+                        "INSERT INTO knowledge_fts(rowid, content, domain) VALUES (?, ?, ?)",
+                        (rowid[0], content, domain.value),
+                    )
+                    conn.commit()
+            except sqlite3.OperationalError as e:
+                logger.debug("FTS update skipped: %s", e)
 
         logger.info(f"Added knowledge node: id={node_id}, domain={domain.value}")
         return node_id

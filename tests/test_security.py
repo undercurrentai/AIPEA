@@ -442,13 +442,24 @@ class TestComplianceHandler:
             "FedRAMP requires audit logging; audit_required must be True"
         )
 
-    def test_validate_model_allows_all_in_general_mode(self) -> None:
-        """GENERAL mode allows all models (no global forbidden list)."""
+    def test_validate_model_blocks_globally_forbidden_in_general_mode(self) -> None:
+        """GENERAL mode blocks globally forbidden models (gpt-4o, gpt-4o-mini)."""
         general = ComplianceHandler(ComplianceMode.GENERAL)
-
-        assert general.validate_model("gpt-4o") is True
-        assert general.validate_model("gpt-4o-mini") is True
+        assert general.validate_model("gpt-4o") is False
+        assert general.validate_model("gpt-4o-mini") is False
         assert general.validate_model("claude-opus-4-6") is True
+        assert general.validate_model("gpt-5.2") is True
+
+    def test_global_forbidden_models_blocked_in_all_modes(self) -> None:
+        """Global forbidden models are blocked regardless of compliance mode."""
+        for mode in ComplianceMode:
+            handler = ComplianceHandler(mode)
+            assert handler.validate_model("gpt-4o") is False, (
+                f"gpt-4o should be forbidden in {mode.value}"
+            )
+            assert handler.validate_model("gpt-4o-mini") is False, (
+                f"gpt-4o-mini should be forbidden in {mode.value}"
+            )
 
     def test_validate_model_allows_case_insensitive_match(self) -> None:
         """Allowed model checks should be case-insensitive."""

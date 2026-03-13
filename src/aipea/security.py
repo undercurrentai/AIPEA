@@ -507,6 +507,10 @@ class ComplianceHandler:
         force_offline: Whether external connectivity is prohibited
     """
 
+    # Models forbidden across ALL compliance modes (deprecated/retired models).
+    # Checked before mode-specific allowlists via substring match.
+    GLOBAL_FORBIDDEN_MODELS: ClassVar[set[str]] = {"gpt-4o", "gpt-4o-mini"}
+
     def __init__(self, mode: ComplianceMode) -> None:
         """Initialize compliance handler for the specified mode.
 
@@ -582,13 +586,21 @@ class ComplianceHandler:
             True if the model is allowed, False otherwise
 
         Note:
-            An empty allowed_models list means all models are permitted.
+            An empty allowed_models list means all non-forbidden models are permitted.
+            Global forbidden models are blocked in ALL modes.
         """
+        model_lower = model_id.lower()
+
+        # Check global forbidden list first (applies to ALL modes)
+        if any(forbidden in model_lower for forbidden in self.GLOBAL_FORBIDDEN_MODELS):
+            logger.warning("Model '%s' is globally forbidden (deprecated)", model_id)
+            return False
+
+        # Then check mode-specific allowlist
         if not self.allowed_models:
-            return True  # No restrictions in GENERAL mode
+            return True  # No further restrictions in GENERAL mode
 
         # Check if any allowed model is a substring of the model_id (case-insensitive)
-        model_lower = model_id.lower()
         allowed_models = [allowed.lower() for allowed in self.allowed_models]
         is_allowed = any(allowed in model_lower for allowed in allowed_models)
 

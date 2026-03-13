@@ -180,7 +180,7 @@ class TestGetModelFamily:
         [
             ("gpt-4", "openai"),
             ("gpt-4o", "openai"),
-            ("gpt-5.2", "gpt"),
+            ("gpt-5.2", "openai"),
             ("gpt-oss-20b", "openai"),
             ("GPT-4", "openai"),  # case-insensitive via partial match
         ],
@@ -377,12 +377,26 @@ class TestAIPEAEnhancerEnhance:
     @pytest.mark.asyncio
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
-    async def test_all_frontier_models_allowed_in_general_mode(
+    async def test_globally_forbidden_model_blocked(
         self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
-        """All frontier models are allowed in GENERAL mode (no global forbidden list)."""
+        """Globally forbidden models (gpt-4o) are blocked even in GENERAL mode."""
         enhancer = AIPEAEnhancer()
         result = await enhancer.enhance("safe query", "gpt-4o")
+
+        assert result.was_enhanced is False
+        assert enhancer._stats["queries_blocked"] == 1
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_non_forbidden_frontier_models_allowed_in_general_mode(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """Non-forbidden frontier models are allowed in GENERAL mode."""
+        enhancer = AIPEAEnhancer()
+        result = await enhancer.enhance("safe query", "gpt-5.2")
 
         assert result.was_enhanced is True
         assert enhancer._stats["queries_enhanced"] == 1
@@ -857,10 +871,10 @@ class TestAIPEAEnhancerEnhanceForModels:
         )
 
         with patch.object(enhancer, "enhance", new_callable=AsyncMock, return_value=base_result):
-            requests = await enhancer.enhance_for_models("q", ["gpt-4", "gpt-4o"])
+            requests = await enhancer.enhance_for_models("q", ["gpt-4", "gpt-5.2"])
 
         assert "gpt-4" in requests
-        assert "gpt-4o" in requests
+        assert "gpt-5.2" in requests
 
     @pytest.mark.unit
     @pytest.mark.asyncio

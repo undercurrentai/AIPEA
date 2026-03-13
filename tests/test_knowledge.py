@@ -234,10 +234,10 @@ class TestOfflineKnowledgeBase:
         await kb.add_knowledge("Content B", KnowledgeDomain.MEDICAL, relevance_score=0.8)
         await kb.add_knowledge("Content C", KnowledgeDomain.TECHNICAL, relevance_score=0.7)
 
-        results = await kb.search("test query", limit=10)
-        assert len(results) == 3
+        result = await kb.search("test query", limit=10)
+        assert len(result.nodes) == 3
         # Should be sorted by relevance
-        assert results[0].relevance_score >= results[1].relevance_score
+        assert result.nodes[0].relevance_score >= result.nodes[1].relevance_score
 
     @pytest.mark.asyncio
     async def test_search_with_domain_filter(self, kb: OfflineKnowledgeBase) -> None:
@@ -245,9 +245,10 @@ class TestOfflineKnowledgeBase:
         await kb.add_knowledge("Military info", KnowledgeDomain.MILITARY, relevance_score=0.9)
         await kb.add_knowledge("Medical info", KnowledgeDomain.MEDICAL, relevance_score=0.8)
 
-        results = await kb.search("query", domain=KnowledgeDomain.MILITARY)
-        assert len(results) == 1
-        assert results[0].domain == KnowledgeDomain.MILITARY
+        result = await kb.search("query", domain=KnowledgeDomain.MILITARY)
+        assert len(result.nodes) == 1
+        assert result.nodes[0].domain == KnowledgeDomain.MILITARY
+        assert result.domain_filter == KnowledgeDomain.MILITARY
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_node(self, kb: OfflineKnowledgeBase) -> None:
@@ -368,7 +369,7 @@ class TestOfflineKnowledgeBase:
         initial_count = node.access_count
 
         # Search should increment access count
-        await kb.search("query")
+        await kb.search("query")  # returns KnowledgeSearchResult
 
         node = await kb.get_by_id(node_id)
         assert node is not None
@@ -390,7 +391,7 @@ class TestOfflineKnowledgeBase:
                 relevance_score=0.5 + index * 0.01,
             )
 
-        async def search_knowledge() -> list:
+        async def search_knowledge() -> KnowledgeSearchResult:
             """Search knowledge base."""
             return await kb.search("concurrent")
 
@@ -449,12 +450,12 @@ class TestOfflineKnowledgeBase:
             conn.close()
 
             # Search should return the valid node but skip the corrupt one
-            results = await kb.search("query", limit=10)
+            search_result = await kb.search("query", limit=10)
 
             # Valid node should be in results
-            assert any(n.id == valid_id for n in results)
+            assert any(n.id == valid_id for n in search_result.nodes)
             # Corrupt node should NOT be in results
-            assert not any(n.id == corrupt_id for n in results)
+            assert not any(n.id == corrupt_id for n in search_result.nodes)
 
             # Check that corrupt node's access_count was NOT incremented
             conn = sqlite3.connect(temp_db)
@@ -651,9 +652,9 @@ class TestWave4InvalidDomainRecovery:
         conn.close()
 
         # search should not crash; it may return the valid row
-        results = await kb.search("AI")
+        search_result = await kb.search("AI")
         # Should not raise ValueError
-        assert isinstance(results, list)
+        assert isinstance(search_result, KnowledgeSearchResult)
 
         kb.close()
 
@@ -677,8 +678,8 @@ class TestSearchLimitValidation:
         with OfflineKnowledgeBase(temp_db, StorageTier.COMPACT) as kb:
             await kb.add_knowledge("node one", KnowledgeDomain.GENERAL, relevance_score=0.8)
             await kb.add_knowledge("node two", KnowledgeDomain.GENERAL, relevance_score=0.5)
-            results = await kb.search("test", limit=-1)
-            assert len(results) == 1, "limit=-1 should be clamped to 1, not return all rows"
+            result = await kb.search("test", limit=-1)
+            assert len(result.nodes) == 1, "limit=-1 should be clamped to 1, not return all rows"
 
     @pytest.mark.asyncio
     @pytest.mark.unit
@@ -686,8 +687,8 @@ class TestSearchLimitValidation:
         """Zero limit must return at least 1 result."""
         with OfflineKnowledgeBase(temp_db, StorageTier.COMPACT) as kb:
             await kb.add_knowledge("node one", KnowledgeDomain.GENERAL, relevance_score=0.8)
-            results = await kb.search("test", limit=0)
-            assert len(results) == 1, "limit=0 should be clamped to 1"
+            result = await kb.search("test", limit=0)
+            assert len(result.nodes) == 1, "limit=0 should be clamped to 1"
 
 
 if __name__ == "__main__":
