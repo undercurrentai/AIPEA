@@ -1,0 +1,105 @@
+%% AIPEA Logic Flow Diagram — Coherence Audit
+%% Generated: 2026-03-13
+
+graph TD
+    subgraph Surface["Surface Layer"]
+        INIT["__init__.py<br/>34 exports"]
+        CLI["cli.py<br/>configure, check, doctor, info, seed-kb"]
+        MAIN["__main__.py<br/>python -m aipea"]
+    end
+
+    subgraph Facade["Facade Layer"]
+        ENH["enhancer.py<br/>AIPEAEnhancer"]
+    end
+
+    subgraph Middle["Middle Layer"]
+        ANA["analyzer.py<br/>QueryAnalyzer + QueryRouter"]
+        ENG["engine.py<br/>PromptEngine + OfflineTierProcessor"]
+    end
+
+    subgraph Base["Base Layer"]
+        SEC["security.py<br/>SecurityScanner + ComplianceHandler"]
+        KB["knowledge.py<br/>OfflineKnowledgeBase"]
+        SEARCH["search.py<br/>SearchOrchestrator"]
+        CFG["config.py<br/>AIPEAConfig + load_config"]
+    end
+
+    subgraph SharedTypes["Shared Types"]
+        TYPES["_types.py<br/>ProcessingTier, QueryType, SearchStrategy"]
+        MODELS["models.py<br/>QueryAnalysis"]
+    end
+
+    %% Entry Points
+    USER((User)) --> INIT
+    USER --> CLI
+    MAIN --> CLI
+
+    %% Facade orchestration
+    INIT --> ENH
+    ENH -->|"1. scan()"| SEC
+    ENH -->|"2. analyze()"| ANA
+    ENH -->|"3. search()"| SEARCH
+    ENH -->|"3b. search()"| KB
+    ENH -->|"4. formulate()"| ENG
+    ENH -->|"4b. Ollama"| ENG
+
+    %% Middle layer deps
+    ANA -->|"_calculate_complexity()<br/>PRIVATE ACCESS"| ANA
+    ANA --> SEC
+    ANA --> TYPES
+    ANA --> MODELS
+    ENG --> SEARCH
+    ENG --> TYPES
+
+    %% Base layer deps
+    SEARCH -.->|"lazy import"| CFG
+    CLI --> CFG
+    CLI --> KB
+
+    %% Shared types
+    MODELS --> TYPES
+
+    %% Enhancement Flow (numbered steps)
+    subgraph EnhanceFlow["enhance() Pipeline"]
+        direction TB
+        E1["1. ComplianceHandler<br/>validate_model()"]
+        E2["2. SecurityScanner.scan()"]
+        E3["3. QueryAnalyzer.analyze()"]
+        E4["4. _is_offline_required()"]
+        E5a["5a. _gather_online_context()"]
+        E5b["5b. _gather_offline_context()"]
+        E6["6. Determine tier"]
+        E6b["6b. _try_ollama_enhancement()"]
+        E7["7. formulate_search_aware_prompt()"]
+
+        E1 -->|"model allowed"| E2
+        E1 -->|"model blocked"| BLOCKED["BLOCKED RESULT"]
+        E2 -->|"clean"| E3
+        E2 -->|"injection"| BLOCKED
+        E3 --> E4
+        E4 -->|"online"| E5a
+        E4 -->|"offline"| E5b
+        E5a --> E6
+        E5b --> E6
+        E6 -->|"offline"| E6b
+        E6 -->|"online"| E7
+        E6b --> E7
+        E7 --> RESULT["EnhancementResult"]
+    end
+
+    %% Dual model-family detection
+    subgraph DualDetection["FINDING: Dual Model Detection"]
+        GMF["enhancer.get_model_family()<br/>openai/claude/gemini/llama/general"]
+        FFM["search.formatted_for_model()<br/>openai/claude/generic"]
+    end
+
+    %% Duplicate patterns
+    subgraph DupPatterns["FINDING: Duplicate Patterns"]
+        ANA_PAT["analyzer.QUERY_TYPE_PATTERNS<br/>TECHNICAL: 4 patterns"]
+        ENG_PAT["engine.QUERY_PATTERNS<br/>TECHNICAL: 3 patterns"]
+    end
+
+    style BLOCKED fill:#f66,color:#fff
+    style RESULT fill:#6f6,color:#000
+    style DualDetection fill:#ff9,stroke:#f90
+    style DupPatterns fill:#ff9,stroke:#f90

@@ -1,0 +1,142 @@
+{
+  "project": "AIPEA",
+  "version": "1.2.0",
+  "total_loc": 7288,
+  "total_modules": 12,
+  "analysis_order": "dependency-first",
+  "modules": [
+    {
+      "order": 1,
+      "name": "_types.py",
+      "path": "src/aipea/_types.py",
+      "loc": 73,
+      "layer": "shared_types",
+      "imports_aipea": [],
+      "imports_external": [],
+      "exports": ["QUERY_TYPE_PRIORITY", "ProcessingTier", "QueryType", "SearchStrategy"],
+      "notes": "Pure enums and type aliases. Zero aipea imports."
+    },
+    {
+      "order": 2,
+      "name": "models.py",
+      "path": "src/aipea/models.py",
+      "loc": 105,
+      "layer": "shared_types",
+      "imports_aipea": ["_types"],
+      "imports_external": [],
+      "exports": ["QueryAnalysis"],
+      "notes": "QueryAnalysis dataclass with __post_init__ validation."
+    },
+    {
+      "order": 3,
+      "name": "config.py",
+      "path": "src/aipea/config.py",
+      "loc": 353,
+      "layer": "base",
+      "imports_aipea": [],
+      "imports_external": [],
+      "exports": ["AIPEAConfig", "load_config", "save_dotenv", "save_toml_config", "get_config_locations"],
+      "notes": "Stdlib only. Priority: env > dotenv > TOML > defaults."
+    },
+    {
+      "order": 4,
+      "name": "security.py",
+      "path": "src/aipea/security.py",
+      "loc": 707,
+      "layer": "base",
+      "imports_aipea": [],
+      "imports_external": [],
+      "exports": ["ComplianceHandler", "ComplianceMode", "ScanResult", "SecurityContext", "SecurityLevel", "SecurityScanner", "create_security_context_for_mode", "quick_scan"],
+      "notes": "Stdlib only. 8 injection patterns, ReDoS validator."
+    },
+    {
+      "order": 5,
+      "name": "knowledge.py",
+      "path": "src/aipea/knowledge.py",
+      "loc": 959,
+      "layer": "base",
+      "imports_aipea": [],
+      "imports_external": [],
+      "exports": ["SEED_KNOWLEDGE", "KnowledgeDomain", "KnowledgeNode", "KnowledgeSearchResult", "OfflineKnowledgeBase", "StorageTier", "seed_knowledge_base"],
+      "notes": "Stdlib only. SQLite + zlib. Search ignores query text."
+    },
+    {
+      "order": 6,
+      "name": "search.py",
+      "path": "src/aipea/search.py",
+      "loc": 1227,
+      "layer": "base",
+      "imports_aipea": [],
+      "imports_external": ["httpx"],
+      "lazy_imports_aipea": ["config"],
+      "exports": ["Context7Provider", "ExaSearchProvider", "FirecrawlProvider", "ModelType", "SearchContext", "SearchOrchestrator", "SearchProvider", "SearchResult", "create_empty_context", "parse_model_type"],
+      "notes": "httpx is the only external dep. Lazy-imports config to avoid circular deps."
+    },
+    {
+      "order": 7,
+      "name": "analyzer.py",
+      "path": "src/aipea/analyzer.py",
+      "loc": 869,
+      "layer": "middle",
+      "imports_aipea": ["_types", "models", "security"],
+      "imports_external": [],
+      "exports": ["QueryAnalyzer", "QueryRouter", "analyze_query", "get_query_analyzer", "route_query"],
+      "notes": "Duplicate QUERY_TYPE_PATTERNS vs engine.py. Accesses QueryRouter private methods."
+    },
+    {
+      "order": 8,
+      "name": "engine.py",
+      "path": "src/aipea/engine.py",
+      "loc": 1081,
+      "layer": "middle",
+      "imports_aipea": ["_types", "search"],
+      "imports_external": [],
+      "exports": ["CLAUDE_CODE_AVAILABLE", "EnhancedQuery", "ModelType", "OfflineModel", "OfflineTierProcessor", "OllamaModelInfo", "OllamaOfflineClient", "ProcessingTier", "PromptEngine", "QueryType", "SearchContext", "SearchOrchestrator", "SearchResult", "SearchStrategy", "TierProcessor", "create_empty_context", "get_ollama_client", "get_prompt_engine"],
+      "notes": "TierProcessor ABC with single impl. Ollama ignores max_tokens/temperature."
+    },
+    {
+      "order": 9,
+      "name": "enhancer.py",
+      "path": "src/aipea/enhancer.py",
+      "loc": 1228,
+      "layer": "facade",
+      "imports_aipea": ["_types", "analyzer", "engine", "knowledge", "models", "search", "security"],
+      "imports_external": [],
+      "exports": ["AIPEAEnhancer", "ComplianceMode", "EnhancedRequest", "EnhancementResult", "ProcessingTier", "QueryType", "SecurityLevel", "StorageTier", "enhance_prompt", "get_enhancer", "get_model_family", "is_offline_model", "reset_enhancer"],
+      "notes": "Main facade. Dual offline determination. _stats without locks."
+    },
+    {
+      "order": 10,
+      "name": "cli.py",
+      "path": "src/aipea/cli.py",
+      "loc": 573,
+      "layer": "surface",
+      "imports_aipea": ["config", "knowledge"],
+      "imports_external": ["typer", "rich", "httpx"],
+      "exports": ["app"],
+      "notes": "Optional deps (typer, rich). Graceful fallback if not installed."
+    },
+    {
+      "order": 11,
+      "name": "__init__.py",
+      "path": "src/aipea/__init__.py",
+      "loc": 108,
+      "layer": "surface",
+      "imports_aipea": ["_types", "analyzer", "config", "engine", "enhancer", "knowledge", "models", "search", "security"],
+      "imports_external": [],
+      "exports_count": 34,
+      "notes": "__all__ has 34 symbols; spec says 32."
+    },
+    {
+      "order": 12,
+      "name": "__main__.py",
+      "path": "src/aipea/__main__.py",
+      "loc": 6,
+      "layer": "surface",
+      "imports_aipea": ["cli"],
+      "imports_external": [],
+      "exports": [],
+      "notes": "Entry point: python -m aipea"
+    }
+  ]
+}
