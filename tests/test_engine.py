@@ -234,9 +234,8 @@ class TestPromptEngine:
         assert len(prompt) > 100
 
     @pytest.mark.asyncio
-    @patch("aipea.engine.CLAUDE_CODE_AVAILABLE", False)
-    async def test_fallback_when_claude_code_unavailable(self, prompt_engine):
-        """Test fallback to basic enhanced prompts when Claude Code SDK unavailable"""
+    async def test_fallback_to_basic_enhanced_prompt(self, prompt_engine):
+        """Test fallback to basic enhanced prompts (no Claude Code SDK)."""
         query = "Design a microservices architecture"
         complexity = "complex"
 

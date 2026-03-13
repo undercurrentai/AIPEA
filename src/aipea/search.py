@@ -37,8 +37,8 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # API Configuration
-EXA_API_URL = "https://api.exa.ai/search"
-FIRECRAWL_API_URL = "https://api.firecrawl.dev/v1/search"
+EXA_API_URL = os.environ.get("AIPEA_EXA_API_URL", "https://api.exa.ai/search")
+FIRECRAWL_API_URL = os.environ.get("AIPEA_FIRECRAWL_API_URL", "https://api.firecrawl.dev/v1/search")
 
 
 def _resolve_http_timeout() -> float:
@@ -190,7 +190,7 @@ class SearchResult:
             logger.warning("SearchResult score is NaN, defaulting to 0.0")
             self.score = 0.0
         if not 0.0 <= self.score <= 1.0:
-            logger.warning(f"SearchResult score {self.score} outside [0, 1] range, clamping")
+            logger.warning("SearchResult score %s outside [0, 1] range, clamping", self.score)
             self.score = max(0.0, min(1.0, self.score))
 
 
@@ -521,7 +521,7 @@ class ExaSearchProvider(SearchProvider):
 
         # Clamp num_results to at least 1 to avoid division-by-zero in confidence calc
         num_results = max(1, num_results)
-        logger.info(f"Exa search: query_len={len(query)}, num_results={num_results}")
+        logger.info("Exa search: query_len=%d, num_results=%d", len(query), num_results)
 
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
@@ -564,7 +564,7 @@ class ExaSearchProvider(SearchProvider):
             confidence = (
                 min(1.0, len(results) / num_results) if results and num_results > 0 else 0.0
             )
-            logger.info(f"Exa search returned {len(results)} results")
+            logger.info("Exa search returned %d results", len(results))
 
             return SearchContext(
                 query=query,
@@ -574,15 +574,15 @@ class ExaSearchProvider(SearchProvider):
             )
 
         except httpx.HTTPStatusError as e:
-            logger.warning(f"Exa search HTTP error: {e.response.status_code} - {e}")
+            logger.warning("Exa search HTTP error: %s - %s", e.response.status_code, e)
             return SearchContext(
                 query=query,
                 results=[],
                 source=self.provider_name,
                 confidence=0.0,
             )
-        except Exception as e:
-            logger.warning(f"Exa search failed: {e}")
+        except (httpx.HTTPError, KeyError, ValueError) as e:
+            logger.warning("Exa search failed: %s", e)
             return SearchContext(
                 query=query,
                 results=[],
@@ -641,6 +641,15 @@ class FirecrawlProvider(SearchProvider):
         Returns:
             SearchContext with results from Firecrawl
         """
+        if not query or not query.strip():
+            logger.debug("Empty query provided to FirecrawlProvider.search()")
+            return SearchContext(
+                query=query or "",
+                results=[],
+                source=self.provider_name,
+                confidence=0.0,
+            )
+
         if not self.enabled:
             logger.debug("FirecrawlProvider disabled, returning empty context")
             return SearchContext(
@@ -652,7 +661,7 @@ class FirecrawlProvider(SearchProvider):
 
         # Clamp num_results to at least 1 to avoid division-by-zero in confidence calc
         num_results = max(1, num_results)
-        logger.info(f"Firecrawl search: query_len={len(query)}, num_results={num_results}")
+        logger.info("Firecrawl search: query_len=%d, num_results=%d", len(query), num_results)
 
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
@@ -695,7 +704,7 @@ class FirecrawlProvider(SearchProvider):
             confidence = (
                 min(1.0, len(results) / num_results) if results and num_results > 0 else 0.0
             )
-            logger.info(f"Firecrawl search returned {len(results)} results")
+            logger.info("Firecrawl search returned %d results", len(results))
 
             return SearchContext(
                 query=query,
@@ -705,15 +714,15 @@ class FirecrawlProvider(SearchProvider):
             )
 
         except httpx.HTTPStatusError as e:
-            logger.warning(f"Firecrawl search HTTP error: {e.response.status_code} - {e}")
+            logger.warning("Firecrawl search HTTP error: %s - %s", e.response.status_code, e)
             return SearchContext(
                 query=query,
                 results=[],
                 source=self.provider_name,
                 confidence=0.0,
             )
-        except Exception as e:
-            logger.warning(f"Firecrawl search failed: {e}")
+        except (httpx.HTTPError, KeyError, ValueError) as e:
+            logger.warning("Firecrawl search failed: %s", e)
             return SearchContext(
                 query=query,
                 results=[],
@@ -803,7 +812,7 @@ class FirecrawlProvider(SearchProvider):
                 )
 
             confidence = 0.85 if results else 0.0
-            logger.info(f"Firecrawl deep research returned {len(results)} results")
+            logger.info("Firecrawl deep research returned %d results", len(results))
 
             return SearchContext(
                 query=query,
@@ -813,15 +822,15 @@ class FirecrawlProvider(SearchProvider):
             )
 
         except httpx.HTTPStatusError as e:
-            logger.warning(f"Firecrawl deep research HTTP error: {e.response.status_code} - {e}")
+            logger.warning("Firecrawl deep research HTTP error: %s - %s", e.response.status_code, e)
             return SearchContext(
                 query=query,
                 results=[],
                 source=f"{self.provider_name}_deep",
                 confidence=0.0,
             )
-        except Exception as e:
-            logger.warning(f"Firecrawl deep research failed: {e}")
+        except (httpx.HTTPError, KeyError, ValueError) as e:
+            logger.warning("Firecrawl deep research failed: %s", e)
             return SearchContext(
                 query=query,
                 results=[],
@@ -892,7 +901,7 @@ class Context7Provider(SearchProvider):
                 confidence=0.0,
             )
 
-        logger.info(f"Context7 search: query_len={len(query)}, num_results={num_results}")
+        logger.info("Context7 search: query_len=%d, num_results=%d", len(query), num_results)
 
         try:
             # Context7 is an MCP tool-calling server used by Claude Code at
@@ -907,8 +916,8 @@ class Context7Provider(SearchProvider):
                 confidence=0.0,
             )
 
-        except Exception as e:
-            logger.warning(f"Context7 search failed: {e}")
+        except (httpx.HTTPError, KeyError, ValueError) as e:
+            logger.warning("Context7 search failed: %s", e)
             return SearchContext(
                 query=query,
                 results=[],
@@ -943,7 +952,7 @@ class Context7Provider(SearchProvider):
                 confidence=0.0,
             )
 
-        logger.info(f"Context7 library docs: library_id='{library_id}', topic='{topic}'")
+        logger.info("Context7 library docs: library_id='%s', topic='%s'", library_id, topic)
 
         try:
             # Context7 MCP tools are invoked by Claude Code at development
@@ -957,8 +966,8 @@ class Context7Provider(SearchProvider):
                 confidence=0.0,
             )
 
-        except Exception as e:
-            logger.warning(f"Context7 library docs failed: {e}")
+        except (httpx.HTTPError, KeyError, ValueError) as e:
+            logger.warning("Context7 library docs failed: %s", e)
             return SearchContext(
                 query=f"{library_id}:{topic}" if topic else library_id,
                 results=[],
@@ -1019,7 +1028,7 @@ class SearchOrchestrator:
                 self.context7_provider.enabled,
             ]
         )
-        logger.info(f"SearchOrchestrator initialized with {enabled_count}/3 providers enabled")
+        logger.info("SearchOrchestrator initialized with %d/3 providers enabled", enabled_count)
 
     async def search(
         self,
@@ -1043,7 +1052,7 @@ class SearchOrchestrator:
         # Normalize strategy
         strategy_lower = strategy.lower().replace("-", "_").replace(" ", "_")
 
-        logger.info(f"Search orchestration: strategy='{strategy_lower}', query_len={len(query)}")
+        logger.info("Search orchestration: strategy='%s', query_len=%d", strategy_lower, len(query))
 
         try:
             if strategy_lower == "quick_facts":
@@ -1053,11 +1062,11 @@ class SearchOrchestrator:
             elif strategy_lower == "multi_source":
                 return await self._multi_source_search(query, num_results)
             else:
-                logger.warning(f"Unknown strategy '{strategy}', falling back to quick_facts")
+                logger.warning("Unknown strategy '%s', falling back to quick_facts", strategy)
                 return await self._quick_facts_search(query, num_results)
 
-        except Exception as e:
-            logger.error(f"Search orchestration failed: {e}")
+        except (httpx.HTTPError, KeyError, ValueError, OSError) as e:
+            logger.error("Search orchestration failed: %s", e)
             return SearchContext(
                 query=query,
                 results=[],
@@ -1143,7 +1152,7 @@ class SearchOrchestrator:
         Returns:
             SearchContext from Context7 provider
         """
-        logger.info(f"Technical search via Context7: query_len={len(query)}")
+        logger.info("Technical search via Context7: query_len=%d", len(query))
         return await self.context7_provider.search(query, num_results)
 
     def get_provider_status(self) -> dict[str, bool]:

@@ -162,7 +162,7 @@ class OfflineKnowledgeBase:
 
     def __init__(
         self,
-        db_path: str = "aipea_knowledge.db",
+        db_path: str | None = None,
         tier: StorageTier = StorageTier.STANDARD,
     ) -> None:
         """Initialize the offline knowledge base.
@@ -174,7 +174,10 @@ class OfflineKnowledgeBase:
             db_path: Path to SQLite database file
             tier: Storage tier for capacity limits
         """
-        self.db_path = Path(db_path)
+        import os
+
+        resolved_path = db_path or os.environ.get("AIPEA_DB_PATH", "aipea_knowledge.db")
+        self.db_path = Path(resolved_path)
         self.tier = tier
         self._conn: sqlite3.Connection | None = None
         self._db_lock = threading.RLock()  # Thread-safe database access
@@ -298,7 +301,7 @@ class OfflineKnowledgeBase:
                 self._sync_fts_index(conn)
 
                 logger.debug("Database schema initialized")
-            except Exception:
+            except sqlite3.OperationalError:
                 # Close failed connection and reset so _get_connection() creates fresh one
                 conn.close()
                 self._conn = None
@@ -367,6 +370,93 @@ class OfflineKnowledgeBase:
             domain_filter=domain,
             total_matches=len(nodes),
         )
+
+    async def search_semantic(
+        self,
+        query: str,
+        top_k: int = 5,
+    ) -> KnowledgeSearchResult:
+        """Search using FTS5 BM25 ranking for content-based similarity.
+
+        Unlike :meth:`search`, this method uses only BM25-ranked FTS5 results
+        and does NOT fall back to relevance_score ordering. Returns empty
+        results when no FTS matches are found.
+
+        Args:
+            query: Search query (used for FTS5 BM25 matching)
+            top_k: Maximum number of ranked results to return
+
+        Returns:
+            KnowledgeSearchResult with BM25-ranked nodes
+        """
+        nodes = await asyncio.to_thread(self._search_semantic_sync, query, top_k)
+        return KnowledgeSearchResult(
+            nodes=nodes,
+            query=query,
+            domain_filter=None,
+            total_matches=len(nodes),
+        )
+
+    def _search_semantic_sync(self, query: str, top_k: int) -> list[KnowledgeNode]:
+        """Synchronous BM25-ranked search (runs in thread pool)."""
+        top_k = max(1, top_k)
+        if not query or not query.strip():
+            return []
+
+        fts_query = self._fts_escape(query)
+        if not fts_query:
+            return []
+
+        with self._with_db_lock() as conn:
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT kn.id, kn.domain, kn.compressed_content, kn.relevance_score,
+                           kn.security_classification, kn.created_at, kn.access_count,
+                           bm25(knowledge_fts) AS bm25_score
+                    FROM knowledge_nodes kn
+                    JOIN knowledge_fts fts ON kn.rowid = fts.rowid
+                    WHERE knowledge_fts MATCH ?
+                    ORDER BY bm25(knowledge_fts)
+                    LIMIT ?
+                    """,
+                    (fts_query, top_k),
+                ).fetchall()
+            except sqlite3.OperationalError as e:
+                logger.debug("Semantic (BM25) search failed: %s", e)
+                return []
+
+            results: list[KnowledgeNode] = []
+            for row in rows:
+                try:
+                    compressed_content = row["compressed_content"]
+                    content = zlib.decompress(compressed_content).decode("utf-8")
+
+                    created_at_str = row["created_at"]
+                    if created_at_str:
+                        try:
+                            created_at = datetime.fromisoformat(created_at_str)
+                        except ValueError:
+                            created_at = datetime.now(UTC)
+                    else:
+                        created_at = datetime.now(UTC)
+
+                    node = KnowledgeNode(
+                        id=row["id"],
+                        domain=KnowledgeDomain(row["domain"]),
+                        content=content,
+                        relevance_score=row["relevance_score"],
+                        security_classification=row["security_classification"],
+                        created_at=created_at,
+                        access_count=row["access_count"],
+                    )
+                    results.append(node)
+                except (zlib.error, UnicodeDecodeError, ValueError) as e:
+                    logger.warning("Failed to reconstruct node %s: %s", row["id"], e)
+                    continue
+
+        logger.debug("Semantic search found %d nodes for query", len(results))
+        return results
 
     @staticmethod
     def _fts_escape(query: str) -> str:
@@ -517,7 +607,7 @@ class OfflineKnowledgeBase:
                     node_ids.append(row["id"])
 
                 except (zlib.error, UnicodeDecodeError, ValueError) as e:
-                    logger.warning(f"Failed to reconstruct node {row['id']}: {e}")
+                    logger.warning("Failed to reconstruct node %s: %s", row["id"], e)
                     continue
 
             # Update access counts and timestamps for retrieved nodes
@@ -537,7 +627,7 @@ class OfflineKnowledgeBase:
                     )
                 conn.commit()
 
-        logger.debug(f"Found {len(results)} knowledge nodes for query")
+        logger.debug("Found %d knowledge nodes for query", len(results))
         return results
 
     async def add_knowledge(
@@ -640,7 +730,7 @@ class OfflineKnowledgeBase:
             except sqlite3.OperationalError as e:
                 logger.debug("FTS update skipped: %s", e)
 
-        logger.info(f"Added knowledge node: id={node_id}, domain={domain.value}")
+        logger.info("Added knowledge node: id=%s, domain=%s", node_id, domain.value)
         return node_id
 
     async def get_by_id(self, node_id: str) -> KnowledgeNode | None:
@@ -692,7 +782,7 @@ class OfflineKnowledgeBase:
                     access_count=row["access_count"],
                 )
             except (zlib.error, UnicodeDecodeError, ValueError) as e:
-                logger.warning(f"Failed to reconstruct node {node_id}: {e}")
+                logger.warning("Failed to reconstruct node %s: %s", node_id, e)
                 return None
 
     async def update_relevance(self, node_id: str, new_score: float) -> bool:
@@ -843,7 +933,7 @@ class OfflineKnowledgeBase:
             deleted = cursor.rowcount
 
         if deleted > 0:
-            logger.info(f"Pruned {deleted} low-relevance knowledge nodes")
+            logger.info("Pruned %d low-relevance knowledge nodes", deleted)
 
         return deleted
 

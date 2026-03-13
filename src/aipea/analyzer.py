@@ -247,6 +247,9 @@ class QueryRouter:
         Returns:
             Complexity score from 0.0 to 1.0
         """
+        if not query or not query.strip():
+            return 0.0
+
         # Base complexity (was 0.3, lowered to give OFFLINE tier usable range)
         complexity = 0.1
 

@@ -1077,7 +1077,7 @@ class TestExceptionHandling:
         provider = Context7Provider(enabled=True)
         with patch(
             "aipea.search.logger.debug",
-            side_effect=Exception("Test exception"),
+            side_effect=ValueError("Test exception"),
         ):
             result = await provider.search("test query")
             assert isinstance(result, SearchContext)
@@ -1089,7 +1089,7 @@ class TestExceptionHandling:
         provider = Context7Provider(enabled=True)
         with patch(
             "aipea.search.logger.debug",
-            side_effect=Exception("Test exception"),
+            side_effect=ValueError("Test exception"),
         ):
             result = await provider.get_library_docs("/test/lib", topic="routing")
             assert isinstance(result, SearchContext)
@@ -1103,7 +1103,7 @@ class TestExceptionHandling:
         with patch.object(
             orchestrator,
             "_quick_facts_search",
-            side_effect=Exception("Orchestrator error"),
+            side_effect=ValueError("Orchestrator error"),
         ):
             result = await orchestrator.search("test", strategy="quick_facts")
             assert isinstance(result, SearchContext)

@@ -37,6 +37,7 @@ if not _HAS_TYPER:  # pragma: no cover
         _missing_typer_error()
 
 else:
+    import logging
     import platform
     from pathlib import Path
 
@@ -175,6 +176,7 @@ else:
             console.print(f"  Exa: [red]HTTP {resp.status_code}[/red]")
             return False
         except Exception as exc:
+            logging.debug("Exa connectivity error", exc_info=True)
             console.print(f"  Exa: [red]Error — {exc}[/red]")
             return False
 
@@ -196,6 +198,7 @@ else:
             console.print(f"  Firecrawl: [red]HTTP {resp.status_code}[/red]")
             return False
         except Exception as exc:
+            logging.debug("Firecrawl connectivity error", exc_info=True)
             console.print(f"  Firecrawl: [red]Error — {exc}[/red]")
             return False
 
@@ -330,6 +333,7 @@ else:
         except _sp.TimeoutExpired:
             chk.warn("Ollama service", "timed out (may not be running)")
         except Exception as exc:
+            logging.debug("Ollama doctor error", exc_info=True)
             chk.warn("Ollama", str(exc))
 
     def _doctor_knowledge_base(chk: _DoctorChecks) -> None:
@@ -356,6 +360,7 @@ else:
             else:
                 chk.warn("Knowledge base", "exists but empty — run 'aipea seed-kb'")
         except Exception as exc:
+            logging.debug("Knowledge base doctor error", exc_info=True)
             chk.warn("Knowledge base", f"error reading: {exc}")
 
     @app.command()

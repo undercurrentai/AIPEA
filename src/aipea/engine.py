@@ -47,10 +47,6 @@ from aipea.search import SearchContext as SearchContext  # re-exported for backw
 
 logger = logging.getLogger(__name__)
 
-# Availability flag for Claude Code SDK integration
-# Set to False as placeholder - actual SDK detection would go here
-CLAUDE_CODE_AVAILABLE = False
-
 
 # =============================================================================
 # ENUMS
@@ -134,11 +130,13 @@ class OllamaOfflineClient:
         """Initialize Ollama client.
 
         Args:
-            host: Ollama server URL (default: http://localhost:11434)
+            host: Ollama server URL (default: AIPEA_OLLAMA_HOST env var or http://localhost:11434)
         """
-        self.host = host or self.DEFAULT_HOST
+        import os
+
+        self.host = host or os.environ.get("AIPEA_OLLAMA_HOST", self.DEFAULT_HOST)
         self._available_models: list[OllamaModelInfo] | None = None
-        logger.debug(f"OllamaOfflineClient initialized with host: {self.host}")
+        logger.debug("OllamaOfflineClient initialized with host: %s", self.host)
 
     async def get_available_models(self) -> list[OllamaModelInfo]:
         """Get list of pre-downloaded Ollama models.
@@ -159,7 +157,7 @@ class OllamaOfflineClient:
                 timeout=10,
             )
             if result.returncode != 0:
-                logger.warning(f"Ollama list failed: {result.stderr}")
+                logger.warning("Ollama list failed: %s", result.stderr)
                 self._available_models = []
                 return []
 
@@ -196,10 +194,12 @@ class OllamaOfflineClient:
                             )
                         )
                 except (IndexError, ValueError) as parse_err:
-                    logger.debug(f"Skipping unparseable Ollama output line: {line!r} ({parse_err})")
+                    logger.debug(
+                        "Skipping unparseable Ollama output line: %r (%s)", line, parse_err
+                    )
 
             self._available_models = models
-            logger.info(f"Found {len(models)} Ollama models: {[m.name for m in models]}")
+            logger.info("Found %d Ollama models: %s", len(models), [m.name for m in models])
             return models
 
         except subprocess.TimeoutExpired:
@@ -210,13 +210,13 @@ class OllamaOfflineClient:
             logger.warning("Ollama not found in PATH")
             self._available_models = []
             return []
-        except Exception as e:
-            # Log full exception info including type for better debugging
+        except OSError as e:
+            # Catch remaining OS-level errors (permissions, broken pipe, etc.)
             logger.warning(
                 "Error listing Ollama models: %s: %s",
                 type(e).__name__,
                 e,
-                exc_info=True,  # Include traceback in debug mode
+                exc_info=True,
             )
             self._available_models = []
             return []
@@ -262,7 +262,7 @@ class OllamaOfflineClient:
         ]
         for model in preference_order:
             if model.value in available_names:
-                logger.info(f"Selected best available offline model: {model.value}")
+                logger.info("Selected best available offline model: %s", model.value)
                 return model
 
         logger.warning("No Tier 1 offline models available")
@@ -339,11 +339,11 @@ class OllamaOfflineClient:
             )
 
             if result.returncode != 0:
-                logger.error(f"Ollama generation failed: {result.stderr}")
+                logger.error("Ollama generation failed: %s", result.stderr)
                 raise RuntimeError(f"Ollama generation failed: {result.stderr}")
 
             response = result.stdout.strip()
-            logger.debug(f"Ollama generated {len(response)} chars with {model.value}")
+            logger.debug("Ollama generated %d chars with %s", len(response), model.value)
             return response
 
         except subprocess.TimeoutExpired:
@@ -352,7 +352,7 @@ class OllamaOfflineClient:
             raise RuntimeError("Ollama not found. Install from https://ollama.ai") from None
         except RuntimeError:
             raise
-        except Exception as e:
+        except OSError as e:
             raise RuntimeError(f"Ollama generation error: {e}") from e
 
 
@@ -423,7 +423,8 @@ class EnhancedQuery:
             self.confidence = 0.0
         if not 0.0 <= self.confidence <= 1.0:
             logger.warning(
-                f"EnhancedQuery confidence {self.confidence} outside [0, 1] range, clamping"
+                "EnhancedQuery confidence %s outside [0, 1] range, clamping",
+                self.confidence,
             )
             self.confidence = max(0.0, min(1.0, self.confidence))
         # Runtime type guard: search_context may be assigned a wrong type at runtime
@@ -642,11 +643,11 @@ class OfflineTierProcessor(TierProcessor):
                 self._ollama_model = await self._ollama_client.get_best_available_model()
 
                 if self._ollama_model:
-                    logger.info(f"Offline mode using Ollama model: {self._ollama_model.value}")
+                    logger.info("Offline mode using Ollama model: %s", self._ollama_model.value)
                 else:
                     logger.info("No Ollama models available, using templates only")
-            except Exception as e:
-                logger.warning(f"Ollama check failed: {e}, using templates only")
+            except (RuntimeError, OSError) as e:
+                logger.warning("Ollama check failed: %s, using templates only", e)
                 self._ollama_client = None
                 self._ollama_model = None
 
@@ -684,11 +685,12 @@ class OfflineTierProcessor(TierProcessor):
         if use_llm and self._ollama_client and self._ollama_model:
             try:
                 return await self._process_with_ollama(query, query_type)
-            except Exception as e:
-                logger.warning(f"Ollama processing failed: {e}, falling back to templates")
+            except (RuntimeError, OSError) as e:
+                logger.warning("Ollama processing failed: %s, falling back to templates", e)
 
         # Fall back to template-based enhancement
-        return await self._process_with_templates(query, query_type)
+        strategy_name = context.get("strategy") if context else None
+        return await self._process_with_templates(query, query_type, strategy_name)
 
     async def _process_with_ollama(
         self,
@@ -756,16 +758,20 @@ class OfflineTierProcessor(TierProcessor):
         self,
         query: str,
         query_type: QueryType,
+        strategy_name: str | None = None,
     ) -> EnhancedQuery:
         """Process query using template-based enhancement (fallback).
 
         Args:
             query: The original query
             query_type: Classified query type
+            strategy_name: Optional override for the enhancement strategy
 
         Returns:
             EnhancedQuery with template-based enhancement
         """
+        from aipea.strategies import apply_strategy, select_strategy_for_query_type
+
         # Get the appropriate template
         template = self.ENHANCEMENT_TEMPLATES.get(
             query_type, self.ENHANCEMENT_TEMPLATES[QueryType.UNKNOWN]
@@ -773,6 +779,12 @@ class OfflineTierProcessor(TierProcessor):
 
         # Apply the template without format-string injection risks
         enhanced = template.replace("{query}", query)
+
+        # Apply named strategy techniques for additional structure
+        effective_strategy = strategy_name or select_strategy_for_query_type(query_type)
+        strategy_output = apply_strategy(query, effective_strategy)
+        if strategy_output:
+            enhanced = f"{enhanced}\n\n[Enhancement Context]\n{strategy_output}"
 
         # Determine confidence based on classification
         confidence = 0.70 if query_type == QueryType.UNKNOWN else 0.75
@@ -912,6 +924,7 @@ class PromptEngine:
         search_context: SearchContext | None,
         model_type: str = "general",
         query_type: str = "unknown",
+        strategy: str | None = None,
     ) -> str:
         """Formulate a search-aware enhanced prompt.
 
@@ -978,6 +991,17 @@ class PromptEngine:
                     # Include date from timestamp
                     timestamp_date = search_context.search_timestamp[:10]
                     parts.append(f"(Context retrieved: {timestamp_date})")
+
+        # Apply named strategy techniques for structured enhancement context
+        from aipea.strategies import apply_strategy, select_strategy_for_query_type
+
+        try:
+            effective_strategy = strategy or select_strategy_for_query_type(QueryType(query_type))
+        except ValueError:
+            effective_strategy = strategy or "general"
+        strategy_output = apply_strategy(query, effective_strategy)
+        if strategy_output:
+            parts.extend(["", f"[Enhancement Context]\n{strategy_output}"])
 
         # Add response instructions
         parts.extend(
@@ -1053,7 +1077,6 @@ def get_prompt_engine() -> PromptEngine:
 # =============================================================================
 
 __all__ = [
-    "CLAUDE_CODE_AVAILABLE",
     "EnhancedQuery",
     "ModelType",
     "OfflineModel",

@@ -449,6 +449,10 @@ class SecurityScanner:
         Returns:
             ScanResult with detected flags and blocking decision
         """
+        if not query:
+            logger.debug("Empty query provided to scan()")
+            return ScanResult()
+
         flags: list[str] = []
         is_blocked = False
         force_offline = False
