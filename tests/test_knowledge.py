@@ -691,5 +691,98 @@ class TestSearchLimitValidation:
             assert len(result.nodes) == 1, "limit=0 should be clamped to 1"
 
 
+# =============================================================================
+# SEMANTIC SEARCH (BM25) TESTS
+# =============================================================================
+
+
+class TestSearchSemantic:
+    """Tests for OfflineKnowledgeBase.search_semantic() — BM25-ranked FTS5 search."""
+
+    @pytest.fixture
+    def temp_db(self) -> Generator[str, None, None]:
+        import contextlib
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        yield db_path
+        with contextlib.suppress(OSError):
+            os.unlink(db_path)
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_semantic_returns_ranked_results(self, temp_db: str) -> None:
+        """search_semantic returns results ranked by BM25."""
+        with OfflineKnowledgeBase(temp_db, StorageTier.STANDARD) as kb:
+            await kb.add_knowledge(
+                "The attention mechanism in transformers",
+                KnowledgeDomain.TECHNICAL,
+            )
+            await kb.add_knowledge(
+                "Neural network architectures overview",
+                KnowledgeDomain.TECHNICAL,
+            )
+            result = await kb.search_semantic("attention mechanism")
+            assert result.total_matches >= 1
+            assert any("attention" in n.content.lower() for n in result.nodes)
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_semantic_empty_query_returns_empty(self, temp_db: str) -> None:
+        """search_semantic with empty query returns empty results."""
+        with OfflineKnowledgeBase(temp_db, StorageTier.STANDARD) as kb:
+            await kb.add_knowledge("Some content", KnowledgeDomain.GENERAL)
+            result = await kb.search_semantic("")
+            assert result.nodes == []
+            assert result.total_matches == 0
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_semantic_no_matches_returns_empty(self, temp_db: str) -> None:
+        """search_semantic with unmatched query returns empty results."""
+        with OfflineKnowledgeBase(temp_db, StorageTier.STANDARD) as kb:
+            await kb.add_knowledge("Python web frameworks", KnowledgeDomain.TECHNICAL)
+            result = await kb.search_semantic("quantum entanglement physics")
+            assert result.nodes == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_semantic_respects_top_k(self, temp_db: str) -> None:
+        """search_semantic respects the top_k limit."""
+        with OfflineKnowledgeBase(temp_db, StorageTier.STANDARD) as kb:
+            for i in range(5):
+                await kb.add_knowledge(
+                    f"Machine learning technique number {i}",
+                    KnowledgeDomain.TECHNICAL,
+                )
+            result = await kb.search_semantic("machine learning", top_k=2)
+            assert len(result.nodes) <= 2
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_semantic_does_not_fallback(self, temp_db: str) -> None:
+        """search_semantic does NOT fall back to relevance_score ordering."""
+        with OfflineKnowledgeBase(temp_db, StorageTier.STANDARD) as kb:
+            # Add content that won't match FTS
+            await kb.add_knowledge(
+                "Completely unrelated content about gardening",
+                KnowledgeDomain.GENERAL,
+                relevance_score=1.0,
+            )
+            # Search for something that won't match FTS
+            result = await kb.search_semantic("xyzzy nonexistent")
+            # Even though there's high-relevance content, semantic search returns empty
+            assert result.nodes == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_semantic_result_type(self, temp_db: str) -> None:
+        """search_semantic returns KnowledgeSearchResult."""
+        with OfflineKnowledgeBase(temp_db, StorageTier.STANDARD) as kb:
+            await kb.add_knowledge("Test content", KnowledgeDomain.GENERAL)
+            result = await kb.search_semantic("test")
+            assert isinstance(result, KnowledgeSearchResult)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

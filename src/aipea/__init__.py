@@ -13,7 +13,7 @@ Usage:
 
 from __future__ import annotations
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 # Configuration
 # Core enums and types
@@ -47,6 +47,9 @@ from aipea.knowledge import (
 
 # Data models
 from aipea.models import QueryAnalysis
+
+# Quality assessment
+from aipea.quality import QualityAssessor, QualityScore
 
 # Search
 from aipea.search import (
@@ -86,6 +89,8 @@ __all__ = [
     "OfflineKnowledgeBase",
     "ProcessingTier",
     "PromptEngine",
+    "QualityAssessor",
+    "QualityScore",
     "QueryAnalysis",
     "QueryAnalyzer",
     "QueryType",

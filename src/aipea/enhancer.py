@@ -43,17 +43,21 @@ Version: 1.0.0
 from __future__ import annotations
 
 import logging
+import sqlite3
 import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
 from aipea._types import ProcessingTier, QueryType, SearchStrategy, get_model_family
 from aipea.analyzer import QueryAnalyzer
 from aipea.engine import PromptEngine
 from aipea.knowledge import KnowledgeDomain, OfflineKnowledgeBase, StorageTier
 from aipea.models import QueryAnalysis
+from aipea.quality import QualityAssessor, QualityScore
 from aipea.search import SearchContext, SearchOrchestrator, SearchResult, create_empty_context
 from aipea.security import (
     ComplianceHandler,
@@ -92,6 +96,8 @@ class EnhancementResult:
         enhancement_time_ms: Time taken for enhancement in milliseconds
         was_enhanced: Whether enhancement was actually performed
         enhancement_notes: List of notes/warnings from the enhancement process
+        clarifications: Advisory clarifying questions for ambiguous queries (max 3)
+        quality_score: Optional quality assessment of the enhancement (None if not computed)
     """
 
     original_query: str
@@ -103,6 +109,8 @@ class EnhancementResult:
     enhancement_time_ms: float = 0.0
     was_enhanced: bool = True
     enhancement_notes: list[str] = field(default_factory=list)
+    clarifications: list[str] = field(default_factory=list)
+    quality_score: QualityScore | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary for logging/storage.
@@ -129,6 +137,8 @@ class EnhancementResult:
             "enhancement_time_ms": self.enhancement_time_ms,
             "was_enhanced": self.was_enhanced,
             "enhancement_notes": self.enhancement_notes,
+            "clarifications": self.clarifications,
+            "quality_score": self.quality_score.to_dict() if self.quality_score else None,
         }
 
 
@@ -283,10 +293,9 @@ class AIPEAEnhancer:
         if enable_enhancement:
             try:
                 self._offline_kb = OfflineKnowledgeBase(
-                    db_path="aipea_knowledge.db",
                     tier=storage_tier,
                 )
-            except Exception as e:
+            except (sqlite3.Error, OSError, RuntimeError) as e:
                 logger.warning("Failed to initialize offline knowledge base: %s", e)
                 self._offline_kb = None
 
@@ -311,6 +320,68 @@ class AIPEAEnhancer:
             default_compliance.value,
         )
 
+    def _generate_clarifications(self, query: str, analysis: QueryAnalysis) -> list[str]:
+        """Generate advisory clarifying questions for ambiguous queries.
+
+        Produces up to 3 clarifying questions based on query analysis signals.
+        These are advisory only — the enhancement still proceeds best-effort.
+
+        Args:
+            query: The original user query.
+            analysis: The query analysis result.
+
+        Returns:
+            List of clarifying question strings (max 3).
+        """
+        clarifications: list[str] = []
+
+        # High ambiguity → ask for specificity
+        if analysis.ambiguity_score > 0.6:
+            clarifications.append(
+                "Could you be more specific about what aspect you're interested in?"
+            )
+
+        # No detected entities → ask for domain/topic
+        if not analysis.detected_entities:
+            query_type_label = analysis.query_type.value.replace("_", " ")
+            clarifications.append(f"What specific {query_type_label} topic are you asking about?")
+
+        # High complexity without clear search strategy → ask about depth
+        if analysis.complexity >= 0.7 and analysis.search_strategy.value == "none":
+            clarifications.append(
+                "Are you looking for a high-level summary or a deep technical dive?"
+            )
+
+        # Short query (fewer than 4 words) → suggest more context
+        if len(query.split()) < 4 and not clarifications:
+            clarifications.append("Could you provide more context to help refine the response?")
+
+        # Low confidence → suggest rephrasing
+        if analysis.confidence < 0.4 and len(clarifications) < 3:
+            clarifications.append(
+                "The intent isn't fully clear — could you rephrase or add more detail?"
+            )
+
+        # Incorporate enhancement suggestions from analyzer (reformulated as questions)
+        if len(clarifications) < 3:
+            suggestions = self._query_analyzer.suggest_enhancements(query, analysis)
+            for suggestion in suggestions:
+                if len(clarifications) >= 3:
+                    break
+                # Skip suggestions already covered by our clarifications
+                if any(s.lower() in c.lower() for c in clarifications for s in suggestion.split()):
+                    continue
+                # Reformulate suggestion as a question if not already one
+                if not suggestion.endswith("?"):
+                    suggestion = f"Would it help to {suggestion[0].lower()}{suggestion[1:]}"
+                    if not suggestion.endswith("?"):
+                        suggestion = suggestion.rstrip(".") + "?"
+                clarifications.append(suggestion)
+                if len(clarifications) >= 3:
+                    break
+
+        return clarifications[:3]
+
     async def enhance(
         self,
         query: str,
@@ -320,6 +391,7 @@ class AIPEAEnhancer:
         force_offline: bool = False,
         include_search: bool = True,
         format_for_model: bool = True,
+        strategy: str | None = None,
     ) -> EnhancementResult:
         """
         Enhance a query for optimal model consumption.
@@ -352,6 +424,24 @@ class AIPEAEnhancer:
             ... )
             >>> print(result.enhanced_prompt)
         """
+        if not query or not query.strip():
+            logger.debug("Empty query provided to enhance()")
+            return EnhancementResult(
+                original_query=query or "",
+                enhanced_prompt=query or "",
+                processing_tier=ProcessingTier.OFFLINE,
+                security_context=SecurityContext(),
+                query_analysis=QueryAnalysis(
+                    query=query or "",
+                    query_type=QueryType.UNKNOWN,
+                    complexity=0.0,
+                    confidence=0.0,
+                    needs_current_info=False,
+                ),
+                was_enhanced=False,
+                enhancement_notes=["Empty query provided"],
+            )
+
         start_time = time.perf_counter()
         enhancement_notes: list[str] = []
 
@@ -435,6 +525,9 @@ class AIPEAEnhancer:
         # Step 3: Analyze query
         analysis = self._query_analyzer.analyze(query, security_context)
 
+        # Step 3b: Generate dialogical clarifications (advisory only)
+        clarifications = self._generate_clarifications(query, analysis)
+
         # Step 4: Determine if offline mode is required
         offline_required = self._is_offline_required(
             security_level,
@@ -491,6 +584,7 @@ class AIPEAEnhancer:
             search_context=search_context,
             model_type=model_family,
             query_type=analysis.query_type.value,
+            strategy=strategy,
         )
 
         # Calculate timing
@@ -510,6 +604,9 @@ class AIPEAEnhancer:
             enhancement_time_ms,
         )
 
+        # Compute quality score
+        quality_score = QualityAssessor().assess(query, enhanced_prompt)
+
         return EnhancementResult(
             original_query=query,
             enhanced_prompt=enhanced_prompt,
@@ -520,6 +617,8 @@ class AIPEAEnhancer:
             enhancement_time_ms=enhancement_time_ms,
             was_enhanced=True,
             enhancement_notes=enhancement_notes,
+            clarifications=clarifications,
+            quality_score=quality_score,
         )
 
     async def enhance_for_models(
@@ -795,7 +894,7 @@ class AIPEAEnhancer:
                 num_results=5,
             )
             return context
-        except Exception as e:
+        except (httpx.HTTPError, KeyError, ValueError) as e:
             logger.warning("Online search failed: %s", e)
             return None
 
@@ -834,12 +933,17 @@ class AIPEAEnhancer:
         domain = domain_map.get(analysis.query_type, KnowledgeDomain.GENERAL)
 
         try:
-            search_result = await self._offline_kb.search(
-                query=query,
-                domain=domain,
-                limit=5,
-            )
-            nodes = search_result.nodes
+            # Prefer semantic (BM25) search; fall back to domain-filtered search
+            semantic_result = await self._offline_kb.search_semantic(query=query, top_k=5)
+            if semantic_result.nodes:
+                nodes = semantic_result.nodes
+            else:
+                domain_result = await self._offline_kb.search(
+                    query=query,
+                    domain=domain,
+                    limit=5,
+                )
+                nodes = domain_result.nodes
 
             if not nodes:
                 return create_empty_context(query, source="offline_kb")
@@ -866,7 +970,7 @@ class AIPEAEnhancer:
                 confidence=sum(r.score for r in results) / len(results) if results else 0.0,
             )
 
-        except Exception as e:
+        except (sqlite3.Error, OSError, ValueError, TypeError) as e:
             logger.warning("Offline search failed: %s", e)
             return None
 
@@ -904,7 +1008,7 @@ class AIPEAEnhancer:
             logger.debug("Ollama not available, skipping LLM enhancement")
             return None
 
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.debug("Ollama enhancement skipped: %s", e)
             return None
 
@@ -1131,6 +1235,7 @@ async def enhance_prompt(
     force_offline: bool = False,
     include_search: bool = True,
     format_for_model: bool = True,
+    strategy: str | None = None,
 ) -> EnhancementResult:
     """Convenience function for quick prompt enhancement.
 
@@ -1144,6 +1249,7 @@ async def enhance_prompt(
         force_offline: Force air-gapped mode regardless of security level
         include_search: Include search context in enhancement (default True)
         format_for_model: Apply model-specific formatting (default True)
+        strategy: Named enhancement strategy override (default: auto-select)
 
     Returns:
         EnhancementResult with enhanced prompt and metadata
@@ -1155,6 +1261,24 @@ async def enhance_prompt(
         ... )
         >>> print(result.enhanced_prompt)
     """
+    if not query or not query.strip():
+        logger.debug("Empty query provided to enhance_prompt()")
+        return EnhancementResult(
+            original_query=query or "",
+            enhanced_prompt=query or "",
+            processing_tier=ProcessingTier.OFFLINE,
+            security_context=SecurityContext(),
+            query_analysis=QueryAnalysis(
+                query=query or "",
+                query_type=QueryType.UNKNOWN,
+                complexity=0.0,
+                confidence=0.0,
+                needs_current_info=False,
+            ),
+            was_enhanced=False,
+            enhancement_notes=["Empty query provided"],
+        )
+
     return await get_enhancer().enhance(
         query,
         model_id,
@@ -1163,6 +1287,7 @@ async def enhance_prompt(
         force_offline,
         include_search=include_search,
         format_for_model=format_for_model,
+        strategy=strategy,
     )
 
 

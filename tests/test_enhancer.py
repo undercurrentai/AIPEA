@@ -76,7 +76,34 @@ class TestEnhancementResult:
         assert result.was_enhanced is True
         assert result.enhancement_time_ms == 0.0
         assert result.enhancement_notes == []
+        assert result.clarifications == []
         assert result.search_context is None
+
+    @pytest.mark.unit
+    def test_clarifications_default_empty(self) -> None:
+        """clarifications field defaults to empty list."""
+        result = EnhancementResult(
+            original_query="test",
+            enhanced_prompt="enhanced test",
+            processing_tier=ProcessingTier.OFFLINE,
+            security_context=self._make_security_context(),
+            query_analysis=self._make_analysis(),
+        )
+        assert result.clarifications == []
+
+    @pytest.mark.unit
+    def test_clarifications_in_to_dict(self) -> None:
+        """to_dict includes clarifications field."""
+        result = EnhancementResult(
+            original_query="test",
+            enhanced_prompt="enhanced test",
+            processing_tier=ProcessingTier.OFFLINE,
+            security_context=self._make_security_context(),
+            query_analysis=self._make_analysis(),
+            clarifications=["What do you mean?"],
+        )
+        d = result.to_dict()
+        assert d["clarifications"] == ["What do you mean?"]
 
     @pytest.mark.unit
     def test_to_dict_without_search_context(self) -> None:
@@ -671,6 +698,7 @@ class TestEnhancerNewParams:
                 False,
                 include_search=False,
                 format_for_model=False,
+                strategy=None,
             )
 
         reset_enhancer()
@@ -1008,6 +1036,7 @@ class TestEnhancePromptConvenience:
                 False,
                 include_search=True,
                 format_for_model=True,
+                strategy=None,
             )
             assert result.enhanced_prompt == "eq"
 
@@ -1050,6 +1079,7 @@ class TestEnhancePromptConvenience:
                 False,
                 include_search=True,
                 format_for_model=True,
+                strategy=None,
             )
 
         reset_enhancer()
@@ -1091,6 +1121,7 @@ class TestEnhancePromptConvenience:
                 True,
                 include_search=True,
                 format_for_model=True,
+                strategy=None,
             )
 
         reset_enhancer()
@@ -1132,6 +1163,7 @@ class TestEnhancePromptConvenience:
                 False,
                 include_search=True,
                 format_for_model=True,
+                strategy=None,
             )
 
         reset_enhancer()
@@ -1609,3 +1641,160 @@ class TestTryOllamaEnhancement:
         assert len(captured_queries) == 1
         assert "[Offline LLM Analysis]" in captured_queries[0]
         assert "Ollama says: good question" in captured_queries[0]
+
+
+# =============================================================================
+# DIALOGICAL CLARIFICATION TESTS
+# =============================================================================
+
+
+class TestGenerateClarifications:
+    """Tests for AIPEAEnhancer._generate_clarifications()."""
+
+    def _make_enhancer(self) -> AIPEAEnhancer:
+        return AIPEAEnhancer(enable_enhancement=False)
+
+    def _make_analysis(
+        self,
+        query: str = "test",
+        *,
+        ambiguity: float = 0.0,
+        complexity: float = 0.3,
+        confidence: float = 0.8,
+        entities: list[str] | None = None,
+        search_strategy: str = "none",
+        query_type: QueryType = QueryType.UNKNOWN,
+    ) -> QueryAnalysis:
+        from aipea._types import SearchStrategy
+
+        strategy = (
+            SearchStrategy(search_strategy) if search_strategy != "none" else SearchStrategy.NONE
+        )
+        return QueryAnalysis(
+            query=query,
+            query_type=query_type,
+            complexity=complexity,
+            confidence=confidence,
+            needs_current_info=False,
+            detected_entities=entities or [],
+            ambiguity_score=ambiguity,
+            search_strategy=strategy,
+        )
+
+    @pytest.mark.unit
+    def test_clear_query_no_clarifications(self) -> None:
+        """Clear, specific query produces no clarifications."""
+        enhancer = self._make_enhancer()
+        analysis = self._make_analysis(
+            "Explain the attention mechanism in transformers",
+            ambiguity=0.1,
+            confidence=0.9,
+            entities=["attention mechanism", "transformers"],
+        )
+        result = enhancer._generate_clarifications(
+            "Explain the attention mechanism in transformers", analysis
+        )
+        assert result == []
+
+    @pytest.mark.unit
+    def test_vague_query_produces_clarifications(self) -> None:
+        """Vague single-word query produces non-empty clarifications."""
+        enhancer = self._make_enhancer()
+        analysis = self._make_analysis(
+            "stuff",
+            ambiguity=0.8,
+            confidence=0.3,
+            entities=[],
+        )
+        result = enhancer._generate_clarifications("stuff", analysis)
+        assert len(result) > 0
+
+    @pytest.mark.unit
+    def test_high_ambiguity_triggers_specificity_question(self) -> None:
+        """ambiguity_score > 0.6 triggers a specificity clarification."""
+        enhancer = self._make_enhancer()
+        analysis = self._make_analysis(
+            "How does it work?",
+            ambiguity=0.75,
+            entities=["it"],
+        )
+        result = enhancer._generate_clarifications("How does it work?", analysis)
+        assert any("specific" in c.lower() for c in result)
+
+    @pytest.mark.unit
+    def test_no_entities_triggers_topic_question(self) -> None:
+        """No detected entities triggers a topic clarification."""
+        enhancer = self._make_enhancer()
+        analysis = self._make_analysis(
+            "Tell me about that thing",
+            ambiguity=0.3,
+            entities=[],
+        )
+        result = enhancer._generate_clarifications("Tell me about that thing", analysis)
+        assert any("topic" in c.lower() for c in result)
+
+    @pytest.mark.unit
+    def test_high_complexity_no_strategy_triggers_depth_question(self) -> None:
+        """complexity >= 0.7 with no search strategy triggers depth question."""
+        enhancer = self._make_enhancer()
+        analysis = self._make_analysis(
+            "Explain everything about neural networks",
+            complexity=0.85,
+            entities=["neural networks"],
+            search_strategy="none",
+        )
+        result = enhancer._generate_clarifications(
+            "Explain everything about neural networks", analysis
+        )
+        assert any("summary" in c.lower() or "deep" in c.lower() for c in result)
+
+    @pytest.mark.unit
+    def test_max_three_clarifications(self) -> None:
+        """Never returns more than 3 clarifications."""
+        enhancer = self._make_enhancer()
+        # Trigger as many conditions as possible
+        analysis = self._make_analysis(
+            "x",
+            ambiguity=0.9,
+            complexity=0.9,
+            confidence=0.2,
+            entities=[],
+            search_strategy="none",
+        )
+        result = enhancer._generate_clarifications("x", analysis)
+        assert len(result) <= 3
+
+    @pytest.mark.unit
+    def test_low_confidence_triggers_rephrase(self) -> None:
+        """confidence < 0.4 suggests rephrasing."""
+        enhancer = self._make_enhancer()
+        analysis = self._make_analysis(
+            "maybe something idk",
+            confidence=0.2,
+            entities=["something"],
+        )
+        result = enhancer._generate_clarifications("maybe something idk", analysis)
+        assert any("rephrase" in c.lower() or "intent" in c.lower() for c in result)
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_enhance_returns_clarifications_for_vague_query(self) -> None:
+        """enhance() populates clarifications for a vague query."""
+        enhancer = AIPEAEnhancer(enable_enhancement=True)
+        result = await enhancer.enhance("stuff", model_id="gpt-4")
+        assert isinstance(result.clarifications, list)
+        # Vague query should trigger at least one clarification
+        assert len(result.clarifications) >= 1
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_enhance_clear_query_empty_clarifications(self) -> None:
+        """enhance() returns empty clarifications for a clear query."""
+        enhancer = AIPEAEnhancer(enable_enhancement=True)
+        result = await enhancer.enhance(
+            "Explain the Python GIL and its impact on multithreading performance",
+            model_id="gpt-4",
+        )
+        assert isinstance(result.clarifications, list)
+        # Might still have 0 or few clarifications for a clear query
+        assert len(result.clarifications) <= 1
