@@ -41,11 +41,19 @@ class AIPEAConfig:
         exa_api_key: Exa search provider API key.
         firecrawl_api_key: Firecrawl provider API key.
         http_timeout: HTTP timeout for search providers (seconds).
+        ollama_host: Ollama server URL for offline models.
+        db_path: Path to offline knowledge SQLite database.
+        storage_tier: Storage tier name (ultra_compact, compact, standard, extended).
+        default_compliance: Default compliance mode (general, hipaa, tactical, fedramp).
     """
 
     exa_api_key: str = ""
     firecrawl_api_key: str = ""
     http_timeout: float = _DEFAULT_HTTP_TIMEOUT
+    ollama_host: str = "http://localhost:11434"
+    db_path: str = "aipea_knowledge.db"
+    storage_tier: str = "standard"
+    default_compliance: str = "general"
     _sources: dict[str, str] = field(default_factory=dict, repr=False)
 
     # -- helpers --
@@ -147,6 +155,72 @@ def _parse_toml_config(path: Path) -> dict[str, str]:
     return values
 
 
+def _resolve_string(
+    env_key: str,
+    toml_key: str,
+    default: str,
+    dotenv_vals: dict[str, str],
+    toml_vals: dict[str, str],
+    sources: dict[str, str],
+    dotenv_file: Path,
+    toml_file: Path,
+    *,
+    valid_values: set[str] | None = None,
+) -> str:
+    """Resolve a string config value through the priority chain.
+
+    Priority: env > .env > toml > default.
+    If ``valid_values`` is set, values not in the set are ignored.
+    """
+    env_val = os.environ.get(env_key)
+    if env_val is not None and (valid_values is None or env_val.lower() in valid_values):
+        sources[toml_key] = "env"
+        return env_val.lower() if valid_values else env_val
+    if env_key in dotenv_vals:
+        raw = dotenv_vals[env_key]
+        if valid_values is None or raw.lower() in valid_values:
+            sources[toml_key] = f"dotenv ({dotenv_file})"
+            return raw.lower() if valid_values else raw
+    if toml_key in toml_vals:
+        raw = toml_vals[toml_key]
+        if valid_values is None or raw.lower() in valid_values:
+            sources[toml_key] = f"toml ({toml_file})"
+            return raw.lower() if valid_values else raw
+    sources[toml_key] = "default"
+    return default
+
+
+def _parse_timeout(raw: str) -> float:
+    """Parse a timeout string, returning the default if invalid."""
+    try:
+        val = float(raw)
+        return val if 0 < val < float("inf") else _DEFAULT_HTTP_TIMEOUT
+    except (ValueError, TypeError):
+        return _DEFAULT_HTTP_TIMEOUT
+
+
+def _resolve_timeout(
+    dotenv_vals: dict[str, str],
+    toml_vals: dict[str, str],
+    sources: dict[str, str],
+    dotenv_file: Path,
+    toml_file: Path,
+) -> float:
+    """Resolve http_timeout through the priority chain."""
+    env_val = os.environ.get("AIPEA_HTTP_TIMEOUT")
+    if env_val is not None:
+        sources["http_timeout"] = "env"
+        return _parse_timeout(env_val)
+    if "AIPEA_HTTP_TIMEOUT" in dotenv_vals:
+        sources["http_timeout"] = f"dotenv ({dotenv_file})"
+        return _parse_timeout(dotenv_vals["AIPEA_HTTP_TIMEOUT"])
+    if "http_timeout" in toml_vals:
+        sources["http_timeout"] = f"toml ({toml_file})"
+        return _parse_timeout(toml_vals["http_timeout"])
+    sources["http_timeout"] = "default"
+    return _DEFAULT_HTTP_TIMEOUT
+
+
 # ---------------------------------------------------------------------------
 # Unified loader
 # ---------------------------------------------------------------------------
@@ -160,7 +234,7 @@ def load_config(
     """Load AIPEA configuration by merging all sources.
 
     Priority (highest wins):
-        1. Environment variables (``EXA_API_KEY``, ``FIRECRAWL_API_KEY``, ``AIPEA_HTTP_TIMEOUT``)
+        1. Environment variables
         2. Project-local ``.env`` file (``dotenv_path`` or ``cwd/.env``)
         3. Global ``~/.aipea/config.toml``
         4. Built-in defaults
@@ -184,69 +258,87 @@ def load_config(
     dotenv_file = dotenv_path or Path.cwd() / ".env"
     dotenv_vals = _parse_dotenv(dotenv_file)
 
-    # Resolve each field: env > .env > toml > default
-    exa_key = ""
-    firecrawl_key = ""
-    http_timeout = _DEFAULT_HTTP_TIMEOUT
+    # --- string fields (env > .env > toml > default) ---
+    exa_key = _resolve_string(
+        "EXA_API_KEY",
+        "exa_api_key",
+        "",
+        dotenv_vals,
+        toml_vals,
+        sources,
+        dotenv_file,
+        toml_file,
+    )
+    firecrawl_key = _resolve_string(
+        "FIRECRAWL_API_KEY",
+        "firecrawl_api_key",
+        "",
+        dotenv_vals,
+        toml_vals,
+        sources,
+        dotenv_file,
+        toml_file,
+    )
+    ollama_host = _resolve_string(
+        "AIPEA_OLLAMA_HOST",
+        "ollama_host",
+        "http://localhost:11434",
+        dotenv_vals,
+        toml_vals,
+        sources,
+        dotenv_file,
+        toml_file,
+    )
+    db_path = _resolve_string(
+        "AIPEA_DB_PATH",
+        "db_path",
+        "aipea_knowledge.db",
+        dotenv_vals,
+        toml_vals,
+        sources,
+        dotenv_file,
+        toml_file,
+    )
+    storage_tier = _resolve_string(
+        "AIPEA_STORAGE_TIER",
+        "storage_tier",
+        "standard",
+        dotenv_vals,
+        toml_vals,
+        sources,
+        dotenv_file,
+        toml_file,
+        valid_values={"ultra_compact", "compact", "standard", "extended"},
+    )
+    default_compliance = _resolve_string(
+        "AIPEA_DEFAULT_COMPLIANCE",
+        "default_compliance",
+        "general",
+        dotenv_vals,
+        toml_vals,
+        sources,
+        dotenv_file,
+        toml_file,
+        valid_values={"general", "hipaa", "tactical", "fedramp"},
+    )
 
-    # --- exa_api_key ---
-    env_exa = os.environ.get("EXA_API_KEY")
-    if env_exa is not None:
-        exa_key = env_exa
-        sources["exa_api_key"] = "env"
-    elif "EXA_API_KEY" in dotenv_vals:
-        exa_key = dotenv_vals["EXA_API_KEY"]
-        sources["exa_api_key"] = f"dotenv ({dotenv_file})"
-    elif "exa_api_key" in toml_vals:
-        exa_key = toml_vals["exa_api_key"]
-        sources["exa_api_key"] = f"toml ({toml_file})"
-    else:
-        sources["exa_api_key"] = "default"
-
-    # --- firecrawl_api_key ---
-    env_fc = os.environ.get("FIRECRAWL_API_KEY")
-    if env_fc is not None:
-        firecrawl_key = env_fc
-        sources["firecrawl_api_key"] = "env"
-    elif "FIRECRAWL_API_KEY" in dotenv_vals:
-        firecrawl_key = dotenv_vals["FIRECRAWL_API_KEY"]
-        sources["firecrawl_api_key"] = f"dotenv ({dotenv_file})"
-    elif "firecrawl_api_key" in toml_vals:
-        firecrawl_key = toml_vals["firecrawl_api_key"]
-        sources["firecrawl_api_key"] = f"toml ({toml_file})"
-    else:
-        sources["firecrawl_api_key"] = "default"
-
-    # --- http_timeout ---
-    env_timeout = os.environ.get("AIPEA_HTTP_TIMEOUT")
-    if env_timeout is not None:
-        sources["http_timeout"] = "env"
-        try:
-            val = float(env_timeout)
-            http_timeout = val if 0 < val < float("inf") else _DEFAULT_HTTP_TIMEOUT
-        except (ValueError, TypeError):
-            http_timeout = _DEFAULT_HTTP_TIMEOUT
-    elif "AIPEA_HTTP_TIMEOUT" in dotenv_vals:
-        sources["http_timeout"] = f"dotenv ({dotenv_file})"
-        try:
-            val = float(dotenv_vals["AIPEA_HTTP_TIMEOUT"])
-            http_timeout = val if 0 < val < float("inf") else _DEFAULT_HTTP_TIMEOUT
-        except (ValueError, TypeError):
-            http_timeout = _DEFAULT_HTTP_TIMEOUT
-    elif "http_timeout" in toml_vals:
-        sources["http_timeout"] = f"toml ({toml_file})"
-        try:
-            val = float(toml_vals["http_timeout"])
-            http_timeout = val if 0 < val < float("inf") else _DEFAULT_HTTP_TIMEOUT
-        except (ValueError, TypeError):
-            http_timeout = _DEFAULT_HTTP_TIMEOUT
-    else:
-        sources["http_timeout"] = "default"
+    # --- http_timeout (special: needs float parsing + validation) ---
+    http_timeout = _resolve_timeout(
+        dotenv_vals,
+        toml_vals,
+        sources,
+        dotenv_file,
+        toml_file,
+    )
 
     return AIPEAConfig(
         exa_api_key=exa_key,
         firecrawl_api_key=firecrawl_key,
         http_timeout=http_timeout,
+        ollama_host=ollama_host,
+        db_path=db_path,
+        storage_tier=storage_tier,
+        default_compliance=default_compliance,
         _sources=sources,
     )
 
@@ -270,7 +362,15 @@ def save_dotenv(path: Path, config: AIPEAConfig) -> None:
         path: Target file path.
         config: Configuration to persist.
     """
-    aipea_keys = {"EXA_API_KEY", "FIRECRAWL_API_KEY", "AIPEA_HTTP_TIMEOUT"}
+    aipea_keys = {
+        "EXA_API_KEY",
+        "FIRECRAWL_API_KEY",
+        "AIPEA_HTTP_TIMEOUT",
+        "AIPEA_OLLAMA_HOST",
+        "AIPEA_DB_PATH",
+        "AIPEA_STORAGE_TIER",
+        "AIPEA_DEFAULT_COMPLIANCE",
+    }
     existing = _parse_dotenv(path)
 
     lines = [
@@ -291,6 +391,16 @@ def save_dotenv(path: Path, config: AIPEAConfig) -> None:
         lines.append(f'FIRECRAWL_API_KEY="{escaped}"')
     if config.http_timeout != _DEFAULT_HTTP_TIMEOUT:
         lines.append(f"AIPEA_HTTP_TIMEOUT={config.http_timeout}")
+    if config.ollama_host != "http://localhost:11434":
+        escaped = _escape_config_value(config.ollama_host)
+        lines.append(f'AIPEA_OLLAMA_HOST="{escaped}"')
+    if config.db_path != "aipea_knowledge.db":
+        escaped = _escape_config_value(config.db_path)
+        lines.append(f'AIPEA_DB_PATH="{escaped}"')
+    if config.storage_tier != "standard":
+        lines.append(f"AIPEA_STORAGE_TIER={config.storage_tier}")
+    if config.default_compliance != "general":
+        lines.append(f"AIPEA_DEFAULT_COMPLIANCE={config.default_compliance}")
     lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -325,6 +435,16 @@ def save_toml_config(path: Path, config: AIPEAConfig) -> None:
         lines.append(f'firecrawl_api_key = "{escaped}"')
     if config.http_timeout != _DEFAULT_HTTP_TIMEOUT:
         lines.append(f"http_timeout = {config.http_timeout}")
+    if config.ollama_host != "http://localhost:11434":
+        escaped = _escape_config_value(config.ollama_host)
+        lines.append(f'ollama_host = "{escaped}"')
+    if config.db_path != "aipea_knowledge.db":
+        escaped = _escape_config_value(config.db_path)
+        lines.append(f'db_path = "{escaped}"')
+    if config.storage_tier != "standard":
+        lines.append(f'storage_tier = "{config.storage_tier}"')
+    if config.default_compliance != "general":
+        lines.append(f'default_compliance = "{config.default_compliance}"')
     lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")

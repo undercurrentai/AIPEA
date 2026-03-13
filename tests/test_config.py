@@ -28,6 +28,10 @@ class TestAIPEAConfig:
         assert cfg.exa_api_key == ""
         assert cfg.firecrawl_api_key == ""
         assert cfg.http_timeout == 30.0
+        assert cfg.ollama_host == "http://localhost:11434"
+        assert cfg.db_path == "aipea_knowledge.db"
+        assert cfg.storage_tier == "standard"
+        assert cfg.default_compliance == "general"
 
     def test_has_exa(self) -> None:
         assert not AIPEAConfig().has_exa()
@@ -185,9 +189,16 @@ class TestLoadConfig:
     def test_defaults_when_no_sources(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.delenv("EXA_API_KEY", raising=False)
-        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
-        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+        for var in (
+            "EXA_API_KEY",
+            "FIRECRAWL_API_KEY",
+            "AIPEA_HTTP_TIMEOUT",
+            "AIPEA_OLLAMA_HOST",
+            "AIPEA_DB_PATH",
+            "AIPEA_STORAGE_TIER",
+            "AIPEA_DEFAULT_COMPLIANCE",
+        ):
+            monkeypatch.delenv(var, raising=False)
         cfg = load_config(
             dotenv_path=tmp_path / "no.env",
             toml_path=tmp_path / "no.toml",
@@ -195,6 +206,10 @@ class TestLoadConfig:
         assert cfg.exa_api_key == ""
         assert cfg.firecrawl_api_key == ""
         assert cfg.http_timeout == 30.0
+        assert cfg.ollama_host == "http://localhost:11434"
+        assert cfg.db_path == "aipea_knowledge.db"
+        assert cfg.storage_tier == "standard"
+        assert cfg.default_compliance == "general"
 
     def test_toml_provides_values(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("EXA_API_KEY", raising=False)
@@ -289,6 +304,135 @@ class TestLoadConfig:
 
         cfg = load_config(dotenv_path=tmp_path / "no.env", toml_path=toml)
         assert cfg.http_timeout == 30.0
+
+    def test_ollama_host_from_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AIPEA_OLLAMA_HOST", "http://remote:11434")
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+
+        cfg = load_config(dotenv_path=tmp_path / "no.env", toml_path=tmp_path / "no.toml")
+        assert cfg.ollama_host == "http://remote:11434"
+        assert cfg._sources["ollama_host"] == "env"
+
+    def test_ollama_host_default(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("AIPEA_OLLAMA_HOST", raising=False)
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+
+        cfg = load_config(dotenv_path=tmp_path / "no.env", toml_path=tmp_path / "no.toml")
+        assert cfg.ollama_host == "http://localhost:11434"
+
+    def test_db_path_from_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AIPEA_DB_PATH", "/data/custom.db")
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+        monkeypatch.delenv("AIPEA_OLLAMA_HOST", raising=False)
+
+        cfg = load_config(dotenv_path=tmp_path / "no.env", toml_path=tmp_path / "no.toml")
+        assert cfg.db_path == "/data/custom.db"
+        assert cfg._sources["db_path"] == "env"
+
+    def test_storage_tier_from_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AIPEA_STORAGE_TIER", "compact")
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+        monkeypatch.delenv("AIPEA_OLLAMA_HOST", raising=False)
+        monkeypatch.delenv("AIPEA_DB_PATH", raising=False)
+
+        cfg = load_config(dotenv_path=tmp_path / "no.env", toml_path=tmp_path / "no.toml")
+        assert cfg.storage_tier == "compact"
+
+    def test_storage_tier_invalid_falls_back(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AIPEA_STORAGE_TIER", "invalid_tier")
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+        monkeypatch.delenv("AIPEA_OLLAMA_HOST", raising=False)
+        monkeypatch.delenv("AIPEA_DB_PATH", raising=False)
+
+        cfg = load_config(dotenv_path=tmp_path / "no.env", toml_path=tmp_path / "no.toml")
+        assert cfg.storage_tier == "standard"  # falls back to default
+
+    def test_default_compliance_from_env(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AIPEA_DEFAULT_COMPLIANCE", "hipaa")
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+        monkeypatch.delenv("AIPEA_OLLAMA_HOST", raising=False)
+        monkeypatch.delenv("AIPEA_DB_PATH", raising=False)
+        monkeypatch.delenv("AIPEA_STORAGE_TIER", raising=False)
+
+        cfg = load_config(dotenv_path=tmp_path / "no.env", toml_path=tmp_path / "no.toml")
+        assert cfg.default_compliance == "hipaa"
+
+    def test_default_compliance_invalid_falls_back(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AIPEA_DEFAULT_COMPLIANCE", "bogus")
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+        monkeypatch.delenv("AIPEA_OLLAMA_HOST", raising=False)
+        monkeypatch.delenv("AIPEA_DB_PATH", raising=False)
+        monkeypatch.delenv("AIPEA_STORAGE_TIER", raising=False)
+
+        cfg = load_config(dotenv_path=tmp_path / "no.env", toml_path=tmp_path / "no.toml")
+        assert cfg.default_compliance == "general"  # falls back to default
+
+    def test_new_vars_from_dotenv(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+        monkeypatch.delenv("AIPEA_OLLAMA_HOST", raising=False)
+        monkeypatch.delenv("AIPEA_DB_PATH", raising=False)
+        monkeypatch.delenv("AIPEA_STORAGE_TIER", raising=False)
+        monkeypatch.delenv("AIPEA_DEFAULT_COMPLIANCE", raising=False)
+
+        env = tmp_path / ".env"
+        env.write_text(
+            "AIPEA_OLLAMA_HOST=http://dotenv:11434\n"
+            "AIPEA_DB_PATH=/dotenv/kb.db\n"
+            "AIPEA_STORAGE_TIER=extended\n"
+            "AIPEA_DEFAULT_COMPLIANCE=tactical\n"
+        )
+
+        cfg = load_config(dotenv_path=env, toml_path=tmp_path / "no.toml")
+        assert cfg.ollama_host == "http://dotenv:11434"
+        assert cfg.db_path == "/dotenv/kb.db"
+        assert cfg.storage_tier == "extended"
+        assert cfg.default_compliance == "tactical"
+
+    def test_new_vars_from_toml(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+        monkeypatch.delenv("AIPEA_OLLAMA_HOST", raising=False)
+        monkeypatch.delenv("AIPEA_DB_PATH", raising=False)
+        monkeypatch.delenv("AIPEA_STORAGE_TIER", raising=False)
+        monkeypatch.delenv("AIPEA_DEFAULT_COMPLIANCE", raising=False)
+
+        toml = tmp_path / "config.toml"
+        toml.write_text(
+            "[aipea]\n"
+            'ollama_host = "http://toml:11434"\n'
+            'db_path = "/toml/kb.db"\n'
+            'storage_tier = "compact"\n'
+            'default_compliance = "fedramp"\n'
+        )
+
+        cfg = load_config(dotenv_path=tmp_path / "no.env", toml_path=toml)
+        assert cfg.ollama_host == "http://toml:11434"
+        assert cfg.db_path == "/toml/kb.db"
+        assert cfg.storage_tier == "compact"
+        assert cfg.default_compliance == "fedramp"
 
     def test_full_priority_chain(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """env > dotenv > toml > default — test all layers active."""
@@ -554,3 +698,130 @@ class TestGetConfigLocations:
         assert "global_toml" in locations
         assert "path" in locations["dotenv"]
         assert "exists" in locations["dotenv"]
+
+
+# ============================================================================
+# save_dotenv / save_toml_config: new v1.3.0 fields
+# ============================================================================
+
+
+class TestSaveNewConfigFields:
+    """Ensure new v1.3.0 config fields are persisted by save_dotenv and save_toml_config."""
+
+    @pytest.mark.unit
+    def test_dotenv_writes_new_fields(self, tmp_path: Path) -> None:
+        target = tmp_path / ".env"
+        cfg = AIPEAConfig(
+            ollama_host="http://remote:11434",
+            db_path="/data/kb.db",
+            storage_tier="extended",
+            default_compliance="hipaa",
+        )
+        save_dotenv(target, cfg)
+
+        content = target.read_text()
+        assert 'AIPEA_OLLAMA_HOST="http://remote:11434"' in content
+        assert 'AIPEA_DB_PATH="/data/kb.db"' in content
+        assert "AIPEA_STORAGE_TIER=extended" in content
+        assert "AIPEA_DEFAULT_COMPLIANCE=hipaa" in content
+
+    @pytest.mark.unit
+    def test_dotenv_omits_default_new_fields(self, tmp_path: Path) -> None:
+        target = tmp_path / ".env"
+        cfg = AIPEAConfig()  # all defaults
+        save_dotenv(target, cfg)
+
+        content = target.read_text()
+        assert "AIPEA_OLLAMA_HOST" not in content
+        assert "AIPEA_DB_PATH" not in content
+        assert "AIPEA_STORAGE_TIER" not in content
+        assert "AIPEA_DEFAULT_COMPLIANCE" not in content
+
+    @pytest.mark.unit
+    def test_toml_writes_new_fields(self, tmp_path: Path) -> None:
+        target = tmp_path / "config.toml"
+        cfg = AIPEAConfig(
+            ollama_host="http://remote:11434",
+            db_path="/data/kb.db",
+            storage_tier="compact",
+            default_compliance="tactical",
+        )
+        save_toml_config(target, cfg)
+
+        content = target.read_text()
+        assert 'ollama_host = "http://remote:11434"' in content
+        assert 'db_path = "/data/kb.db"' in content
+        assert 'storage_tier = "compact"' in content
+        assert 'default_compliance = "tactical"' in content
+
+    @pytest.mark.unit
+    def test_toml_omits_default_new_fields(self, tmp_path: Path) -> None:
+        target = tmp_path / "config.toml"
+        cfg = AIPEAConfig()  # all defaults
+        save_toml_config(target, cfg)
+
+        content = target.read_text()
+        assert "ollama_host" not in content
+        assert "db_path" not in content
+        assert "storage_tier" not in content
+        assert "default_compliance" not in content
+
+    @pytest.mark.unit
+    def test_dotenv_roundtrip_new_fields(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for var in (
+            "EXA_API_KEY",
+            "FIRECRAWL_API_KEY",
+            "AIPEA_HTTP_TIMEOUT",
+            "AIPEA_OLLAMA_HOST",
+            "AIPEA_DB_PATH",
+            "AIPEA_STORAGE_TIER",
+            "AIPEA_DEFAULT_COMPLIANCE",
+        ):
+            monkeypatch.delenv(var, raising=False)
+
+        target = tmp_path / ".env"
+        original = AIPEAConfig(
+            ollama_host="http://gpu:11434",
+            db_path="/data/test.db",
+            storage_tier="compact",
+            default_compliance="hipaa",
+        )
+        save_dotenv(target, original)
+
+        loaded = load_config(dotenv_path=target, toml_path=tmp_path / "no.toml")
+        assert loaded.ollama_host == "http://gpu:11434"
+        assert loaded.db_path == "/data/test.db"
+        assert loaded.storage_tier == "compact"
+        assert loaded.default_compliance == "hipaa"
+
+    @pytest.mark.unit
+    def test_toml_roundtrip_new_fields(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for var in (
+            "EXA_API_KEY",
+            "FIRECRAWL_API_KEY",
+            "AIPEA_HTTP_TIMEOUT",
+            "AIPEA_OLLAMA_HOST",
+            "AIPEA_DB_PATH",
+            "AIPEA_STORAGE_TIER",
+            "AIPEA_DEFAULT_COMPLIANCE",
+        ):
+            monkeypatch.delenv(var, raising=False)
+
+        target = tmp_path / "config.toml"
+        original = AIPEAConfig(
+            ollama_host="http://gpu:11434",
+            db_path="/data/test.db",
+            storage_tier="extended",
+            default_compliance="tactical",
+        )
+        save_toml_config(target, original)
+
+        loaded = load_config(dotenv_path=tmp_path / "no.env", toml_path=target)
+        assert loaded.ollama_host == "http://gpu:11434"
+        assert loaded.db_path == "/data/test.db"
+        assert loaded.storage_tier == "extended"
+        assert loaded.default_compliance == "tactical"
