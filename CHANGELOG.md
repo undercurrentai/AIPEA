@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-03-13
+
 ### Added
 - **enhancer**: Degradation feedback in `enhancement_notes` — reports when offline KB is missing ("run 'aipea seed-kb'"), when no search providers are configured ("aipea configure"), and when Ollama is unavailable ("using template-based enhancement")
 - **cli**: Provider descriptions with signup URLs in `aipea configure` (Exa, Firecrawl) and skip hints showing API keys are optional
@@ -14,14 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **cli**: "Recommendations" panel after `aipea doctor` summary with actionable next steps
 - **cli**: Platform-specific Ollama install hints in doctor (macOS: brew, Linux: curl, other: URL)
 - **README**: "Getting Started" section with 3 paths (Minimal, Search Providers, Ollama) emphasizing zero-config baseline
-- 7 new tests (698 total, 91.42% coverage)
-
-### Changed
-- **cli**: `_ollama_install_hint()` helper extracted for DRY platform-specific install commands (3 call sites)
-
-## [1.3.0] - 2026-03-13
-
-### Added
 - **strategies**: New `strategies.py` module — named enhancement strategies with 6 technique functions (specification_extraction, constraint_identification, hypothesis_clarification, metric_definition, task_decomposition, objective_hierarchy_construction) and 6 strategy presets (general, technical, research, creative, analytical, strategic) [P2a roadmap]
 - **quality**: New `quality.py` module — heuristic quality assessor scoring clarity, specificity, information density, and instruction quality improvements between original and enhanced prompts [P3a roadmap]
 - **enhancer**: `clarifications: list[str]` field on `EnhancementResult` — advisory clarifying questions for ambiguous queries (max 3), generated from ambiguity score, entity count, and complexity signals [P1 roadmap]
@@ -35,9 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **enhancer**: Thread-safe `_stats_lock` protecting all statistics mutations
 - **enhancer**: FEDRAMP stub warning when FEDRAMP compliance mode is selected
 - **engine**: Warning logs when non-default `max_tokens`/`temperature` passed to `OllamaOfflineClient.generate()`
-- 69 new tests (691 total, 90.94% coverage)
+- 76 new tests (698 total, 91.42% coverage)
 
 ### Changed
+- **cli**: `_ollama_install_hint()` helper extracted for DRY platform-specific install commands (3 call sites)
 - **_types**: `QUERY_TYPE_PATTERNS` and `get_model_family()` centralized as single source of truth (was duplicated in analyzer.py, engine.py, enhancer.py, search.py)
 - **analyzer**: `QueryRouter` methods promoted from private to public: `calculate_complexity()`, `detect_temporal_needs()`, `identify_domain()`, `calculate_confidence()`
 - **enhancer**: Complexity scoring now uses actual `analysis.complexity` score instead of tier-based mapping
