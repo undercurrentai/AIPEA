@@ -49,7 +49,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from aipea._types import ProcessingTier, QueryType, SearchStrategy
+from aipea._types import ProcessingTier, QueryType, SearchStrategy, get_model_family
 from aipea.analyzer import QueryAnalyzer
 from aipea.engine import PromptEngine
 from aipea.knowledge import KnowledgeDomain, OfflineKnowledgeBase, StorageTier
@@ -179,38 +179,8 @@ class EnhancedRequest:
 # =============================================================================
 
 
-# Model ID to model family mapping for formatting
-MODEL_FAMILY_MAP: dict[str, str] = {
-    # OpenAI models
-    "gpt-4": "openai",
-    "gpt-4o": "openai",
-    "gpt-4-turbo": "openai",
-    "gpt-3.5-turbo": "openai",
-    "gpt-5.1": "gpt",
-    "gpt-5.2": "gpt",
-    "gpt-5.2-pro": "gpt",
-    "gpt-oss-20b": "openai",  # Offline OpenAI SLM
-    # Anthropic models
-    "claude-3-opus": "claude",
-    "claude-3-sonnet": "claude",
-    "claude-3-haiku": "claude",
-    "claude-3.5-sonnet": "claude",
-    "claude-3.5-haiku": "claude",
-    "claude-opus-4-6": "claude",
-    "claude-sonnet-4-5": "claude",
-    "claude-haiku-4-5": "claude",
-    # Google models
-    "gemini-2": "gemini",
-    "gemini-2-flash": "gemini",
-    "gemini-1.5-pro": "gemini",
-    "gemini-1.5-flash": "gemini",
-    "gemini-3-pro-preview": "gemini",
-    "gemini-3-flash-preview": "gemini",
-    "gemma-3n": "gemini",  # Offline Google SLM
-    # Meta models (offline)
-    "llama-3.3-70b": "llama",
-    "llama-3.2-3b": "llama",
-}
+# Re-export canonical definitions for backward compatibility
+from aipea._types import MODEL_FAMILY_MAP as MODEL_FAMILY_MAP  # noqa: E402
 
 # Offline-capable models
 OFFLINE_MODELS: set[str] = {
@@ -219,34 +189,6 @@ OFFLINE_MODELS: set[str] = {
     "llama-3.2-3b",
     "gemma-3n",
 }
-
-
-def get_model_family(model_id: str) -> str:
-    """Get the model family for a given model ID.
-
-    Args:
-        model_id: The model identifier
-
-    Returns:
-        Model family string (openai, claude, gemini, llama, or general)
-    """
-    model_lower = model_id.lower()
-
-    # Check exact match first
-    if model_lower in MODEL_FAMILY_MAP:
-        return MODEL_FAMILY_MAP[model_lower]
-
-    # Check partial matches
-    if "gpt" in model_lower or "openai" in model_lower:
-        return "openai"
-    elif "claude" in model_lower or "anthropic" in model_lower:
-        return "claude"
-    elif "gemini" in model_lower or "gemma" in model_lower:
-        return "gemini"
-    elif "llama" in model_lower:
-        return "llama"
-    else:
-        return "general"
 
 
 def is_offline_model(model_id: str) -> bool:
@@ -351,7 +293,8 @@ class AIPEAEnhancer:
         # Ollama processor (lazily initialized, reused across calls)
         self._ollama_processor: OfflineTierProcessor | None = None
 
-        # Statistics tracking
+        # Thread-safe statistics tracking
+        self._stats_lock = threading.Lock()
         self._stats: dict[str, Any] = {
             "queries_enhanced": 0,
             "queries_blocked": 0,
@@ -418,10 +361,19 @@ class AIPEAEnhancer:
 
         # If enhancement is disabled, pass through
         if not self._enable_enhancement:
-            self._stats["queries_passthrough"] += 1
-            self._stats["compliance_distribution"][compliance_mode.value] += 1
+            with self._stats_lock:
+                self._stats["queries_passthrough"] += 1
+                self._stats["compliance_distribution"][compliance_mode.value] += 1
             return self._create_passthrough_result(
                 query, model_id, security_level, compliance_mode, start_time
+            )
+
+        # Warn when FEDRAMP stub mode is selected (configuration only, no
+        # FedRAMP-specific security scanning or behavioural enforcement yet).
+        if compliance_mode == ComplianceMode.FEDRAMP:
+            logger.warning(
+                "FEDRAMP mode is an unsupported stub — configuration only, "
+                "no FedRAMP-specific security scanning or behavioral enforcement"
             )
 
         # Step 1: Create security context
@@ -433,8 +385,9 @@ class AIPEAEnhancer:
 
         # Enforce compliance-mode model restrictions and global forbidden list
         if not compliance_handler.validate_model(model_id):
-            self._stats["queries_blocked"] += 1
-            self._stats["compliance_distribution"][compliance_mode.value] += 1
+            with self._stats_lock:
+                self._stats["queries_blocked"] += 1
+                self._stats["compliance_distribution"][compliance_mode.value] += 1
             enhancement_notes.append(
                 f"Model '{model_id}' is not allowed in compliance mode '{compliance_mode.value}'"
             )
@@ -455,8 +408,9 @@ class AIPEAEnhancer:
         scan_result = self._security_scanner.scan(query, security_context)
 
         if scan_result.is_blocked:
-            self._stats["queries_blocked"] += 1
-            self._stats["compliance_distribution"][compliance_mode.value] += 1
+            with self._stats_lock:
+                self._stats["queries_blocked"] += 1
+                self._stats["compliance_distribution"][compliance_mode.value] += 1
             enhancement_notes.append(
                 f"Query blocked due to security scan: {', '.join(scan_result.flags)}"
             )
@@ -517,13 +471,13 @@ class AIPEAEnhancer:
         # Step 7: Formulate enhanced prompt
         model_family = get_model_family(model_id) if format_for_model else "general"
 
-        # Determine complexity string from tier
-        complexity_map = {
-            ProcessingTier.OFFLINE: "simple",
-            ProcessingTier.TACTICAL: "medium",
-            ProcessingTier.STRATEGIC: "complex",
-        }
-        complexity = complexity_map.get(processing_tier, "medium")
+        # Determine complexity string from actual analysis score
+        if analysis.complexity >= 0.7:
+            complexity = "complex"
+        elif analysis.complexity >= 0.4:
+            complexity = "medium"
+        else:
+            complexity = "simple"
 
         # If Ollama provided LLM analysis, prepend it to the query for richer context
         effective_query = query
@@ -542,11 +496,12 @@ class AIPEAEnhancer:
         # Calculate timing
         enhancement_time_ms = (time.perf_counter() - start_time) * 1000
 
-        # Update statistics
-        self._stats["queries_enhanced"] += 1
-        self._stats["tier_distribution"][processing_tier.value] += 1
-        self._stats["compliance_distribution"][compliance_mode.value] += 1
-        self._update_avg_time(enhancement_time_ms)
+        # Update statistics (thread-safe)
+        with self._stats_lock:
+            self._stats["queries_enhanced"] += 1
+            self._stats["tier_distribution"][processing_tier.value] += 1
+            self._stats["compliance_distribution"][compliance_mode.value] += 1
+            self._update_avg_time(enhancement_time_ms)
 
         logger.info(
             "Query enhanced: tier=%s, model=%s, time=%.2fms",
@@ -865,25 +820,26 @@ class AIPEAEnhancer:
             logger.debug("Offline knowledge base not available, skipping offline context")
             return None
 
-        # Map query type to knowledge domain
+        # Map query type to knowledge domain (GENERAL for non-specialized types)
         domain_map: dict[QueryType, KnowledgeDomain] = {
             QueryType.TECHNICAL: KnowledgeDomain.TECHNICAL,
             QueryType.RESEARCH: KnowledgeDomain.GENERAL,
             QueryType.CREATIVE: KnowledgeDomain.GENERAL,
             QueryType.ANALYTICAL: KnowledgeDomain.GENERAL,
-            QueryType.OPERATIONAL: KnowledgeDomain.LOGISTICS,
-            QueryType.STRATEGIC: KnowledgeDomain.MILITARY,
+            QueryType.OPERATIONAL: KnowledgeDomain.GENERAL,
+            QueryType.STRATEGIC: KnowledgeDomain.GENERAL,
             QueryType.UNKNOWN: KnowledgeDomain.GENERAL,
         }
 
         domain = domain_map.get(analysis.query_type, KnowledgeDomain.GENERAL)
 
         try:
-            nodes = await self._offline_kb.search(
+            search_result = await self._offline_kb.search(
                 query=query,
                 domain=domain,
                 limit=5,
             )
+            nodes = search_result.nodes
 
             if not nodes:
                 return create_empty_context(query, source="offline_kb")
@@ -1064,6 +1020,8 @@ class AIPEAEnhancer:
     def _update_avg_time(self, new_time_ms: float) -> None:
         """Update the rolling average enhancement time.
 
+        Note: Caller must hold ``_stats_lock``.
+
         Args:
             new_time_ms: New enhancement time in milliseconds
         """
@@ -1090,30 +1048,32 @@ class AIPEAEnhancer:
             - queries_enhanced: Total queries enhanced
             - queries_blocked: Total queries blocked
         """
-        return {
-            "enhancement_enabled": self._enable_enhancement,
-            "storage_tier": self._storage_tier.tier_name,
-            "default_compliance": self._default_compliance.value,
-            "offline_knowledge_ready": self._offline_kb is not None,
-            "search_orchestrator_ready": self._search_orchestrator is not None,
-            "queries_enhanced": self._stats["queries_enhanced"],
-            "queries_blocked": self._stats["queries_blocked"],
-            "queries_passthrough": self._stats["queries_passthrough"],
-            "avg_enhancement_time_ms": round(self._stats["avg_enhancement_time_ms"], 2),
-            "tier_distribution": self._stats["tier_distribution"],
-            "compliance_distribution": self._stats["compliance_distribution"],
-        }
+        with self._stats_lock:
+            return {
+                "enhancement_enabled": self._enable_enhancement,
+                "storage_tier": self._storage_tier.tier_name,
+                "default_compliance": self._default_compliance.value,
+                "offline_knowledge_ready": self._offline_kb is not None,
+                "search_orchestrator_ready": self._search_orchestrator is not None,
+                "queries_enhanced": self._stats["queries_enhanced"],
+                "queries_blocked": self._stats["queries_blocked"],
+                "queries_passthrough": self._stats["queries_passthrough"],
+                "avg_enhancement_time_ms": round(self._stats["avg_enhancement_time_ms"], 2),
+                "tier_distribution": dict(self._stats["tier_distribution"]),
+                "compliance_distribution": dict(self._stats["compliance_distribution"]),
+            }
 
     def reset_stats(self) -> None:
         """Reset all statistics counters."""
-        self._stats = {
-            "queries_enhanced": 0,
-            "queries_blocked": 0,
-            "queries_passthrough": 0,
-            "avg_enhancement_time_ms": 0.0,
-            "tier_distribution": {tier.value: 0 for tier in ProcessingTier},
-            "compliance_distribution": {mode.value: 0 for mode in ComplianceMode},
-        }
+        with self._stats_lock:
+            self._stats = {
+                "queries_enhanced": 0,
+                "queries_blocked": 0,
+                "queries_passthrough": 0,
+                "avg_enhancement_time_ms": 0.0,
+                "tier_distribution": {tier.value: 0 for tier in ProcessingTier},
+                "compliance_distribution": {mode.value: 0 for mode in ComplianceMode},
+            }
         logger.info("Enhancement statistics reset")
 
 

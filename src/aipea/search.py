@@ -285,15 +285,16 @@ class SearchContext:
         if self.is_empty():
             return ""
 
-        # Normalize model type for matching
-        model_lower = model_type.lower()
+        # Use canonical model family detector from _types.py
+        from aipea._types import get_model_family as _get_family
 
-        if "openai" in model_lower or "gpt" in model_lower:
+        family = _get_family(model_type)
+        if family == "openai":
             return self._format_openai()
-        elif "claude" in model_lower or "anthropic" in model_lower:
+        elif family == "claude":
             return self._format_anthropic()
         else:
-            # Gemini and generic models use numbered list format
+            # Gemini, llama, and generic models use numbered list format
             return self._format_generic()
 
     def _format_openai(self) -> str:
