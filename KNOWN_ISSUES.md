@@ -362,13 +362,13 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 
 ## Intentional Design Decisions (documented, not bugs)
 
-### 1. `_stats` dict not thread-safe on AIPEAEnhancer singleton — INTENTIONAL
-- **File**: `src/aipea/enhancer.py:349-357`
-- **Rationale**: Async model is single-threaded; stats are best-effort. Adding locks would add overhead to every enhance() call.
+### 1. `_stats` dict not thread-safe on AIPEAEnhancer singleton — RESOLVED
+- **File**: `src/aipea/enhancer.py`
+- **Resolution**: Thread-safe `_stats_lock = threading.Lock()` added in coherence audit remediation (F14, 2026-03-13). All `_stats` mutations and reads now wrapped in `with self._stats_lock:`.
 
-### 2. MODEL_FAMILY_MAP returns "gpt" instead of "openai" for GPT-5.x models — INTENTIONAL
-- **File**: `src/aipea/enhancer.py:181-189`
-- **Rationale**: Downstream code uses substring matching (`"gpt" in model_lower`), so `"gpt"` still matches correctly.
+### 2. MODEL_FAMILY_MAP returns "gpt" instead of "openai" for GPT-5.x models — RESOLVED
+- **File**: `src/aipea/_types.py`
+- **Resolution**: Canonical `get_model_family()` moved to `_types.py` in coherence audit remediation (F7, 2026-03-13). GPT-5.x now returns `"openai"` consistently. Both `enhancer.py` and `search.py` use the centralized detector.
 
 ### 3. `merge_with` produces non-zero confidence with zero results — INTENTIONAL
 - **File**: `src/aipea/search.py:345-365`

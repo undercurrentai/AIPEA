@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **knowledge**: FTS5 full-text search with query-aware matching and automatic fallback to relevance-score ordering
+- **security**: `GLOBAL_FORBIDDEN_MODELS` class variable on `ComplianceHandler` — blocks `gpt-4o` and `gpt-4o-mini` in ALL compliance modes
+- **enhancer**: Thread-safe `_stats_lock` protecting all statistics mutations
+- **enhancer**: FEDRAMP stub warning when FEDRAMP compliance mode is selected
+- **engine**: Warning logs when non-default `max_tokens`/`temperature` passed to `OllamaOfflineClient.generate()`
+
+### Changed
+- **_types**: `QUERY_TYPE_PATTERNS` and `get_model_family()` centralized as single source of truth (was duplicated in analyzer.py, engine.py, enhancer.py, search.py)
+- **analyzer**: `QueryRouter` methods promoted from private to public: `calculate_complexity()`, `detect_temporal_needs()`, `identify_domain()`, `calculate_confidence()`
+- **enhancer**: Complexity scoring now uses actual `analysis.complexity` score instead of tier-based mapping
+- **enhancer**: Domain defaults changed: OPERATIONAL and STRATEGIC now map to `GENERAL` (was `LOGISTICS` and `MILITARY`)
+- **knowledge**: `OfflineKnowledgeBase.search()` now returns `KnowledgeSearchResult` instead of `list[KnowledgeNode]`
+- **engine**: `TierProcessor` ABC docstring documents planned Tactical/Strategic subclasses
+
+### Removed
+- **_types**: `ProcessingTier.confidence_threshold` property (dead code, never used)
+
 ## [1.2.0] - 2026-03-13
 
 ### Added

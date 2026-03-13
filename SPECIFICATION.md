@@ -278,7 +278,8 @@ Configures operational parameters per compliance mode:
 
 Model validation uses **substring matching** (case-insensitive) against the allowed
 list, plus a global **forbidden list** (`gpt-4o`, `gpt-4o-mini`) that applies
-regardless of mode.
+regardless of mode. The forbidden list is enforced via `GLOBAL_FORBIDDEN_MODELS`
+class variable, checked **before** mode-specific allowlists in `validate_model()`.
 
 #### 3.1.4 Convenience Functions
 
@@ -330,7 +331,7 @@ class OfflineKnowledgeBase:
     def __init__(self, db_path="aipea_knowledge.db", tier=StorageTier.STANDARD)
 
     async def add_knowledge(content, domain, classification="UNCLASSIFIED", relevance_score=0.5) -> str
-    async def search(query, domain=None, limit=5) -> list[KnowledgeNode]
+    async def search(query, domain=None, limit=5) -> KnowledgeSearchResult
     async def get_by_id(node_id) -> KnowledgeNode | None
     async def update_relevance(node_id, new_score) -> bool
     async def delete_node(node_id) -> bool
@@ -1103,7 +1104,7 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full roadmap with 6 prioritized
 
 ### 11.1 Public Exports (`aipea/__init__.py`)
 
-> **Note**: The actual `__init__.py` exports 32 symbols. The listing below shows the
+> **Note**: The actual `__init__.py` exports 34 symbols. The listing below shows the
 > full internal API surface (including non-exported internals) for reference. Symbols
 > marked with `# (not in __all__)` are accessible but not part of the public API.
 
