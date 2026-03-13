@@ -351,7 +351,8 @@ else:
 
     def _doctor_knowledge_base(chk: _DoctorChecks) -> None:
         """Check offline knowledge base status."""
-        db_path = Path.cwd() / "aipea_knowledge.db"
+        _db = Path(load_config().db_path)
+        db_path = _db if _db.is_absolute() else Path.cwd() / _db
         if not db_path.exists():
             chk.warn(
                 "Knowledge base",
@@ -464,8 +465,10 @@ else:
             recommendations.append(
                 f"Install Ollama for offline LLM enhancement: [bold]{_ollama_install_hint()}[/bold]"
             )
-        db_path = Path.cwd() / "aipea_knowledge.db"
-        if not db_path.exists():
+        _db_rec = Path(cfg.db_path)
+        if not _db_rec.is_absolute():
+            _db_rec = Path.cwd() / _db_rec
+        if not _db_rec.exists():
             recommendations.append("Populate offline knowledge base: [bold]aipea seed-kb[/bold]")
 
         if recommendations:
