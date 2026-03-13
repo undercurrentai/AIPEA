@@ -36,9 +36,29 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# API Configuration
-EXA_API_URL = os.environ.get("AIPEA_EXA_API_URL", "https://api.exa.ai/search")
-FIRECRAWL_API_URL = os.environ.get("AIPEA_FIRECRAWL_API_URL", "https://api.firecrawl.dev/v1/search")
+# API Configuration — lazy resolvers to respect .env / TOML config chain
+
+
+def _resolve_exa_api_url() -> str:
+    """Resolve Exa API URL from env var, config files, or default."""
+    env_val = os.environ.get("AIPEA_EXA_API_URL")
+    if env_val is not None:
+        return env_val
+    from aipea.config import load_config
+
+    cfg = load_config()
+    return cfg.exa_api_url
+
+
+def _resolve_firecrawl_api_url() -> str:
+    """Resolve Firecrawl API URL from env var, config files, or default."""
+    env_val = os.environ.get("AIPEA_FIRECRAWL_API_URL")
+    if env_val is not None:
+        return env_val
+    from aipea.config import load_config
+
+    cfg = load_config()
+    return cfg.firecrawl_api_url
 
 
 def _resolve_http_timeout() -> float:
@@ -535,7 +555,7 @@ class ExaSearchProvider(SearchProvider):
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
                 response = await client.post(
-                    EXA_API_URL,
+                    _resolve_exa_api_url(),
                     headers={
                         "x-api-key": self.api_key,
                         "Content-Type": "application/json",
@@ -675,7 +695,7 @@ class FirecrawlProvider(SearchProvider):
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
                 response = await client.post(
-                    FIRECRAWL_API_URL,
+                    _resolve_firecrawl_api_url(),
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",

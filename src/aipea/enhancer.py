@@ -399,6 +399,7 @@ class AIPEAEnhancer:
         include_search: bool = True,
         format_for_model: bool = True,
         strategy: str | None = None,
+        embed_search_context: bool = True,
     ) -> EnhancementResult:
         """
         Enhance a query for optimal model consumption.
@@ -592,6 +593,7 @@ class AIPEAEnhancer:
             model_type=model_family,
             query_type=analysis.query_type.value,
             strategy=strategy,
+            embed_search_context=embed_search_context,
         )
 
         # Calculate timing
@@ -684,6 +686,7 @@ class AIPEAEnhancer:
             security_level=security_level,
             compliance_mode=self._default_compliance,
             force_offline=compliance_handler.force_offline,
+            embed_search_context=False,
         )
 
         # If the base enhancement was blocked (e.g. injection detected),
@@ -704,13 +707,11 @@ class AIPEAEnhancer:
             # Get model-specific formatting
             model_family = get_model_family(model_id)
 
-            # Create model-specific prompt
+            # Create model-specific prompt with per-model search formatting
             model_prompt = await self._prompt_engine.create_model_specific_prompt(
                 base_prompt=base_result.enhanced_prompt,
                 model_type=model_family,
-                # base_result.enhanced_prompt already contains any gathered
-                # search context from enhance(); avoid injecting it twice.
-                search_context=None,
+                search_context=base_result.search_context,
             )
 
             results[model_id] = EnhancedRequest(

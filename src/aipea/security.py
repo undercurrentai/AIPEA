@@ -18,11 +18,57 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
+
+# Common cross-script confusable characters mapped to ASCII equivalents.
+# Used to defeat homoglyph bypass attacks where adversaries substitute
+# visually similar characters from other scripts (e.g., Cyrillic U+043E for Latin 'o').
+# Only maps characters commonly exploited in injection attacks.
+_CONFUSABLE_MAP: dict[str, str] = {
+    # Cyrillic -> Latin
+    "\u0410": "A",  # U+0410 Cyrillic A
+    "\u0412": "B",  # U+0412 Cyrillic Ve
+    "\u0421": "C",  # U+0421 Cyrillic Es
+    "\u0415": "E",  # U+0415 Cyrillic Ie
+    "\u041d": "H",  # U+041D Cyrillic En
+    "\u041a": "K",  # U+041A Cyrillic Ka
+    "\u041c": "M",  # U+041C Cyrillic Em
+    "\u041e": "O",  # U+041E Cyrillic O
+    "\u0420": "P",  # U+0420 Cyrillic Er
+    "\u0422": "T",  # U+0422 Cyrillic Te
+    "\u0425": "X",  # U+0425 Cyrillic Kha
+    "\u0430": "a",  # U+0430 Cyrillic a
+    "\u0441": "c",  # U+0441 Cyrillic es
+    "\u0435": "e",  # U+0435 Cyrillic ie
+    "\u043e": "o",  # U+043E Cyrillic o
+    "\u0440": "p",  # U+0440 Cyrillic er
+    "\u0445": "x",  # U+0445 Cyrillic kha
+    "\u0443": "y",  # U+0443 Cyrillic u
+    "\u0456": "i",  # U+0456 Cyrillic i (Ukrainian)
+    "\u0455": "s",  # U+0455 Cyrillic dze
+    # Greek -> Latin
+    "\u0391": "A",  # U+0391 Greek Alpha
+    "\u0392": "B",  # U+0392 Greek Beta
+    "\u0395": "E",  # U+0395 Greek Epsilon
+    "\u0397": "H",  # U+0397 Greek Eta
+    "\u0399": "I",  # U+0399 Greek Iota
+    "\u039a": "K",  # U+039A Greek Kappa
+    "\u039c": "M",  # U+039C Greek Mu
+    "\u039d": "N",  # U+039D Greek Nu
+    "\u039f": "O",  # U+039F Greek Omicron
+    "\u03a1": "P",  # U+03A1 Greek Rho
+    "\u03a4": "T",  # U+03A4 Greek Tau
+    "\u03a5": "Y",  # U+03A5 Greek Upsilon
+    "\u03a7": "X",  # U+03A7 Greek Chi
+    "\u03bf": "o",  # U+03BF Greek omicron
+    "\u03b1": "a",  # U+03B1 Greek alpha
+}
+_CONFUSABLE_TRANS = str.maketrans(_CONFUSABLE_MAP)
 
 
 # =============================================================================
@@ -453,29 +499,36 @@ class SecurityScanner:
             logger.debug("Empty query provided to scan()")
             return ScanResult()
 
+        # Normalize Unicode to defeat homoglyph bypass attacks:
+        # 1. NFKC handles compatibility forms (fullwidth → ASCII, ligatures, etc.)
+        # 2. Confusable mapping handles cross-script homoglyphs (Cyrillic → Latin, etc.)
+        normalized_query = unicodedata.normalize("NFKC", query).translate(_CONFUSABLE_TRANS)
+
         flags: list[str] = []
         is_blocked = False
         force_offline = False
 
         # Always check PII patterns
-        flags.extend(self._check_pii(query))
+        flags.extend(self._check_pii(normalized_query))
 
         # Check PHI patterns only in HIPAA mode
         if context.compliance_mode == ComplianceMode.HIPAA:
-            flags.extend(self._check_phi(query))
+            flags.extend(self._check_phi(normalized_query))
 
         # Check classified markers only in TACTICAL mode
         if context.compliance_mode == ComplianceMode.TACTICAL:
-            classified_flags, force_offline = self._check_classified_markers(query)
+            classified_flags, force_offline = self._check_classified_markers(normalized_query)
             flags.extend(classified_flags)
 
         # Always check injection patterns - these are always blocked
-        injection_flags, injection_blocked = self._check_injection(query)
+        injection_flags, injection_blocked = self._check_injection(normalized_query)
         flags.extend(injection_flags)
         is_blocked = is_blocked or injection_blocked
 
         # Check custom blocked patterns from context
-        custom_flags, custom_blocked = self._check_custom_patterns(query, context.blocked_patterns)
+        custom_flags, custom_blocked = self._check_custom_patterns(
+            normalized_query, context.blocked_patterns
+        )
         flags.extend(custom_flags)
         is_blocked = is_blocked or custom_blocked
 

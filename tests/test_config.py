@@ -873,3 +873,108 @@ class TestEscapeConfigValueControlChars:
         result = _escape_config_value("has\ttab")
         # Tab (U+0009) is allowed in TOML basic strings
         assert "\t" in result
+
+
+# ============================================================================
+# API URL config chain (#73)
+# ============================================================================
+
+
+class TestApiUrlConfig:
+    """Regression tests: API URLs must resolve through the config chain."""
+
+    @pytest.mark.unit
+    def test_default_exa_api_url(self) -> None:
+        from aipea.config import AIPEAConfig
+
+        cfg = AIPEAConfig()
+        assert cfg.exa_api_url == "https://api.exa.ai/search"
+
+    @pytest.mark.unit
+    def test_default_firecrawl_api_url(self) -> None:
+        from aipea.config import AIPEAConfig
+
+        cfg = AIPEAConfig()
+        assert cfg.firecrawl_api_url == "https://api.firecrawl.dev/v1/search"
+
+    @pytest.mark.unit
+    def test_env_override_exa_url(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from aipea.config import load_config
+
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.setenv("AIPEA_EXA_API_URL", "https://custom.exa.test/search")
+        monkeypatch.chdir(tmp_path)
+        cfg = load_config()
+        assert cfg.exa_api_url == "https://custom.exa.test/search"
+
+    @pytest.mark.unit
+    def test_env_override_firecrawl_url(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from aipea.config import load_config
+
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.setenv("AIPEA_FIRECRAWL_API_URL", "https://custom.fc.test/v1/search")
+        monkeypatch.chdir(tmp_path)
+        cfg = load_config()
+        assert cfg.firecrawl_api_url == "https://custom.fc.test/v1/search"
+
+    @pytest.mark.unit
+    def test_dotenv_override_exa_url(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from aipea.config import load_config
+
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_EXA_API_URL", raising=False)
+        dotenv = tmp_path / ".env"
+        dotenv.write_text('AIPEA_EXA_API_URL="https://dotenv.exa.test/search"\n')
+        cfg = load_config(dotenv_path=dotenv)
+        assert cfg.exa_api_url == "https://dotenv.exa.test/search"
+
+    @pytest.mark.unit
+    def test_save_dotenv_round_trip_url(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from aipea.config import AIPEAConfig, load_config, save_dotenv
+
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_EXA_API_URL", raising=False)
+        monkeypatch.delenv("AIPEA_FIRECRAWL_API_URL", raising=False)
+
+        cfg = AIPEAConfig(
+            exa_api_url="https://custom.exa.test/search",
+            firecrawl_api_url="https://custom.fc.test/v1/search",
+        )
+        dotenv = tmp_path / ".env"
+        save_dotenv(dotenv, cfg)
+        loaded = load_config(dotenv_path=dotenv)
+        assert loaded.exa_api_url == "https://custom.exa.test/search"
+        assert loaded.firecrawl_api_url == "https://custom.fc.test/v1/search"
+
+    @pytest.mark.unit
+    def test_save_toml_round_trip_url(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from aipea.config import AIPEAConfig, load_config, save_toml_config
+
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_EXA_API_URL", raising=False)
+        monkeypatch.delenv("AIPEA_FIRECRAWL_API_URL", raising=False)
+
+        cfg = AIPEAConfig(
+            exa_api_url="https://custom.exa.test/search",
+            firecrawl_api_url="https://custom.fc.test/v1/search",
+        )
+        toml_path = tmp_path / "config.toml"
+        save_toml_config(toml_path, cfg)
+        loaded = load_config(toml_path=toml_path, dotenv_path=tmp_path / "nonexistent.env")
+        assert loaded.exa_api_url == "https://custom.exa.test/search"
+        assert loaded.firecrawl_api_url == "https://custom.fc.test/v1/search"

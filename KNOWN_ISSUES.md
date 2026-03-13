@@ -1,6 +1,38 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-14 + Quality Gate: 2026-03-13)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-15 + Quality Gate: 2026-03-13)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Wave 15 Fixes (2026-03-13) — 5 deferred issues resolved
+
+### 56. Unicode homoglyph bypass of all injection patterns — FIXED (was DEFERRED)
+- **File**: `src/aipea/security.py:32-71,474`
+- **Severity**: MEDIUM | **Confidence**: 0.85
+- **Source**: Claude sweep agent (Opus deep sweep, wave 12)
+- **Fix**: Added NFKC normalization + cross-script confusable character mapping (`_CONFUSABLE_MAP` with 35 Cyrillic/Greek-to-Latin entries) before all security checks. Attackers substituting Cyrillic U+043E for Latin 'o' or fullwidth U+FF49 for Latin 'i' now correctly trigger injection detection. 4 regression tests added.
+
+### 73. API URL env vars frozen at import time — FIXED (was DEFERRED)
+- **File**: `src/aipea/search.py` (resolvers), `src/aipea/config.py` (fields)
+- **Severity**: MEDIUM | **Confidence**: 0.80
+- **Source**: Claude sweep agent (core modules, wave 14)
+- **Fix**: Removed module-level `EXA_API_URL`/`FIRECRAWL_API_URL` constants. Added lazy resolvers `_resolve_exa_api_url()` and `_resolve_firecrawl_api_url()` that check env vars first, then fall back to `load_config()`. Added `exa_api_url`/`firecrawl_api_url` fields to `AIPEAConfig` with persistence in both `.env` and TOML formats. 7 regression tests added.
+
+### 74. `enhance_for_models()` gives all models the same prompt formatted for the first model — FIXED (was DEFERRED)
+- **File**: `src/aipea/enhancer.py:681-708`, `src/aipea/engine.py:920`
+- **Severity**: MEDIUM | **Confidence**: 0.90
+- **Source**: Claude sweep agent (engine/enhancer, wave 14)
+- **Fix**: Added `embed_search_context: bool = True` parameter to `enhance()` and `formulate_search_aware_prompt()`. `enhance_for_models()` now calls `enhance(embed_search_context=False)` to get a clean base prompt, then passes `search_context` to `create_model_specific_prompt()` for per-model formatting (markdown for GPT, XML for Claude, numbered list for generic). 5 regression tests added.
+
+### 41. `aipea check` exits with code 1 when optional API keys are not configured — FIXED (was DEFERRED)
+- **File**: `src/aipea/cli.py`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Source**: Claude sweep agent (wave 10)
+- **Fix**: Split `issues` list into `errors` (connectivity failures) and `warnings` (missing optional keys). Only `errors` cause exit code 1. Missing API keys now show as warnings but exit 0. 3 regression tests added.
+
+### 42. `doctor` connectivity section uses inconsistent output format — FIXED (was DEFERRED)
+- **File**: `src/aipea/cli.py`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Claude sweep agent (wave 10)
+- **Fix**: Extracted `_doctor_connectivity()` helper that routes through `_DoctorChecks.ok()`/`.fail()`/`.warn()` methods for consistent PASS/WARN/FAIL output format. 1 regression test added.
 
 ## Wave 14 Fixes (2026-03-13) — 10 issues resolved
 
@@ -58,19 +90,19 @@ Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 - **Source**: Claude sweep agent (core modules)
 - **Fix**: Control characters U+0000-U+0008, U+000B-U+000C, U+000E-U+001F, U+007F were not escaped, potentially producing unparsable TOML files. Added `\uXXXX` escaping for illegal control chars while preserving allowed tab (U+0009). 5 regression tests added.
 
-### 73. API URL env vars frozen at import time — DEFERRED
+### 73. API URL env vars frozen at import time — FIXED (wave 15)
 - **File**: `src/aipea/search.py:40-41`
 - **Severity**: MEDIUM | **Confidence**: 0.80
 - **Source**: Claude sweep agent (core modules)
-- **Rationale**: `EXA_API_URL` and `FIRECRAWL_API_URL` resolve from `os.environ.get()` at module import time, bypassing `.env`/TOML config. Fixing requires routing through the config system (`load_config()`), which would add a cross-module dependency to a zero-deps module. Low real-world impact since custom API URLs are rare.
+- **Fix**: See wave 15 entry above.
 
-## Wave 14 — Deferred
+## Wave 14 — Deferred (resolved in wave 15)
 
-### 74. `enhance_for_models()` gives all models the same prompt formatted for the first model — DEFERRED (updates #36)
+### 74. `enhance_for_models()` gives all models the same prompt formatted for the first model — FIXED (wave 15)
 - **File**: `src/aipea/enhancer.py:672-711`
 - **Severity**: MEDIUM | **Confidence**: 0.90
 - **Source**: Claude sweep agent (engine/enhancer)
-- **Rationale**: Same as deferred #36 (D10). `enhance()` is called once with the first model's family, producing family-specific formatting (markdown headers for OpenAI, XML tags for Claude). `create_model_specific_prompt()` with `search_context=None` is a no-op, so all models get the first model's formatting. Fix requires per-model `formulate_search_aware_prompt()` calls or a generic format intermediate. Impact is cosmetic (soft formatting preferences, not functional).
+- **Fix**: See wave 15 entry above.
 
 ## Wave 13 Fixes (2026-03-13) — 7 issues resolved
 
@@ -167,9 +199,9 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 - **Details**: `quick_scan` existed in security.py but was not importable from root.
 - **Fix**: Added `quick_scan` to `__init__.py` imports and `__all__`. Removed `(not in __all__)` annotation from spec Section 11.1. Regression test verifies `from aipea import quick_scan` works.
 
-### D10. `enhance_for_models` base model template baking — DOCUMENTED (#36)
+### D10. `enhance_for_models` base model template baking — FIXED (wave 15, #74)
 - **Severity**: LOW | **Type**: Known limitation
-- **Details**: Already tracked as deferred issue #36 in this file. The base enhancement uses the first model's family-specific template, which other models then receive with an additional layer of their own formatting.
+- **Details**: Already tracked as deferred issue #36. Fixed in wave 15 (#74) with `embed_search_context` parameter and per-model search context formatting.
 
 ### D11. Spec test count / coverage stale — RESOLVED
 - **Severity**: LOW | **Type**: Spec stale
@@ -209,11 +241,11 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 
 ## Wave 12 — Deferred
 
-### 56. Unicode homoglyph bypass of all injection patterns — DEFERRED
+### 56. Unicode homoglyph bypass of all injection patterns — FIXED (wave 15)
 - **File**: `src/aipea/security.py:251-260`
 - **Severity**: MEDIUM | **Confidence**: MEDIUM
 - **Source**: Claude sweep agent (Opus deep sweep)
-- **Rationale**: All injection patterns use ASCII characters only. Attackers can substitute Unicode confusable characters (e.g., Cyrillic `о` U+043E for Latin `o`) to evade detection while LLMs interpret them equivalently. Fix requires NFKC normalization plus confusable character mapping before scanning — non-trivial scope requiring dedicated implementation and testing.
+- **Fix**: See wave 15 entry above.
 
 ## Quality Gate Ultrathink Fixes (2026-02-24) — 3 issues resolved
 
@@ -293,17 +325,17 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 
 ## Wave 10 — Deferred
 
-### 41. `aipea check` exits with code 1 when optional API keys are not configured — DEFERRED
+### 41. `aipea check` exits with code 1 when optional API keys are not configured — FIXED (wave 15)
 - **File**: `src/aipea/cli.py:108-158`
 - **Severity**: LOW | **Confidence**: MEDIUM
 - **Source**: Claude sweep agent
-- **Rationale**: The `check` command treats missing optional API keys (Exa, Firecrawl) as issues, causing exit code 1. This is borderline — scripts calling `aipea check` may interpret this as a failure even when the tool is properly configured for offline-only use. Fix would require distinguishing "error" issues from "warning" issues.
+- **Fix**: See wave 15 entry above.
 
-### 42. `doctor` connectivity section uses inconsistent output format — DEFERRED
+### 42. `doctor` connectivity section uses inconsistent output format — FIXED (wave 15)
 - **File**: `src/aipea/cli.py:331-344`
 - **Severity**: LOW | **Confidence**: HIGH
 - **Source**: Claude sweep agent
-- **Rationale**: Connectivity results print `"Exa: OK"` format while all other doctor checks use `"PASS label"` format via `_DoctorChecks.ok()`. Counting logic is correct but the visual inconsistency is fragile if refactored. Cosmetic issue only.
+- **Fix**: See wave 15 entry above.
 
 ## Wave 9 Fixes (2026-02-17) — 3 issues resolved
 
@@ -327,11 +359,11 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 
 ## Wave 9 — Deferred
 
-### 36. `enhance_for_models` bakes base model's family-specific prompt template into other models — DEFERRED
+### 36. `enhance_for_models` bakes base model's family-specific prompt template into other models — FIXED (wave 15, #74)
 - **File**: `src/aipea/enhancer.py:604-632`
 - **Severity**: LOW | **Confidence**: MEDIUM
 - **Source**: Claude sweep agent
-- **Rationale**: The base enhancement at line 605 formats the prompt with `base_model`'s family-specific template. Non-base models receive this same prompt with an additional layer of their own family instructions via `create_model_specific_prompt`. This means non-base models get mismatched instructions (inner layer from base model family, outer layer from their own). The impact is cosmetic (slightly redundant/mismatched soft instructions), not causing crashes or data loss. Fix would require per-model enhancement or a "generic" base template.
+- **Fix**: Resolved by wave 15 fix #74. `enhance_for_models()` now calls `enhance(embed_search_context=False)` for a clean base prompt, then applies per-model search context formatting via `create_model_specific_prompt(search_context=...)`.
 
 ## Wave 8 Fixes (2026-02-16) — 2 issues resolved
 
@@ -500,11 +532,9 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 - **File**: `src/aipea/search.py:166-182`
 - **Rationale**: Clamping already handles this; log noise is minor and useful for monitoring.
 
-## Deferred Findings (3 bugs remaining)
+## Deferred Findings (0 bugs remaining)
 
-- **#56** Unicode homoglyph bypass (MEDIUM) — requires NFKC normalization implementation
-- **#73** API URL env vars frozen at import time (MEDIUM) — requires config system wiring
-- **#74** enhance_for_models all-same-prompt (MEDIUM) — cosmetic, updates #36
+All deferred bugs resolved in wave 15.
 
 ---
-*Last updated: 2026-03-13 (Wave 14 — 10 fixes, 2 deferred, 14 regression tests, 718 total tests, 91.88% coverage)*
+*Last updated: 2026-03-13 (Wave 15 — 5 deferred bugs resolved, 20 regression tests, 741 total tests, 92.07% coverage)*

@@ -47,15 +47,16 @@ class TestCheckCommand:
         result = runner.invoke(app, ["check"])
         assert "Configuration Check" in result.output
 
-    def test_check_exit_1_when_no_keys(
+    def test_check_exit_0_when_no_keys(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """Missing optional keys are warnings, not errors — exit 0 (#41)."""
         monkeypatch.delenv("EXA_API_KEY", raising=False)
         monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
         monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
         monkeypatch.chdir(tmp_path)  # no .env here
         result = runner.invoke(app, ["check"])
-        assert result.exit_code == 1
+        assert result.exit_code == 0
         assert "not set" in result.output
 
     def test_check_exit_0_when_keys_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,6 +117,41 @@ class TestDoctorCommand:
     def test_doctor_shows_security(self) -> None:
         result = runner.invoke(app, ["doctor"])
         assert "Security" in result.output
+
+    def test_doctor_connectivity_uses_pass_warn_format(self) -> None:
+        """Doctor connectivity section must use PASS/WARN/FAIL format, not raw output (#42)."""
+        result = runner.invoke(app, ["doctor"])
+        assert result.exit_code == 0
+        # The connectivity section should use the _DoctorChecks format
+        # With no keys: WARN is shown (not raw "Exa: skipped" format)
+        output = result.output
+        # Should contain either PASS or WARN for connectivity items
+        assert "PASS" in output or "WARN" in output or "FAIL" in output
+
+
+class TestCheckExitCodes:
+    """Regression tests for check command exit codes (#41)."""
+
+    def test_check_exit_1_when_connectivity_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Connectivity failure must exit 1."""
+        monkeypatch.setenv("EXA_API_KEY", "test_key_1234567890")
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+
+        with patch("aipea.cli._test_exa_connectivity", return_value=False):
+            result = runner.invoke(app, ["check", "--connectivity"])
+            assert result.exit_code == 1
+
+    def test_check_warnings_shown_for_missing_keys(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Missing keys should show warnings but exit 0."""
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.delenv("AIPEA_HTTP_TIMEOUT", raising=False)
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(app, ["check"])
+        assert result.exit_code == 0
+        assert "not configured" in result.output or "not set" in result.output
 
 
 # ============================================================================

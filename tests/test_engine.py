@@ -1546,5 +1546,60 @@ class TestNaNGuardsEngine:
         assert eq.confidence == 0.0
 
 
+# =============================================================================
+# embed_search_context parameter (#74)
+# =============================================================================
+
+
+class TestEmbedSearchContext:
+    """Regression: formulate_search_aware_prompt must respect embed_search_context flag."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_embed_false_skips_search_context(self) -> None:
+        """When embed_search_context=False, search context should not appear in prompt."""
+        from aipea.search import SearchContext, SearchResult
+
+        engine = PromptEngine()
+        ctx = SearchContext(
+            query="test",
+            results=[SearchResult(title="Article", url="https://t.co", snippet="info", score=0.9)],
+            source="exa",
+            confidence=0.8,
+        )
+        prompt = await engine.formulate_search_aware_prompt(
+            query="test query",
+            complexity="medium",
+            search_context=ctx,
+            model_type="openai",
+            embed_search_context=False,
+        )
+        assert "Current Information Context" not in prompt
+        assert "search_context" not in prompt
+        assert "<search_context>" not in prompt
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_embed_true_includes_search_context(self) -> None:
+        """When embed_search_context=True (default), search context appears in prompt."""
+        from aipea.search import SearchContext, SearchResult
+
+        engine = PromptEngine()
+        ctx = SearchContext(
+            query="test",
+            results=[SearchResult(title="Article", url="https://t.co", snippet="info", score=0.9)],
+            source="exa",
+            confidence=0.8,
+        )
+        prompt = await engine.formulate_search_aware_prompt(
+            query="test query",
+            complexity="medium",
+            search_context=ctx,
+            model_type="openai",
+            embed_search_context=True,
+        )
+        assert "Supplementary Context from Web Search" in prompt
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

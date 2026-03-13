@@ -1447,5 +1447,52 @@ class TestExaEmptyQueryGuard:
         assert result.source == "exa"
 
 
+# ============================================================================
+# API URL lazy resolver (#73)
+# ============================================================================
+
+
+class TestApiUrlResolvers:
+    """Regression tests: API URL resolvers must respect env vars and config chain."""
+
+    @pytest.mark.unit
+    def test_exa_url_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from aipea.search import _resolve_exa_api_url
+
+        monkeypatch.setenv("AIPEA_EXA_API_URL", "https://test.exa.local/search")
+        assert _resolve_exa_api_url() == "https://test.exa.local/search"
+
+    @pytest.mark.unit
+    def test_firecrawl_url_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from aipea.search import _resolve_firecrawl_api_url
+
+        monkeypatch.setenv("AIPEA_FIRECRAWL_API_URL", "https://test.fc.local/v1/search")
+        assert _resolve_firecrawl_api_url() == "https://test.fc.local/v1/search"
+
+    @pytest.mark.unit
+    def test_exa_url_falls_back_to_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import patch
+
+        from aipea.config import AIPEAConfig
+        from aipea.search import _resolve_exa_api_url
+
+        monkeypatch.delenv("AIPEA_EXA_API_URL", raising=False)
+        mock_cfg = AIPEAConfig(exa_api_url="https://config.exa.test/search")
+        with patch("aipea.config.load_config", return_value=mock_cfg):
+            assert _resolve_exa_api_url() == "https://config.exa.test/search"
+
+    @pytest.mark.unit
+    def test_firecrawl_url_falls_back_to_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import patch
+
+        from aipea.config import AIPEAConfig
+        from aipea.search import _resolve_firecrawl_api_url
+
+        monkeypatch.delenv("AIPEA_FIRECRAWL_API_URL", raising=False)
+        mock_cfg = AIPEAConfig(firecrawl_api_url="https://config.fc.test/v1/search")
+        with patch("aipea.config.load_config", return_value=mock_cfg):
+            assert _resolve_firecrawl_api_url() == "https://config.fc.test/v1/search"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

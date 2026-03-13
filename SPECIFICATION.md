@@ -935,6 +935,10 @@ Per-compliance-mode allowlists use **substring matching** (case-insensitive):
 7. `{{.*}}` — Template injection (Jinja2/Handlebars)
 8. `<script>` — XSS attempt
 
+All queries are normalized before pattern matching to prevent homoglyph bypass attacks:
+1. **NFKC normalization** — converts fullwidth characters and compatibility forms to ASCII equivalents
+2. **Confusable character mapping** — translates 35 common Cyrillic/Greek homoglyphs to Latin (e.g., Cyrillic U+043E 'o' to Latin 'o')
+
 Custom blocked patterns from `SecurityContext.blocked_patterns` are validated
 for ReDoS safety before execution.
 
@@ -949,8 +953,12 @@ for ReDoS safety before execution.
 | `EXA_API_KEY` | (none) | Exa search provider API key |
 | `FIRECRAWL_API_KEY` | (none) | Firecrawl provider API key |
 | `AIPEA_HTTP_TIMEOUT` | `30.0` | HTTP timeout for search providers (seconds) |
-
-Additional planned env vars are documented in [`docs/ROADMAP.md`](docs/ROADMAP.md#planned-environment-variables).
+| `AIPEA_OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL for offline models |
+| `AIPEA_DB_PATH` | `aipea_knowledge.db` | Path to offline knowledge SQLite database |
+| `AIPEA_STORAGE_TIER` | `standard` | Storage tier: ultra_compact, compact, standard, extended |
+| `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode: general, hipaa, tactical, fedramp |
+| `AIPEA_EXA_API_URL` | `https://api.exa.ai/search` | Exa API endpoint URL |
+| `AIPEA_FIRECRAWL_API_URL` | `https://api.firecrawl.dev/v1/search` | Firecrawl API endpoint URL |
 
 ### 8.2 Configuration System
 
@@ -966,9 +974,15 @@ Constructor args > Environment vars > .env (cwd) > ~/.aipea/config.toml > Defaul
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `exa_api_key` | `str \| None` | `None` | Exa search provider key |
-| `firecrawl_api_key` | `str \| None` | `None` | Firecrawl provider key |
+| `exa_api_key` | `str` | `""` | Exa search provider key |
+| `firecrawl_api_key` | `str` | `""` | Firecrawl provider key |
 | `http_timeout` | `float` | `30.0` | HTTP timeout (seconds) |
+| `ollama_host` | `str` | `"http://localhost:11434"` | Ollama server URL |
+| `db_path` | `str` | `"aipea_knowledge.db"` | Offline knowledge DB path |
+| `storage_tier` | `str` | `"standard"` | Storage tier name |
+| `default_compliance` | `str` | `"general"` | Default compliance mode |
+| `exa_api_url` | `str` | `"https://api.exa.ai/search"` | Exa API endpoint URL |
+| `firecrawl_api_url` | `str` | `"https://api.firecrawl.dev/v1/search"` | Firecrawl API endpoint URL |
 
 Helpers: `has_exa()`, `has_firecrawl()`, `redact_key(key)`.
 
@@ -1255,6 +1269,8 @@ class AIPEAEnhancer:
         force_offline: bool = False,
         include_search: bool = True,
         format_for_model: bool = True,
+        strategy: str | None = None,
+        embed_search_context: bool = True,
     ) -> EnhancementResult: ...
 
     async def enhance_for_models(
@@ -1263,6 +1279,8 @@ class AIPEAEnhancer:
         model_ids: list[str],
         security_level: SecurityLevel = SecurityLevel.UNCLASSIFIED,
     ) -> dict[str, EnhancedRequest]: ...
+    # enhance_for_models calls enhance(embed_search_context=False) internally,
+    # then applies per-model search context formatting via create_model_specific_prompt().
 
     def get_status(self) -> dict[str, Any]: ...
     def reset_stats(self) -> None: ...

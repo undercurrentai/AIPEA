@@ -925,6 +925,7 @@ class PromptEngine:
         model_type: str = "general",
         query_type: str = "unknown",
         strategy: str | None = None,
+        embed_search_context: bool = True,
     ) -> str:
         """Formulate a search-aware enhanced prompt.
 
@@ -976,7 +977,7 @@ class PromptEngine:
         ]
 
         # Add search context if available (clearly framed as supplementary)
-        if search_context is not None and not search_context.is_empty():
+        if embed_search_context and search_context is not None and not search_context.is_empty():
             formatted = search_context.formatted_for_model(model_type)
             if formatted:
                 parts.extend(

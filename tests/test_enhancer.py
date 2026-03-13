@@ -829,22 +829,17 @@ class TestAIPEAEnhancerEnhanceForModels:
     @pytest.mark.asyncio
     @patch("aipea.enhancer.OfflineKnowledgeBase")
     @patch("aipea.enhancer.SearchOrchestrator")
-    async def test_search_context_not_duplicated_in_model_prompt(
+    async def test_search_context_injected_once_per_model(
         self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
     ) -> None:
-        """Model-specific prompt generation should not re-inject existing context."""
+        """Per-model formatting injects search context exactly once."""
         enhancer = AIPEAEnhancer()
         shared_url = "https://example.com/doc"
 
+        # Base prompt WITHOUT search context (embed_search_context=False)
         base_result = EnhancementResult(
             original_query="test query",
-            enhanced_prompt=(
-                "Base prompt with existing context.\n\n"
-                "[Supplementary Context from Web Search\n"
-                "1. Doc\n"
-                f"   URL: {shared_url}\n"
-                "   details"
-            ),
+            enhanced_prompt="Base prompt without search context.",
             processing_tier=ProcessingTier.TACTICAL,
             security_context=SecurityContext(),
             query_analysis=QueryAnalysis(
@@ -873,6 +868,7 @@ class TestAIPEAEnhancerEnhanceForModels:
         with patch.object(enhancer, "enhance", new_callable=AsyncMock, return_value=base_result):
             requests = await enhancer.enhance_for_models("test query", ["gpt-4"])
 
+        # Search context should appear exactly once (injected by create_model_specific_prompt)
         assert requests["gpt-4"].enhanced_prompt.count(shared_url) == 1
 
     @pytest.mark.unit
@@ -1929,3 +1925,116 @@ class TestOfflineModelsSync:
         assert is_offline_model("gemma3:1b")
         assert is_offline_model("gemma3:270m")
         assert is_offline_model("phi3:mini")
+
+
+# =============================================================================
+# REGRESSION TESTS (bug-hunt wave 15)
+# =============================================================================
+
+
+class TestEnhanceForModelsDifferentFormatting:
+    """Regression: enhance_for_models must produce distinct formatting per model (#74)."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_enhance_for_models_different_formatting(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """GPT gets markdown search context, Claude gets XML search context."""
+        from aipea.search import SearchContext, SearchResult
+
+        enhancer = AIPEAEnhancer()
+        search_ctx = SearchContext(
+            query="test",
+            results=[
+                SearchResult(
+                    title="Test Article",
+                    url="https://test.com",
+                    snippet="info",
+                    score=0.9,
+                )
+            ],
+            source="exa",
+            confidence=0.8,
+        )
+        base_result = EnhancementResult(
+            original_query="test query",
+            enhanced_prompt="Enhanced: test query",
+            processing_tier=ProcessingTier.OFFLINE,
+            security_context=SecurityContext(),
+            query_analysis=QueryAnalysis(
+                query="test query",
+                query_type=QueryType.TECHNICAL,
+                complexity=0.5,
+                confidence=0.8,
+                needs_current_info=False,
+            ),
+            was_enhanced=True,
+            search_context=search_ctx,
+        )
+
+        with patch.object(enhancer, "enhance", new_callable=AsyncMock, return_value=base_result):
+            requests = await enhancer.enhance_for_models(
+                "test query",
+                model_ids=["gpt-4", "claude-opus-4-6"],
+            )
+
+        assert "gpt-4" in requests
+        assert "claude-opus-4-6" in requests
+        gpt_prompt = requests["gpt-4"].enhanced_prompt
+        claude_prompt = requests["claude-opus-4-6"].enhanced_prompt
+        # GPT should get markdown formatting (from _format_openai)
+        assert "# Current Information Context" in gpt_prompt or "## Source" in gpt_prompt
+        # Claude should get XML formatting (from _format_anthropic)
+        assert "<search_context>" in claude_prompt
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_embed_search_context_false(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """enhance_for_models passes embed_search_context=False to enhance()."""
+        enhancer = AIPEAEnhancer()
+
+        calls: list[dict] = []
+
+        async def capture_enhance(**kwargs):  # type: ignore[no-untyped-def]
+            calls.append(kwargs)
+            return EnhancementResult(
+                original_query=kwargs.get("query", ""),
+                enhanced_prompt="base prompt without search",
+                processing_tier=ProcessingTier.OFFLINE,
+                security_context=SecurityContext(),
+                query_analysis=QueryAnalysis(
+                    query=kwargs.get("query", ""),
+                    query_type=QueryType.UNKNOWN,
+                    complexity=0.0,
+                    confidence=0.0,
+                    needs_current_info=False,
+                ),
+                was_enhanced=True,
+            )
+
+        with patch.object(enhancer, "enhance", side_effect=capture_enhance):
+            await enhancer.enhance_for_models("test", model_ids=["gpt-4"])
+
+        # The enhance() call should have embed_search_context=False
+        assert len(calls) == 1
+        assert calls[0].get("embed_search_context") is False
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_embed_search_context_true_default(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """Direct enhance() call should embed search context by default (backward compat)."""
+        enhancer = AIPEAEnhancer()
+        result = await enhancer.enhance("test query", model_id="gpt-4")
+        # Should complete without error — search context embedding is default True
+        assert result is not None

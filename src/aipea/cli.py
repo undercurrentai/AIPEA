@@ -98,7 +98,8 @@ else:
     ) -> None:
         """Verify configuration status and optionally test API connectivity."""
         cfg = load_config()
-        issues: list[str] = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         table = Table(title="Configuration Check", border_style="blue")
         table.add_column("Setting", style="bold")
@@ -116,7 +117,7 @@ else:
             cfg._sources.get("exa_api_key", "unknown"),
         )
         if not cfg.has_exa():
-            issues.append("Exa API key not configured — Exa search will be disabled")
+            warnings.append("Exa API key not configured — Exa search will be disabled")
 
         # Firecrawl
         fc_status = "set" if cfg.has_firecrawl() else "not set"
@@ -128,7 +129,7 @@ else:
             cfg._sources.get("firecrawl_api_key", "unknown"),
         )
         if not cfg.has_firecrawl():
-            issues.append("Firecrawl API key not configured — Firecrawl search will be disabled")
+            warnings.append("Firecrawl API key not configured — Firecrawl search will be disabled")
 
         # Timeout
         table.add_row(
@@ -145,20 +146,25 @@ else:
             console.print("\n[bold]Connectivity Tests[/bold]")
             if cfg.has_exa():
                 if not _test_exa_connectivity(cfg.exa_api_key):
-                    issues.append("Exa API connectivity test failed")
+                    errors.append("Exa API connectivity test failed")
             else:
                 console.print("  Exa: [dim]skipped (no key)[/dim]")
 
             if cfg.has_firecrawl():
                 if not _test_firecrawl_connectivity(cfg.firecrawl_api_key):
-                    issues.append("Firecrawl API connectivity test failed")
+                    errors.append("Firecrawl API connectivity test failed")
             else:
                 console.print("  Firecrawl: [dim]skipped (no key)[/dim]")
 
-        if issues:
+        if warnings:
             console.print()
-            for issue in issues:
-                console.print(f"  [yellow]![/yellow] {issue}")
+            for warning in warnings:
+                console.print(f"  [yellow]![/yellow] {warning}")
+
+        if errors:
+            console.print()
+            for error in errors:
+                console.print(f"  [red]![/red] {error}")
             raise typer.Exit(1)
 
     def _test_exa_connectivity(api_key: str) -> bool:
@@ -369,6 +375,24 @@ else:
             logging.debug("Ollama doctor error", exc_info=True)
             chk.warn("Ollama", str(exc))
 
+    def _doctor_connectivity(chk: _DoctorChecks, cfg: AIPEAConfig) -> None:
+        """Check API connectivity using consistent PASS/WARN/FAIL format."""
+        if cfg.has_exa():
+            if _test_exa_connectivity(cfg.exa_api_key):
+                chk.ok("Exa connectivity")
+            else:
+                chk.fail("Exa connectivity", "API request failed")
+        else:
+            chk.warn("Exa connectivity", "skipped (no key)")
+
+        if cfg.has_firecrawl():
+            if _test_firecrawl_connectivity(cfg.firecrawl_api_key):
+                chk.ok("Firecrawl connectivity")
+            else:
+                chk.fail("Firecrawl connectivity", "API request failed")
+        else:
+            chk.warn("Firecrawl connectivity", "skipped (no key)")
+
     def _doctor_knowledge_base(chk: _DoctorChecks) -> None:
         """Check offline knowledge base status."""
         _db = Path(load_config().db_path)
@@ -429,20 +453,7 @@ else:
 
         # 7. Connectivity
         console.print("\n[bold]7. Connectivity[/bold]")
-        if cfg.has_exa():
-            if _test_exa_connectivity(cfg.exa_api_key):
-                chk.passed += 1
-            else:
-                chk.failed += 1
-        else:
-            console.print("  [dim]Exa: skipped (no key)[/dim]")
-        if cfg.has_firecrawl():
-            if _test_firecrawl_connectivity(cfg.firecrawl_api_key):
-                chk.passed += 1
-            else:
-                chk.failed += 1
-        else:
-            console.print("  [dim]Firecrawl: skipped (no key)[/dim]")
+        _doctor_connectivity(chk, cfg)
 
         # 8. Ollama (offline LLM)
         console.print("\n[bold]8. Ollama (Offline LLM)[/bold]")

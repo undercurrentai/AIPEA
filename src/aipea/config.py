@@ -54,6 +54,8 @@ class AIPEAConfig:
     db_path: str = "aipea_knowledge.db"
     storage_tier: str = "standard"
     default_compliance: str = "general"
+    exa_api_url: str = "https://api.exa.ai/search"
+    firecrawl_api_url: str = "https://api.firecrawl.dev/v1/search"
     _sources: dict[str, str] = field(default_factory=dict, repr=False)
 
     # -- helpers --
@@ -321,6 +323,26 @@ def load_config(
         toml_file,
         valid_values={"general", "hipaa", "tactical", "fedramp"},
     )
+    exa_api_url = _resolve_string(
+        "AIPEA_EXA_API_URL",
+        "exa_api_url",
+        "https://api.exa.ai/search",
+        dotenv_vals,
+        toml_vals,
+        sources,
+        dotenv_file,
+        toml_file,
+    )
+    firecrawl_api_url = _resolve_string(
+        "AIPEA_FIRECRAWL_API_URL",
+        "firecrawl_api_url",
+        "https://api.firecrawl.dev/v1/search",
+        dotenv_vals,
+        toml_vals,
+        sources,
+        dotenv_file,
+        toml_file,
+    )
 
     # --- http_timeout (special: needs float parsing + validation) ---
     http_timeout = _resolve_timeout(
@@ -339,6 +361,8 @@ def load_config(
         db_path=db_path,
         storage_tier=storage_tier,
         default_compliance=default_compliance,
+        exa_api_url=exa_api_url,
+        firecrawl_api_url=firecrawl_api_url,
         _sources=sources,
     )
 
@@ -378,6 +402,8 @@ def save_dotenv(path: Path, config: AIPEAConfig) -> None:
         "AIPEA_DB_PATH",
         "AIPEA_STORAGE_TIER",
         "AIPEA_DEFAULT_COMPLIANCE",
+        "AIPEA_EXA_API_URL",
+        "AIPEA_FIRECRAWL_API_URL",
     }
     existing = _parse_dotenv(path)
 
@@ -409,6 +435,12 @@ def save_dotenv(path: Path, config: AIPEAConfig) -> None:
         lines.append(f"AIPEA_STORAGE_TIER={config.storage_tier}")
     if config.default_compliance != "general":
         lines.append(f"AIPEA_DEFAULT_COMPLIANCE={config.default_compliance}")
+    if config.exa_api_url != "https://api.exa.ai/search":
+        escaped = _escape_config_value(config.exa_api_url)
+        lines.append(f'AIPEA_EXA_API_URL="{escaped}"')
+    if config.firecrawl_api_url != "https://api.firecrawl.dev/v1/search":
+        escaped = _escape_config_value(config.firecrawl_api_url)
+        lines.append(f'AIPEA_FIRECRAWL_API_URL="{escaped}"')
     lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -453,6 +485,12 @@ def save_toml_config(path: Path, config: AIPEAConfig) -> None:
         lines.append(f'storage_tier = "{config.storage_tier}"')
     if config.default_compliance != "general":
         lines.append(f'default_compliance = "{config.default_compliance}"')
+    if config.exa_api_url != "https://api.exa.ai/search":
+        escaped = _escape_config_value(config.exa_api_url)
+        lines.append(f'exa_api_url = "{escaped}"')
+    if config.firecrawl_api_url != "https://api.firecrawl.dev/v1/search":
+        escaped = _escape_config_value(config.firecrawl_api_url)
+        lines.append(f'firecrawl_api_url = "{escaped}"')
     lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")
