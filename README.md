@@ -199,9 +199,9 @@ AIPEA is designed as a standalone preprocessing layer for LLM systems. It integr
 
 AIPEA is free and open-source. For organizations that need full AI governance — risk registers, model cards, compliance auditing, and policy enforcement — see [AEGIS](https://github.com/undercurrentai/aegis-governance), Undercurrent AI's governance platform.
 
-AIPEA's compliance modes (HIPAA, TACTICAL, FEDRAMP) provide runtime security controls. AEGIS adds the organizational layer: audit trails, human oversight workflows, and regulatory reporting.
+AIPEA's compliance modes (HIPAA, TACTICAL) provide runtime security controls, with FEDRAMP support planned. AEGIS adds the organizational layer: audit trails, human oversight workflows, and regulatory reporting.
 
-Learn more at [undercurrentai.com](https://undercurrentai.com).
+Learn more at [undercurrentholdings.com](https://undercurrentholdings.com).
 
 ## Development
 
