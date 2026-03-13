@@ -169,19 +169,23 @@ asyncio.run(main())
 ### Search Orchestration
 
 ```python
+import asyncio
 from aipea import SearchOrchestrator
 
-orchestrator = SearchOrchestrator()
+async def main():
+    orchestrator = SearchOrchestrator()
 
-# Multi-provider search with strategy selection
-results = await orchestrator.search(
-    "quantum error correction 2026",
-    strategy="multi_source",
-    num_results=10,
-)
+    # Multi-provider search with strategy selection
+    results = await orchestrator.search(
+        "quantum error correction 2026",
+        strategy="multi_source",
+        num_results=10,
+    )
 
-for result in results.results:
-    print(f"[{results.source}] {result.title}: {result.url}")
+    for result in results.results:
+        print(f"[{results.source}] {result.title}: {result.url}")
+
+asyncio.run(main())
 ```
 
 ## Integration
