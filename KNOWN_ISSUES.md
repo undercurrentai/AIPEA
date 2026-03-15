@@ -1,6 +1,52 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-15 + Quality Gate: 2026-03-13)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-16 + Quality Gate: 2026-03-14)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Wave 16 Fixes (2026-03-14) — 4 bugs fixed, 3 deferred
+
+### 75. AIPEAEnhancer leaks SQLite connection (no close/context manager) — FIXED
+- **File**: `src/aipea/enhancer.py:326-336`
+- **Severity**: MEDIUM | **Confidence**: 0.90
+- **Source**: Claude sweep agent (facade/entry layer, wave 16)
+- **Fix**: Added `close()` method that releases `_offline_kb` SQLite connection, plus `__enter__`/`__exit__` for context manager support. Idempotent — safe to call multiple times. `reset_enhancer()` now delegates to `close()`. 3 regression tests added.
+
+### 76. dotenv parser mishandles quoted values with embedded matching quotes — FIXED
+- **File**: `src/aipea/config.py:114-136`
+- **Severity**: MEDIUM | **Confidence**: 0.80
+- **Source**: Claude sweep agent (core modules, wave 16) + quality gate ultrathink
+- **Fix**: Old code assumed `raw_value[-1]` was the closing quote, incorrectly stripping values like `'val1' 'val2'` to `val1' 'val2`. New code scans character by character for the first unescaped matching close-quote. Also fixed: unescape no longer runs on values with missing closing quotes. 6 regression tests added.
+
+### 77. TOCTOU race in `_prune_low_relevance_sync` — FIXED
+- **File**: `src/aipea/knowledge.py:940-969`
+- **Severity**: MEDIUM | **Confidence**: 0.75
+- **Source**: Claude sweep agent (core modules, wave 16)
+- **Fix**: Old code used SELECT rowids + DELETE by re-evaluated subquery, which could diverge if data changed between queries (leaving orphaned FTS entries). New code SELECTs both `id` and `rowid`, then DELETEs by exact `id` list and cleans FTS by exact `rowid` list. 1 regression test added.
+
+### 78. Doctor connectivity produces duplicate output lines — FIXED
+- **File**: `src/aipea/cli.py:170-219,387-395`
+- **Severity**: LOW | **Confidence**: 0.95
+- **Source**: Claude sweep agent (facade/entry layer, wave 16)
+- **Fix**: `_test_exa_connectivity` and `_test_firecrawl_connectivity` unconditionally printed status, then `_doctor_connectivity` also printed via `chk.ok()`/`chk.fail()`. Added `silent: bool = False` keyword param; doctor passes `silent=True`. 1 regression test added.
+
+### Wave 16 — Deferred (3 LOW severity)
+
+### 79. Exa API scores silently clamped to [0,1] instead of normalized — DEFERRED
+- **File**: `src/aipea/search.py:583-589`
+- **Severity**: LOW | **Confidence**: 0.70
+- **Source**: Claude sweep agent (core modules, wave 16)
+- **Rationale**: Already tracked as intentional design decision #11. Clamping produces acceptable results; normalization would require collecting all scores first.
+
+### 80. Storage stats reads not atomic (node_count vs file_size) — DEFERRED
+- **File**: `src/aipea/knowledge.py:884-896`
+- **Severity**: LOW | **Confidence**: 0.60
+- **Source**: Claude sweep agent (core modules, wave 16)
+- **Rationale**: Stats are informational only. Minor inconsistency between node count and file size has no functional impact.
+
+### 81. HTTP_TIMEOUT eager vs URL lazy resolution inconsistency — DEFERRED
+- **File**: `src/aipea/search.py:113`
+- **Severity**: LOW | **Confidence**: 0.55
+- **Source**: Claude sweep agent (core modules, wave 16)
+- **Rationale**: Timeout is frozen at import time (documented behavior), URLs are lazy. Inconsistent but functional — changing timeout to lazy would be a behavioral change.
 
 ## Wave 15 Fixes (2026-03-13) — 5 deferred issues resolved
 
@@ -532,9 +578,9 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 - **File**: `src/aipea/search.py:166-182`
 - **Rationale**: Clamping already handles this; log noise is minor and useful for monitoring.
 
-## Deferred Findings (0 bugs remaining)
+## Deferred Findings (3 LOW severity remaining)
 
-All deferred bugs resolved in wave 15.
+Wave 16 deferred: #79 (Exa score clamping), #80 (stats atomicity), #81 (timeout eagerness). All LOW severity with no functional impact.
 
 ---
-*Last updated: 2026-03-13 (Wave 15 — 5 deferred bugs resolved, 20 regression tests, 741 total tests, 92.07% coverage)*
+*Last updated: 2026-03-14 (Wave 16 — 4 bugs fixed, 3 deferred, 11 regression tests, 752 total tests, 91.79% coverage)*

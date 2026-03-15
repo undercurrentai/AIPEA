@@ -111,19 +111,33 @@ def _parse_dotenv(path: Path) -> dict[str, str]:
         key = key.strip()
         raw_value = raw_value.strip()
 
-        # Handle quoted values
-        if len(raw_value) >= 2 and raw_value[0] == raw_value[-1] and raw_value[0] in ("'", '"'):
+        # Handle quoted values — find the matching close-quote by scanning
+        # from position 1, rather than assuming raw_value[-1] is the close.
+        if len(raw_value) >= 2 and raw_value[0] in ("'", '"'):
             quote_char = raw_value[0]
-            value = raw_value[1:-1]
-            # Unescape double-quoted values (single-quoted are literal)
-            if quote_char == '"':
-                value = (
-                    value.replace("\\\\", "\x00")
-                    .replace('\\"', '"')
-                    .replace("\\n", "\n")
-                    .replace("\\r", "\r")
-                    .replace("\x00", "\\")
-                )
+            # Find closing quote (skip escaped quotes in double-quoted values)
+            end = 1
+            while end < len(raw_value):
+                if raw_value[end] == "\\" and quote_char == '"' and end + 1 < len(raw_value):
+                    end += 2  # skip escaped char
+                    continue
+                if raw_value[end] == quote_char:
+                    break
+                end += 1
+            if end < len(raw_value):
+                value = raw_value[1:end]
+                # Unescape double-quoted values (single-quoted are literal)
+                if quote_char == '"':
+                    value = (
+                        value.replace("\\\\", "\x00")
+                        .replace('\\"', '"')
+                        .replace("\\n", "\n")
+                        .replace("\\r", "\r")
+                        .replace("\x00", "\\")
+                    )
+            else:
+                # No closing quote found — treat entire raw value as unquoted
+                value = raw_value
         else:
             # Strip inline comment for unquoted values
             comment_idx = raw_value.find(" #")

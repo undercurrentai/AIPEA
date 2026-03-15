@@ -167,7 +167,7 @@ else:
                 console.print(f"  [red]![/red] {error}")
             raise typer.Exit(1)
 
-    def _test_exa_connectivity(api_key: str) -> bool:
+    def _test_exa_connectivity(api_key: str, *, silent: bool = False) -> bool:
         """Ping Exa API to verify the key works."""
         import os as _os
 
@@ -179,16 +179,19 @@ else:
                 timeout=10.0,
             )
             if resp.status_code == 200:
-                console.print("  Exa: [green]OK[/green]")
+                if not silent:
+                    console.print("  Exa: [green]OK[/green]")
                 return True
-            console.print(f"  Exa: [red]HTTP {resp.status_code}[/red]")
+            if not silent:
+                console.print(f"  Exa: [red]HTTP {resp.status_code}[/red]")
             return False
         except Exception as exc:
             logging.debug("Exa connectivity error", exc_info=True)
-            console.print(f"  Exa: [red]Error — {exc}[/red]")
+            if not silent:
+                console.print(f"  Exa: [red]Error — {exc}[/red]")
             return False
 
-    def _test_firecrawl_connectivity(api_key: str) -> bool:
+    def _test_firecrawl_connectivity(api_key: str, *, silent: bool = False) -> bool:
         """Ping Firecrawl API to verify the key works."""
         import os as _os
 
@@ -203,13 +206,16 @@ else:
                 timeout=10.0,
             )
             if resp.status_code == 200:
-                console.print("  Firecrawl: [green]OK[/green]")
+                if not silent:
+                    console.print("  Firecrawl: [green]OK[/green]")
                 return True
-            console.print(f"  Firecrawl: [red]HTTP {resp.status_code}[/red]")
+            if not silent:
+                console.print(f"  Firecrawl: [red]HTTP {resp.status_code}[/red]")
             return False
         except Exception as exc:
             logging.debug("Firecrawl connectivity error", exc_info=True)
-            console.print(f"  Firecrawl: [red]Error — {exc}[/red]")
+            if not silent:
+                console.print(f"  Firecrawl: [red]Error — {exc}[/red]")
             return False
 
     def _ollama_install_hint() -> str:
@@ -378,7 +384,7 @@ else:
     def _doctor_connectivity(chk: _DoctorChecks, cfg: AIPEAConfig) -> None:
         """Check API connectivity using consistent PASS/WARN/FAIL format."""
         if cfg.has_exa():
-            if _test_exa_connectivity(cfg.exa_api_key):
+            if _test_exa_connectivity(cfg.exa_api_key, silent=True):
                 chk.ok("Exa connectivity")
             else:
                 chk.fail("Exa connectivity", "API request failed")
@@ -386,7 +392,7 @@ else:
             chk.warn("Exa connectivity", "skipped (no key)")
 
         if cfg.has_firecrawl():
-            if _test_firecrawl_connectivity(cfg.firecrawl_api_key):
+            if _test_firecrawl_connectivity(cfg.firecrawl_api_key, silent=True):
                 chk.ok("Firecrawl connectivity")
             else:
                 chk.fail("Firecrawl connectivity", "API request failed")

@@ -2038,3 +2038,50 @@ class TestEnhanceForModelsDifferentFormatting:
         result = await enhancer.enhance("test query", model_id="gpt-4")
         # Should complete without error — search context embedding is default True
         assert result is not None
+
+
+# ============================================================================
+# AIPEAEnhancer close() and context manager (regression: resource leak)
+# ============================================================================
+
+
+class TestEnhancerResourceManagement:
+    """Regression tests for AIPEAEnhancer.close() and context manager support."""
+
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_close_closes_offline_kb(
+        self, _mock_search_orch: MagicMock, mock_kb_cls: MagicMock
+    ) -> None:
+        """close() should close the offline knowledge base connection."""
+        mock_kb_instance = MagicMock()
+        mock_kb_cls.return_value = mock_kb_instance
+
+        enhancer = AIPEAEnhancer()
+        assert enhancer._offline_kb is not None
+        enhancer.close()
+        mock_kb_instance.close.assert_called_once()
+        assert enhancer._offline_kb is None
+
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_close_idempotent(self, _mock_search_orch: MagicMock, mock_kb_cls: MagicMock) -> None:
+        """Calling close() twice should not raise."""
+        mock_kb_instance = MagicMock()
+        mock_kb_cls.return_value = mock_kb_instance
+
+        enhancer = AIPEAEnhancer()
+        enhancer.close()
+        enhancer.close()  # should not raise
+        mock_kb_instance.close.assert_called_once()
+
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_context_manager(self, _mock_search_orch: MagicMock, mock_kb_cls: MagicMock) -> None:
+        """AIPEAEnhancer should work as a context manager."""
+        mock_kb_instance = MagicMock()
+        mock_kb_cls.return_value = mock_kb_instance
+
+        with AIPEAEnhancer() as enhancer:
+            assert enhancer._offline_kb is not None
+        mock_kb_instance.close.assert_called_once()

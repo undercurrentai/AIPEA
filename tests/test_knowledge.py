@@ -974,5 +974,40 @@ class TestUpsertPreservesRelevanceScore:
             kb.close()
 
 
+# ============================================================================
+# Regression: prune_low_relevance uses exact IDs (no TOCTOU)
+# ============================================================================
+
+
+class TestPruneLowRelevanceRegression:
+    """Regression: prune should delete by exact IDs, not re-evaluated criteria."""
+
+    @pytest.mark.asyncio
+    async def test_prune_deletes_correct_nodes(self) -> None:
+        """Prune should remove exactly the low-relevance nodes and their FTS entries."""
+        with tempfile.TemporaryDirectory() as td:
+            db_path = os.path.join(td, "prune_test.db")
+            kb = OfflineKnowledgeBase(db_path=db_path, tier=StorageTier.STANDARD)
+            try:
+                # Add nodes with varying relevance
+                await kb.add_knowledge("keep this", KnowledgeDomain.TECHNICAL, relevance_score=0.9)
+                await kb.add_knowledge(
+                    "also keep", KnowledgeDomain.ENGINEERING, relevance_score=0.8
+                )
+                await kb.add_knowledge("prune me", KnowledgeDomain.GENERAL, relevance_score=0.1)
+                await kb.add_knowledge("prune me too", KnowledgeDomain.GENERAL, relevance_score=0.2)
+
+                stats_before = await kb.get_storage_stats()
+                assert stats_before["node_count"] == 4
+
+                deleted = await kb.prune_low_relevance(threshold=0.5, max_delete=10)
+                assert deleted == 2
+
+                stats_after = await kb.get_storage_stats()
+                assert stats_after["node_count"] == 2
+            finally:
+                kb.close()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
