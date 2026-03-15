@@ -178,4 +178,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Origin
 - 6 production modules (5,923 LOC) extracted from Agora IV into 9 standalone modules (6,192 LOC)
 - Original Agora IV files replaced with thin re-export shims (338 LOC) for backward compatibility
-- Vendored back into Agora IV at `vendor/aipea/` for zero-downtime migration
+- Initially vendored into Agora IV at `vendor/aipea/` for zero-downtime migration (replaced by PyPI install in v1.3.0+)
