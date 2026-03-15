@@ -978,3 +978,54 @@ class TestApiUrlConfig:
         loaded = load_config(toml_path=toml_path, dotenv_path=tmp_path / "nonexistent.env")
         assert loaded.exa_api_url == "https://custom.exa.test/search"
         assert loaded.firecrawl_api_url == "https://custom.fc.test/v1/search"
+
+
+# ============================================================================
+# Regression: dotenv parser edge cases with quoted values
+# ============================================================================
+
+
+class TestDotenvQuoteEdgeCases:
+    """Regression tests for dotenv parser handling of quoted values."""
+
+    def test_simple_double_quoted(self, tmp_path: Path) -> None:
+        env_file = tmp_path / ".env"
+        env_file.write_text('KEY="simple_value"\n')
+        result = _parse_dotenv(env_file)
+        assert result["KEY"] == "simple_value"
+
+    def test_simple_single_quoted(self, tmp_path: Path) -> None:
+        env_file = tmp_path / ".env"
+        env_file.write_text("KEY='simple_value'\n")
+        result = _parse_dotenv(env_file)
+        assert result["KEY"] == "simple_value"
+
+    def test_value_with_embedded_matching_quote_at_end(self, tmp_path: Path) -> None:
+        """Value like 'val1' 'val2' should extract only val1 (first quoted segment)."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("KEY='val1' 'val2'\n")
+        result = _parse_dotenv(env_file)
+        assert result["KEY"] == "val1"
+
+    def test_escaped_quote_in_double_quoted(self, tmp_path: Path) -> None:
+        """Escaped quotes inside double-quoted values should be preserved."""
+        env_file = tmp_path / ".env"
+        env_file.write_text('KEY="he said \\"hello\\""\n')
+        result = _parse_dotenv(env_file)
+        assert result["KEY"] == 'he said "hello"'
+
+    def test_no_closing_quote_treated_as_unquoted(self, tmp_path: Path) -> None:
+        """Missing closing quote should treat value as unquoted."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("KEY='no_closing_quote\n")
+        result = _parse_dotenv(env_file)
+        assert result["KEY"] == "'no_closing_quote"
+
+    def test_no_closing_double_quote_no_unescape(self, tmp_path: Path) -> None:
+        """Missing closing double-quote should NOT unescape \\n sequences."""
+        env_file = tmp_path / ".env"
+        env_file.write_text('KEY="path\\nvalue\n')
+        result = _parse_dotenv(env_file)
+        # Should be the raw string with leading quote, NOT a newline-expanded value
+        assert result["KEY"] == '"path\\nvalue'
+        assert "\n" not in result["KEY"]  # no newline expansion

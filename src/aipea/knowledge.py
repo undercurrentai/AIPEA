@@ -940,10 +940,10 @@ class OfflineKnowledgeBase:
     def _prune_low_relevance_sync(self, threshold: float, max_delete: int) -> int:
         """Synchronous implementation of prune_low_relevance (runs in thread pool)."""
         with self._with_db_lock() as conn:
-            # Get rowids before deletion for FTS cleanup
+            # Select exact ids and rowids to prune (single source of truth)
             rows_to_prune = conn.execute(
                 """
-                SELECT rowid FROM knowledge_nodes
+                SELECT id, rowid FROM knowledge_nodes
                 WHERE relevance_score < ?
                 ORDER BY relevance_score ASC, last_accessed ASC
                 LIMIT ?
@@ -951,22 +951,20 @@ class OfflineKnowledgeBase:
                 (threshold, max_delete),
             ).fetchall()
 
+            if not rows_to_prune:
+                return 0
+
+            # Delete by exact ids to avoid TOCTOU with re-evaluated subquery
+            ids_to_delete = [row[0] for row in rows_to_prune]
+            placeholders = ",".join("?" for _ in ids_to_delete)
             cursor = conn.execute(
-                """
-                DELETE FROM knowledge_nodes
-                WHERE id IN (
-                    SELECT id FROM knowledge_nodes
-                    WHERE relevance_score < ?
-                    ORDER BY relevance_score ASC, last_accessed ASC
-                    LIMIT ?
-                )
-                """,
-                (threshold, max_delete),
+                f"DELETE FROM knowledge_nodes WHERE id IN ({placeholders})",  # noqa: S608
+                ids_to_delete,
             )
-            # Clean up orphaned FTS entries
+            # Clean up FTS entries by exact rowids
             for row in rows_to_prune:
                 with contextlib.suppress(sqlite3.OperationalError):
-                    conn.execute("DELETE FROM knowledge_fts WHERE rowid = ?", (row[0],))
+                    conn.execute("DELETE FROM knowledge_fts WHERE rowid = ?", (row[1],))
             conn.commit()
             deleted = cursor.rowcount
 

@@ -323,6 +323,18 @@ class AIPEAEnhancer:
             default_compliance.value,
         )
 
+    def close(self) -> None:
+        """Close resources held by this enhancer (e.g. SQLite connection)."""
+        if self._offline_kb is not None:
+            self._offline_kb.close()
+            self._offline_kb = None
+
+    def __enter__(self) -> AIPEAEnhancer:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
     def _generate_clarifications(self, query: str, analysis: QueryAnalysis) -> list[str]:
         """Generate advisory clarifying questions for ambiguous queries.
 
@@ -1248,8 +1260,8 @@ def reset_enhancer() -> None:
     """
     global _default_enhancer
     with _default_enhancer_lock:
-        if _default_enhancer is not None and _default_enhancer._offline_kb is not None:
-            _default_enhancer._offline_kb.close()
+        if _default_enhancer is not None:
+            _default_enhancer.close()
         _default_enhancer = None
     logger.info("Default enhancer reset")
 

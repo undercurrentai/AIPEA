@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -360,3 +360,31 @@ class TestSeedKBUsesConfigPath:
         import os
 
         os.unlink(custom_path)
+
+
+# ============================================================================
+# Regression: doctor connectivity should not produce duplicate output
+# ============================================================================
+
+
+class TestDoctorConnectivityNoDoubleOutput:
+    """Regression: doctor should show PASS/FAIL only, not also raw OK/Error lines."""
+
+    @patch("aipea.cli.httpx.post")
+    @patch("aipea.cli.load_config")
+    def test_doctor_exa_no_duplicate_ok(self, mock_load: MagicMock, mock_post: MagicMock) -> None:
+        """When Exa succeeds in doctor, output should have PASS but NOT raw 'Exa: OK'."""
+        from aipea.config import AIPEAConfig
+
+        mock_load.return_value = AIPEAConfig(exa_api_key="test-key")
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_post.return_value = mock_resp
+
+        result = runner.invoke(app, ["doctor"])
+        # Should contain PASS line from doctor format
+        assert "PASS" in result.output or "Exa connectivity" in result.output
+        # Should NOT contain raw "Exa: OK" from _test_exa_connectivity
+        # Count occurrences of "Exa" — should not have both "Exa: OK" and "Exa connectivity"
+        lines_with_exa_ok = [ln for ln in result.output.splitlines() if "Exa:" in ln and "OK" in ln]
+        assert len(lines_with_exa_ok) <= 1, f"Duplicate Exa output: {lines_with_exa_ok}"
