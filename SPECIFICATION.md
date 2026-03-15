@@ -1,5 +1,5 @@
 # AIPEA Specification
-> **AI Prompt Engineer Agent** | Version 1.3.0 | 2026-03-13
+> **AI Prompt Engineer Agent** | Version 1.3.1 | 2026-03-15
 
 ```yaml
 status: ACCEPTED
