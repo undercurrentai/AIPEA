@@ -1,5 +1,8 @@
 # AIPEA Roadmap
 
+> **Consolidated**: All roadmap items are now tracked in [`TODO.md`](../TODO.md).
+> This file is retained for historical context on feature design rationale.
+
 Future features ordered by priority. Each item references its origin in the Agora V design.
 
 Extracted from SPECIFICATION.md Section 10 to keep the spec as pure ground truth
