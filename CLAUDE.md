@@ -1,14 +1,14 @@
 # CLAUDE.md - AIPEA
-> Version: 3.0.0 | Updated: 2026-02-19 | Owner: @joshuakirby
+> Version: 3.0.1 | Updated: 2026-04-09 | Owner: @joshuakirby
 
 ```yaml
-version: 3.0.0
+version: 3.0.1
 status: ACTIVE
-tier: 2  # Standard (~8.5K LOC, 2 contributors, internal consumers)
+tier: 2  # Standard (~8.8K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
 inherits_from: ../../CLAUDE.md  # Undercurrent Holdings root
 maintainer: joshuakirby
-last_audit: 2026-03-09
+last_audit: 2026-04-09
 protocol: v4.0
 token_budget: 8000
 ```
@@ -26,7 +26,7 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~8,492 |
+| **Source LOC** | ~8,832 |
 | **Exports** | 36 symbols in `__all__` |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
