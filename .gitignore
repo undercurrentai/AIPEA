@@ -45,3 +45,9 @@ sbom.cdx.json
 .mutmut-cache/
 coverage.json
 perf_results.json
+
+# Knowledge database (runtime artifact)
+aipea_knowledge.db
+
+# AFA workflow config
+.afa.yaml

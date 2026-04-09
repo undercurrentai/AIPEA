@@ -1,5 +1,8 @@
 # AIPEA Extraction — Next Steps
 
+> **Archived**: All 7 extraction steps completed 2026-02-14. Future work items
+> consolidated into [`TODO.md`](../TODO.md). This file retained for provenance.
+
 > **Context**: All steps complete. AIPEA extracted from AgoraIV v4.1.49, standalone package at v1.0.0, AgoraIV shims verified (2187 tests pass).
 > **Date**: 2026-02-14
 > **Prerequisite**: `/Projects/AIPEA/` exists with SPECIFICATION.md, CLAUDE.md, pyproject.toml, src/aipea/ scaffold
@@ -408,30 +411,7 @@ Steps 3 and 6 can be parallelized. Steps 4→5→7 are sequential.
 
 ## DEFERRED: Future Work
 
-The following items are documented for future implementation. They are not blocking current functionality.
-
-### AEGIS Adapter Implementation
-
-| Aspect | Detail |
-|--------|--------|
-| **Status** | DEFERRED — specification complete, not yet implemented |
-| **Spec** | `docs/integration/aegis-adapter.md` (83 lines, complete integration pattern) |
-| **Also in** | `SPECIFICATION.md:725-747` (Section 5.3) |
-| **Includes** | Field mapping table (AIPEA → AEGIS), example code, installation instructions |
-| **Trigger** | Implement when AEGIS integration is scheduled |
-| **Dependencies** | AEGIS system must exist and have a stable API |
-
-### PyPI Publication
-
-| Aspect | Detail |
-|--------|--------|
-| **Status** | READY — workflow created in `.github/workflows/publish.yml`, one-time PyPI setup pending |
-| **Workflow** | `.github/workflows/publish.yml` (trusted publisher OIDC, no API tokens) |
-| **Build tool** | `hatch build` (hatchling backend) |
-| **Current install** | `pip install -e /Projects/AIPEA` (local editable) or vendored at `AgoraIV/vendor/aipea/` |
-| **Steps to publish** | See CLAUDE.md Section 6.5 (Release to PyPI playbook) |
-| **One-time setup** | (1) Register on PyPI, (2) `hatch build && hatch publish` for initial upload, (3) Configure trusted publisher on PyPI, (4) Create GitHub `release` environment |
-| **Priority** | Ready when stable — workflow and playbook are in place |
+> Future work items consolidated into [`TODO.md`](../TODO.md). Only completed items retained below.
 
 ### engine.py Test Coverage
 
