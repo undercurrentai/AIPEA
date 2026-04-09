@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-04-09
+
+### Changed
+- Upgrade PyPI classifier: "Development Status :: 4 - Beta" → "Development Status :: 5 - Production/Stable"
+- Update README badges: 698→752 tests, 91.42→91.79% coverage
+- Add PyPI monthly downloads badge
+
+### Fixed
+- Remove `aipea_knowledge.db` from git tracking (runtime artifact, now gitignored)
+- Add `.afa.yaml` to `.gitignore`
+- Update stale `KNOWN_ISSUES.md` footer timestamp
+- Consolidate deferred work items from `NEXT_STEPS.md` and `ROADMAP.md` into canonical `TODO.md`
+
 ## [1.3.1] - 2026-03-15
 
 ### Changed
