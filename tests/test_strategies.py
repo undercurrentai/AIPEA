@@ -9,7 +9,10 @@ from aipea.strategies import (
     STRATEGY_REGISTRY,
     TECHNIQUE_FUNCTIONS,
     EnhancementStrategy,
+    ScoredEnhancement,
+    StrategyResult,
     apply_strategy,
+    apply_strategy_ranked,
     constraint_identification,
     hypothesis_clarification,
     metric_definition,
@@ -245,3 +248,176 @@ class TestTaskDecompositionRegression:
         )
         assert "sub-task" in result.lower()
         assert result.count("Sub-task") >= 2
+
+
+# =============================================================================
+# RANKED STRATEGY TESTS
+# =============================================================================
+
+
+class TestScoredEnhancement:
+    @pytest.mark.unit
+    def test_dataclass_fields(self) -> None:
+        enh = ScoredEnhancement(text="test", technique="spec", relevance=0.8, domain="technical")
+        assert enh.text == "test"
+        assert enh.technique == "spec"
+        assert enh.relevance == 0.8
+        assert enh.domain == "technical"
+
+    @pytest.mark.unit
+    def test_default_domain(self) -> None:
+        enh = ScoredEnhancement(text="t", technique="t", relevance=0.5)
+        assert enh.domain == "general"
+
+
+class TestStrategyResult:
+    @pytest.mark.unit
+    def test_to_text_joins_enhancements(self) -> None:
+        result = StrategyResult(
+            enhancements=[
+                ScoredEnhancement(text="A.", technique="t", relevance=0.9),
+                ScoredEnhancement(text="B.", technique="t", relevance=0.5),
+            ],
+            strategy_name="test",
+        )
+        text = result.to_text()
+        assert "A." in text
+        assert "B." in text
+
+    @pytest.mark.unit
+    def test_to_text_respects_max_items(self) -> None:
+        result = StrategyResult(
+            enhancements=[
+                ScoredEnhancement(text=f"Item{i}.", technique="t", relevance=0.5) for i in range(10)
+            ],
+        )
+        text = result.to_text(max_items=3)
+        assert "Item0." in text
+        assert "Item2." in text
+        assert "Item3." not in text
+
+    @pytest.mark.unit
+    def test_to_text_includes_conflicts(self) -> None:
+        result = StrategyResult(
+            enhancements=[
+                ScoredEnhancement(text="A.", technique="t", relevance=0.9),
+            ],
+            conflicts=["Cost vs scale tension."],
+        )
+        text = result.to_text()
+        assert "Trade-off:" in text
+        assert "Cost vs scale" in text
+
+    @pytest.mark.unit
+    def test_empty_result(self) -> None:
+        result = StrategyResult()
+        assert result.to_text() == ""
+        assert result.conflicts == []
+
+
+class TestApplyStrategyRanked:
+    @pytest.mark.unit
+    def test_returns_strategy_result(self) -> None:
+        result = apply_strategy_ranked("Compare Python vs Go for APIs")
+        assert isinstance(result, StrategyResult)
+
+    @pytest.mark.unit
+    def test_enhancements_sorted_by_relevance(self) -> None:
+        result = apply_strategy_ranked(
+            "Compare Python vs JavaScript for web development",
+            strategy_name="technical",
+            query_type=QueryType.TECHNICAL,
+        )
+        relevances = [e.relevance for e in result.enhancements]
+        assert relevances == sorted(relevances, reverse=True)
+
+    @pytest.mark.unit
+    def test_max_items_limits_output(self) -> None:
+        result = apply_strategy_ranked(
+            "Build a scalable, fast, reliable, secure API with Python and Django "
+            "and also add caching and rate limiting",
+            strategy_name="technical",
+            max_items=3,
+        )
+        assert len(result.enhancements) <= 3
+
+    @pytest.mark.unit
+    def test_technical_domain_templates(self) -> None:
+        result = apply_strategy_ranked(
+            "Compare PostgreSQL vs MongoDB",
+            strategy_name="technical",
+            query_type=QueryType.TECHNICAL,
+        )
+        texts = " ".join(e.text for e in result.enhancements)
+        # Technical domain should use specific template
+        assert "benchmark" in texts.lower() or "ergonomic" in texts.lower()
+
+    @pytest.mark.unit
+    def test_research_domain_templates(self) -> None:
+        result = apply_strategy_ranked(
+            "Is deep learning better than traditional ML?",
+            strategy_name="research",
+            query_type=QueryType.RESEARCH,
+        )
+        texts = " ".join(e.text for e in result.enhancements)
+        # Research domain for vague qualifier uses precise evaluation language
+        assert "metric" in texts.lower() or "evaluation" in texts.lower()
+
+    @pytest.mark.unit
+    def test_unknown_strategy_falls_back(self) -> None:
+        result = apply_strategy_ranked("Compare X vs Y", strategy_name="nonexistent")
+        # Falls back to general strategy behavior (produces output)
+        assert len(result.enhancements) > 0
+
+    @pytest.mark.unit
+    def test_no_match_returns_empty(self) -> None:
+        result = apply_strategy_ranked("Hi")
+        assert len(result.enhancements) == 0
+        assert result.conflicts == []
+
+    @pytest.mark.unit
+    def test_conflict_detected_cost_vs_scale(self) -> None:
+        result = apply_strategy_ranked(
+            "Build a cheap, budget-friendly system that can scale "
+            "to handle millions of concurrent users",
+            strategy_name="technical",
+            query_type=QueryType.TECHNICAL,
+        )
+        assert len(result.conflicts) > 0
+        assert any("cost" in c.lower() or "scale" in c.lower() for c in result.conflicts)
+
+    @pytest.mark.unit
+    def test_no_conflict_for_simple_query(self) -> None:
+        result = apply_strategy_ranked(
+            "Explain Python list comprehensions",
+            strategy_name="general",
+        )
+        assert result.conflicts == []
+
+    @pytest.mark.unit
+    def test_task_decomposition_included(self) -> None:
+        result = apply_strategy_ranked(
+            "Build auth, add caching, and implement rate limiting",
+            strategy_name="technical",
+        )
+        techniques = [e.technique for e in result.enhancements]
+        assert "task_decomposition" in techniques
+
+    @pytest.mark.unit
+    def test_all_enhancements_have_valid_relevance(self) -> None:
+        result = apply_strategy_ranked(
+            "How to optimize database performance for scale?",
+            strategy_name="technical",
+            query_type=QueryType.TECHNICAL,
+        )
+        for enh in result.enhancements:
+            assert 0.0 <= enh.relevance <= 1.0
+
+    @pytest.mark.unit
+    def test_expanded_tech_regex(self) -> None:
+        result = apply_strategy_ranked(
+            "Deploy with Kubernetes on AWS using Terraform",
+            strategy_name="technical",
+        )
+        texts = " ".join(e.text.lower() for e in result.enhancements)
+        assert "kubernetes" in texts or "aws" in texts or "terraform" in texts

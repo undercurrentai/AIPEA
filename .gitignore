@@ -39,6 +39,9 @@ Thumbs.db
 .env
 .env.*
 
+# Coverage artifacts
+coverage.xml
+
 # Scaffold artifacts
 sbom.spdx.json
 sbom.cdx.json
