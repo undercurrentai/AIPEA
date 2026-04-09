@@ -2,8 +2,8 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-752%20passing-brightgreen)]()
-[![Coverage](https://img.shields.io/badge/coverage-91.79%25-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-860%20passing-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-91.54%25-brightgreen)]()
 [![PyPI](https://img.shields.io/pypi/v/aipea)](https://pypi.org/project/aipea/)
 [![Downloads](https://img.shields.io/pypi/dm/aipea)](https://pypi.org/project/aipea/)
 
