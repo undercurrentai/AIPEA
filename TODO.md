@@ -53,6 +53,7 @@ Full details in [KNOWN_ISSUES.md](KNOWN_ISSUES.md) § "Wave 18 Fixes" and
 - [x] ~~Dynamic coverage badge (Codecov/Coveralls) to replace static shield~~ — done 2026-04-09 via PR #9
 - [ ] Float validation dedup — extract `_clamp_score()` helper
 - [ ] `QueryRouter.route()` complexity reduction
+- [ ] **v2.0 candidate**: review `PromptEngine.create_model_specific_prompt` for deprecation/removal. After Wave 18 #90 it has zero production callers in AIPEA, zero callers in AEGIS, and zero callers in Agora IV that import from `aipea.engine` (the 4 legacy-migrated test hits in AgoraIV reference the pre-extraction `pcw_prompt_engine` in-tree module, not AIPEA). Method still has 6 direct unit tests in `test_engine.py` that would need to be removed or migrated. Schedule against v2.0 breaking-changes window.
 
 ---
 

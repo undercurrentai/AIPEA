@@ -1022,8 +1022,21 @@ class PromptEngine:
     ) -> str:
         """Create a model-specific optimized prompt.
 
-        Optimizes the base prompt for the target model's preferences
-        and capabilities.
+        Wraps an already-built ``base_prompt`` with a per-model-formatted
+        search-context block (markdown for GPT, XML for Claude, numbered
+        list for generic), plus the wave 17 #86 prompt-injection-mitigation
+        framing header.
+
+        .. note::
+            This is **not** the canonical multi-model production path.
+            :meth:`AIPEAEnhancer.enhance_for_models` rebuilds each model's
+            full prompt via :meth:`formulate_search_aware_prompt` so that
+            the query section itself is emitted in the model-preferred
+            format (``## Query`` / ``<query>...</query>`` / ``Query:\\n1. ...``).
+            This helper is retained for callers that already have a
+            finished base prompt and only need per-model search-context
+            wrapping. Candidate for deprecation in a future major release;
+            see ``TODO.md`` § Opportunities.
 
         Args:
             base_prompt: The base prompt to optimize
