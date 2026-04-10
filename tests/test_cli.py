@@ -423,3 +423,108 @@ class TestWave17GitignoreReadCrash:
             assert result.exit_code in (0, 1)
         finally:
             os.chdir(original_cwd)
+
+
+# ============================================================================
+# REGRESSION TESTS — Wave 18 #92
+# ============================================================================
+
+
+class TestWave18ConnectivityUsesCfgUrls:
+    """Regression: connectivity helpers must honor cfg.exa_api_url /
+    cfg.firecrawl_api_url (persisted in .env or global TOML), not just
+    the raw environment variable. (Bug #92 — silent regression of #73)
+    """
+
+    def test_check_connectivity_uses_cfg_exa_url(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """aipea check --connectivity targets the custom Exa URL from AIPEAConfig."""
+        monkeypatch.delenv("AIPEA_EXA_API_URL", raising=False)
+        monkeypatch.delenv("AIPEA_FIRECRAWL_API_URL", raising=False)
+
+        # Persist custom URL via .env in a fresh cwd
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            'EXA_API_KEY="fake-exa-key"\n'
+            'AIPEA_EXA_API_URL="https://custom.exa.example/v1/search"\n'
+        )
+        import os as _os
+
+        original_cwd = _os.getcwd()
+        try:
+            _os.chdir(tmp_path)
+            captured: dict[str, object] = {}
+
+            def fake_post(url: str, **_kwargs: object) -> MagicMock:
+                captured["url"] = url
+                resp = MagicMock()
+                resp.status_code = 200
+                return resp
+
+            with patch("aipea.cli.httpx.post", side_effect=fake_post):
+                result = runner.invoke(app, ["check", "--connectivity"])
+            assert result.exit_code == 0
+            assert captured["url"] == "https://custom.exa.example/v1/search"
+        finally:
+            _os.chdir(original_cwd)
+
+    def test_check_connectivity_uses_cfg_firecrawl_url(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """aipea check --connectivity targets the custom Firecrawl URL from AIPEAConfig."""
+        monkeypatch.delenv("AIPEA_EXA_API_URL", raising=False)
+        monkeypatch.delenv("AIPEA_FIRECRAWL_API_URL", raising=False)
+
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            'FIRECRAWL_API_KEY="fake-fc-key"\n'
+            'AIPEA_FIRECRAWL_API_URL="https://custom.firecrawl.example/search"\n'
+        )
+        import os as _os
+
+        original_cwd = _os.getcwd()
+        try:
+            _os.chdir(tmp_path)
+            captured: dict[str, object] = {}
+
+            def fake_post(url: str, **_kwargs: object) -> MagicMock:
+                captured["url"] = url
+                resp = MagicMock()
+                resp.status_code = 200
+                return resp
+
+            with patch("aipea.cli.httpx.post", side_effect=fake_post):
+                result = runner.invoke(app, ["check", "--connectivity"])
+            assert result.exit_code == 0
+            assert captured["url"] == "https://custom.firecrawl.example/search"
+        finally:
+            _os.chdir(original_cwd)
+
+    def test_default_url_used_when_no_override(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Default Exa URL is used when no env / config override is set."""
+        monkeypatch.delenv("AIPEA_EXA_API_URL", raising=False)
+        env_file = tmp_path / ".env"
+        env_file.write_text('EXA_API_KEY="fake-exa-key"\n')
+
+        import os as _os
+
+        original_cwd = _os.getcwd()
+        try:
+            _os.chdir(tmp_path)
+            captured: dict[str, object] = {}
+
+            def fake_post(url: str, **_kwargs: object) -> MagicMock:
+                captured["url"] = url
+                resp = MagicMock()
+                resp.status_code = 200
+                return resp
+
+            with patch("aipea.cli.httpx.post", side_effect=fake_post):
+                result = runner.invoke(app, ["check", "--connectivity"])
+            assert result.exit_code == 0
+            assert captured["url"] == "https://api.exa.ai/search"
+        finally:
+            _os.chdir(original_cwd)
