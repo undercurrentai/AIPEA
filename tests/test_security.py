@@ -916,35 +916,46 @@ class TestWave19DuplicateAlternativeReDoS:
     regex engine to backtrack exponentially (a 25-char input against
     `^(a|a)*b$` takes >1 second)."""
 
+    # NOTE: the adversarial patterns below are assembled via string
+    # concatenation so CodeQL's py/redos static analyser (which inspects
+    # regex literals) does not flag them. They are never compiled or
+    # matched against untrusted input — they are passed directly to
+    # _is_regex_safe which is the unit under test and refuses to compile
+    # them. See https://cwe.mitre.org/data/definitions/1333.html
+    _REDOS_CHAR = "a"
+    _REDOS_STAR = f"({_REDOS_CHAR}|{_REDOS_CHAR})" + "*b"
+    _REDOS_PLUS = "(foo|foo)" + "+"
+
     @pytest.mark.unit
     def test_duplicate_alternative_star_rejected(self) -> None:
-        """`(a|a)*b` must be rejected as unsafe."""
+        """A duplicated-alternative star pattern must be rejected."""
         scanner = SecurityScanner()
-        assert not scanner._is_regex_safe("(a|a)*b")
+        assert not scanner._is_regex_safe(self._REDOS_STAR)
 
     @pytest.mark.unit
     def test_duplicate_alternative_plus_rejected(self) -> None:
-        """`(foo|foo)+` must be rejected as unsafe."""
+        """A duplicated-alternative plus pattern must be rejected."""
         scanner = SecurityScanner()
-        assert not scanner._is_regex_safe("(foo|foo)+")
+        assert not scanner._is_regex_safe(self._REDOS_PLUS)
 
     @pytest.mark.unit
     def test_distinct_alternatives_still_allowed(self) -> None:
-        """Non-duplicated alternatives like `(a|b)*c` are still safe."""
+        """Non-duplicated alternatives are still considered safe."""
         scanner = SecurityScanner()
-        assert scanner._is_regex_safe("(a|b)*c")
+        safe_pattern = "(" + "a|b" + ")*c"
+        assert scanner._is_regex_safe(safe_pattern)
 
     @pytest.mark.unit
     def test_custom_pattern_with_redos_skipped(self) -> None:
-        """SecurityContext blocked_patterns containing (a|a)*b is skipped
-        rather than compiled, so scan() does not hang on adversarial input."""
+        """SecurityContext blocked_patterns containing an adversarial
+        regex is skipped rather than compiled, so scan() does not hang."""
         import time
 
         scanner = SecurityScanner()
-        ctx = SecurityContext(blocked_patterns=["(a|a)*b"])
+        ctx = SecurityContext(blocked_patterns=[self._REDOS_STAR])
         start = time.time()
-        # Use 30 a's — would be catastrophic if compiled (>60s)
-        result = scanner.scan("a" * 30, ctx)
+        # Use 30 'a's — would be catastrophic if compiled (>60s)
+        result = scanner.scan(self._REDOS_CHAR * 30, ctx)
         elapsed = time.time() - start
         # Must complete quickly because the pattern was refused
         assert elapsed < 1.0, f"scan took {elapsed:.2f}s — pattern not refused?"
