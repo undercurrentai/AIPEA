@@ -780,4 +780,4 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 Wave 16 deferred: #79 (Exa score clamping), #80 (stats atomicity), #81 (timeout eagerness). All LOW severity with no functional impact.
 
 ---
-*Last updated: 2026-04-10 (Wave 17 — 8 bugs fixed, 5 deferred, 891 passing tests, 91.77% coverage)*
+*Last updated: 2026-04-10 (Wave 18 — 7 deferred bugs resolved, 1 reclassified as INTENTIONAL, 916 passing tests, 91.94% coverage)*

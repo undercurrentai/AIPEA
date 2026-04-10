@@ -232,6 +232,12 @@ parent: ../../CLAUDE.md
 | 2026-02-24 | Wave 11 bug hunt | 4 fixes (#44-#46 + 3 QG), 1 deferred (#47): 498→503 tests, 90.92%→90.25% coverage, 7,278→7,332 LOC, 41 FIXED, 7 INTENTIONAL, 4 DEFERRED |
 | 2026-03-09 | Wave 12 bug hunt | 5 fixes (#51-#55), 1 deferred (#56): 503→516 tests, 90.25%→90.20% coverage, 7,332→7,363 LOC, 46 FIXED, 7 INTENTIONAL, 1 DEFERRED |
 | 2026-03-09 | Docs-sync | README badges, CLAUDE.md metrics, audit packet refreshed |
+| 2026-03-13 | Wave 13 bug hunt | 7 fixes (#57-#63); FTS cleanup on delete/prune, Ollama ValueError propagation, seed-kb config path, semantic search access counts, clarification dedup fix, _doctor_knowledge_base resource leak |
+| 2026-03-13 | Wave 14 bug hunt | 10 fixes (#64-#72, #73); task_decomposition split pattern, Exa empty-query guard, .env perms check, gitignore substring, connectivity hardcoded URLs, FTS orphan rebuild, relevance_score upsert, OFFLINE_MODELS sync, TOML control-char escape, API URL lazy resolvers (wave 15) |
+| 2026-03-13 | Wave 15 deferred-resolution | 5 deferred items resolved (#56 homoglyph, #73 API URL lazy, #74 enhance_for_models per-model, #41 check exit code, #42 doctor format) |
+| 2026-03-14 | Wave 16 bug hunt | 4 fixes (#75-#78), 3 deferred (#79-#81 LOW): enhancer close()/context manager, dotenv quoted-value parser, knowledge TOCTOU, doctor duplicate output |
+| 2026-04-10 | Wave 17 bug hunt | 8 fixes (#82-#89), 5 deferred (#90-#94): Exa/Firecrawl null result coercion, template injection multiline, supplementary-context framing on multi-model, task numbering, conflict truncation, gitignore read hardening; 891 passing, 91.77% coverage |
+| 2026-04-10 | Wave 18 deferred-resolution + ultrathink | 7 fixes (#80, #81, #90-#94), 1 reclassified INTENTIONAL (#79 — Exa neural scores documented [0,1]); per-model query-section rebuild, atomic tempfile+fsync secret write, cfg.*_api_url plumbing, lazy HTTP_TIMEOUT, storage-stats lock, whitespace clarity guard, \uXXXX dotenv decode, SPECIFICATION.md drift fix; 916 passing, 91.94% coverage, ~9,580 source LOC, 0 DEFERRED |
 
 *Audit completed: 2026-02-14 | Auditor: Claude Code (Opus 4.6) | Protocol: v4.0*
-*Last amended: 2026-03-09*
+*Last amended: 2026-04-10 (Wave 18)*
