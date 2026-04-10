@@ -3,7 +3,7 @@
 Canonical tracker for all pending work. Replaces scattered items from ROADMAP.md,
 NEXT_STEPS.md, KNOWN_ISSUES.md, SPECIFICATION.md, and discovery findings.
 
-Last updated: 2026-04-10
+Last updated: 2026-04-10 (Wave 18: 7 deferred bugs fixed, 1 reclassified as INTENTIONAL)
 
 ---
 
@@ -30,21 +30,20 @@ Last updated: 2026-04-10
 
 ## Deferred Bugs (from bug-hunt waves)
 
-Full details in [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+All deferred entries from waves 16-17 were resolved in **Wave 18 (2026-04-10)**.
+Full details in [KNOWN_ISSUES.md](KNOWN_ISSUES.md) § "Wave 18 Fixes" and
+§ "Intentional Design Decisions".
 
-### MEDIUM severity (wave 17 — needs larger refactor)
+### Wave 18 — resolved
 
-- [ ] **#90**: `enhance_for_models` bakes first model's query-section format into all models — regression of wave 15 fix #74; requires reworking per-model prompt pipeline
-- [ ] **#91**: `save_dotenv`/`save_toml_config` TOCTOU race (umask → chmod window exposes secrets) — requires atomic file write via `os.open(..., 0o600)`
-- [ ] **#92**: `_test_exa/firecrawl_connectivity` ignore `cfg.*_api_url` — silent regression of wave 15 #73; requires refactoring signatures across multiple call sites
-
-### LOW severity (acceptable design tradeoffs)
-
-- [ ] **#79**: Exa score clamping vs normalization (`search.py:583-589`) — clamping works; normalization would require collecting all scores first
-- [ ] **#80**: Storage stats atomicity (`knowledge.py:884-896`) — stats are informational only
-- [ ] **#81**: HTTP_TIMEOUT eager vs URL lazy resolution inconsistency (`search.py:113`) — timeout frozen at import time is documented behavior
-- [ ] **#93**: `_score_clarity` returns 0.63 for whitespace-only enhanced prompt — marginal impact; upstream enhancers don't produce whitespace in practice
-- [ ] **#94**: `.env` writer emits `\uXXXX` escapes that the reader doesn't decode — asymmetric serialization; not harmful for printable secrets
+- [x] **#90**: `enhance_for_models` per-model query-section format — FIXED (rebuild per model via `formulate_search_aware_prompt` with cached search context)
+- [x] **#91**: `save_dotenv`/`save_toml_config` TOCTOU race — FIXED (atomic `tempfile.mkstemp` + `os.replace`; fsync for durability)
+- [x] **#92**: `_test_exa/firecrawl_connectivity` ignore `cfg.*_api_url` — FIXED (added `api_url` parameter, honored by all 4 call sites)
+- [x] **#79**: Exa score clamping — RECLASSIFIED AS INTENTIONAL (Exa neural scores are documented `[0, 1]` per https://docs.exa.ai/sdks/python-sdk-specification; normalization would destroy absolute semantics)
+- [x] **#80**: Storage stats atomicity — FIXED (single-lock read of node_count + stat; try/except OSError)
+- [x] **#81**: HTTP_TIMEOUT lazy resolution — FIXED (httpx call sites now call `_resolve_http_timeout()` at request time)
+- [x] **#93**: `_score_clarity` whitespace guard — FIXED (early return 0.0 for whitespace-only enhanced prompts)
+- [x] **#94**: `\uXXXX` decode on `.env` read — FIXED (`re.sub` pass in `_parse_dotenv` unescape block)
 
 ## Opportunities (nice-to-haves)
 

@@ -868,7 +868,8 @@ class TestAIPEAEnhancerEnhanceForModels:
         with patch.object(enhancer, "enhance", new_callable=AsyncMock, return_value=base_result):
             requests = await enhancer.enhance_for_models("test query", ["gpt-4"])
 
-        # Search context should appear exactly once (injected by create_model_specific_prompt)
+        # Search context should appear exactly once — embedded by
+        # formulate_search_aware_prompt during the per-model rebuild (#90).
         assert requests["gpt-4"].enhanced_prompt.count(shared_url) == 1
 
     @pytest.mark.unit
@@ -2038,6 +2039,156 @@ class TestEnhanceForModelsDifferentFormatting:
         result = await enhancer.enhance("test query", model_id="gpt-4")
         # Should complete without error — search context embedding is default True
         assert result is not None
+
+
+# ============================================================================
+# REGRESSION TESTS — Wave 18 #90
+# ============================================================================
+
+
+class TestWave18PerModelQuerySection:
+    """Regression: enhance_for_models must emit the correct query-section
+    format for EACH model, not bake in the first model's choice. (Bug #90)
+
+    engine.formulate_search_aware_prompt dispatches on model_type to emit
+    markdown ('## Query') for GPT, XML ('<query>...</query>') for Claude,
+    and numbered format ('Query:\\n1. ...') for Gemini.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_gpt_gets_markdown_query_section(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """GPT model receives '## Query' markdown header."""
+        enhancer = AIPEAEnhancer()
+        base_result = EnhancementResult(
+            original_query="test query",
+            enhanced_prompt="Enhanced: test query",
+            processing_tier=ProcessingTier.OFFLINE,
+            security_context=SecurityContext(),
+            query_analysis=QueryAnalysis(
+                query="test query",
+                query_type=QueryType.TECHNICAL,
+                complexity=0.5,
+                confidence=0.8,
+                needs_current_info=False,
+            ),
+            was_enhanced=True,
+        )
+        with patch.object(enhancer, "enhance", new_callable=AsyncMock, return_value=base_result):
+            requests = await enhancer.enhance_for_models("test query", model_ids=["gpt-4"])
+        assert "## Query" in requests["gpt-4"].enhanced_prompt
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_claude_gets_xml_query_section(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """Claude model receives '<query>...</query>' XML tags."""
+        enhancer = AIPEAEnhancer()
+        base_result = EnhancementResult(
+            original_query="test query",
+            enhanced_prompt="Enhanced: test query",
+            processing_tier=ProcessingTier.OFFLINE,
+            security_context=SecurityContext(),
+            query_analysis=QueryAnalysis(
+                query="test query",
+                query_type=QueryType.TECHNICAL,
+                complexity=0.5,
+                confidence=0.8,
+                needs_current_info=False,
+            ),
+            was_enhanced=True,
+        )
+        with patch.object(enhancer, "enhance", new_callable=AsyncMock, return_value=base_result):
+            requests = await enhancer.enhance_for_models(
+                "test query", model_ids=["claude-opus-4-6"]
+            )
+        prompt = requests["claude-opus-4-6"].enhanced_prompt
+        assert "<query>" in prompt
+        assert "</query>" in prompt
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_gemini_gets_numbered_query_section(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """Gemini model receives 'Query:\\n1. ...' numbered format."""
+        enhancer = AIPEAEnhancer()
+        base_result = EnhancementResult(
+            original_query="test query",
+            enhanced_prompt="Enhanced: test query",
+            processing_tier=ProcessingTier.OFFLINE,
+            security_context=SecurityContext(),
+            query_analysis=QueryAnalysis(
+                query="test query",
+                query_type=QueryType.TECHNICAL,
+                complexity=0.5,
+                confidence=0.8,
+                needs_current_info=False,
+            ),
+            was_enhanced=True,
+        )
+        with patch.object(enhancer, "enhance", new_callable=AsyncMock, return_value=base_result):
+            requests = await enhancer.enhance_for_models(
+                "test query", model_ids=["gemini-2.0-flash"]
+            )
+        prompt = requests["gemini-2.0-flash"].enhanced_prompt
+        # Gemini branch: "Query:\n1. {query}"
+        assert "Query:" in prompt
+        assert "1. test query" in prompt
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_three_models_get_three_distinct_query_sections(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """All three model families in one call receive their own format — the
+        core regression: before the fix, only the first model's format was used.
+        """
+        enhancer = AIPEAEnhancer()
+        base_result = EnhancementResult(
+            original_query="test query",
+            enhanced_prompt="Enhanced: test query",
+            processing_tier=ProcessingTier.OFFLINE,
+            security_context=SecurityContext(),
+            query_analysis=QueryAnalysis(
+                query="test query",
+                query_type=QueryType.TECHNICAL,
+                complexity=0.5,
+                confidence=0.8,
+                needs_current_info=False,
+            ),
+            was_enhanced=True,
+        )
+        with patch.object(enhancer, "enhance", new_callable=AsyncMock, return_value=base_result):
+            requests = await enhancer.enhance_for_models(
+                "test query",
+                model_ids=["gpt-4", "claude-opus-4-6", "gemini-2.0-flash"],
+            )
+
+        gpt_prompt = requests["gpt-4"].enhanced_prompt
+        claude_prompt = requests["claude-opus-4-6"].enhanced_prompt
+        gemini_prompt = requests["gemini-2.0-flash"].enhanced_prompt
+
+        # Each model gets its own distinctive marker
+        assert "## Query" in gpt_prompt
+        assert "<query>" in claude_prompt
+        assert "1. test query" in gemini_prompt
+
+        # GPT must NOT contain the Claude XML tags and vice versa — the bug
+        # was that all models shared the first model's format.
+        assert "<query>" not in gpt_prompt
+        assert "## Query" not in claude_prompt
 
 
 # ============================================================================

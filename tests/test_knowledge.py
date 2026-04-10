@@ -1009,5 +1009,67 @@ class TestPruneLowRelevanceRegression:
                 kb.close()
 
 
+# ============================================================================
+# REGRESSION TESTS — Wave 18 #80
+# ============================================================================
+
+
+class TestWave18StorageStatsAtomicity:
+    """Regression: get_storage_stats must read node_count and db_size_bytes
+    under the same DB lock so they are mutually consistent. (Bug #80)
+    """
+
+    @pytest.mark.asyncio
+    async def test_stats_read_uses_db_lock(self) -> None:
+        """Storage stats internally acquire the DB lock before reading both metrics."""
+        with tempfile.TemporaryDirectory() as td:
+            db_path = os.path.join(td, "stats_lock.db")
+            kb = OfflineKnowledgeBase(db_path=db_path, tier=StorageTier.STANDARD)
+            try:
+                await kb.add_knowledge("seed", KnowledgeDomain.GENERAL)
+                # Monkeypatch _with_db_lock to count acquisitions during the call
+                original_lock = kb._with_db_lock
+                acquisitions = {"count": 0}
+
+                import contextlib
+
+                @contextlib.contextmanager
+                def counting_lock() -> Any:
+                    acquisitions["count"] += 1
+                    with original_lock() as conn:
+                        yield conn
+
+                kb._with_db_lock = counting_lock  # type: ignore[method-assign]
+                try:
+                    stats = await kb.get_storage_stats()
+                finally:
+                    kb._with_db_lock = original_lock  # type: ignore[method-assign]
+
+                # Exactly one lock acquisition for both reads (atomic).
+                assert acquisitions["count"] == 1
+                assert stats["node_count"] == 1
+                assert stats["db_size_bytes"] > 0
+            finally:
+                kb.close()
+
+    @pytest.mark.asyncio
+    async def test_stats_shape_unchanged(self) -> None:
+        """Return shape is unchanged by the atomicity fix."""
+        with tempfile.TemporaryDirectory() as td:
+            db_path = os.path.join(td, "stats_shape.db")
+            kb = OfflineKnowledgeBase(db_path=db_path, tier=StorageTier.STANDARD)
+            try:
+                stats = await kb.get_storage_stats()
+                assert set(stats.keys()) == {
+                    "node_count",
+                    "db_size_bytes",
+                    "capacity_bytes",
+                    "utilization_percent",
+                }
+                assert stats["node_count"] == 0
+            finally:
+                kb.close()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

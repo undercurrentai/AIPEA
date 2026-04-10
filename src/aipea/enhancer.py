@@ -686,11 +686,13 @@ class AIPEAEnhancer:
             logger.warning("No compliant models provided in enhance_for_models; returning empty")
             return results
 
-        # Perform base enhancement once.  Per-model formatting is applied below
-        # via create_model_specific_prompt, preventing double model-specific wrapping.
-        # We use the actual compliance mode (not GENERAL) so PHI/classified scans run.
-        # Pick the first compliant model from model_ids for the base call so that
-        # the model passes the restricted allowlist check.
+        # Perform base enhancement once to run the security scan, query
+        # analysis, and search-context fetch.  We set embed_search_context
+        # to False here because per-model prompts are (re)built below via
+        # formulate_search_aware_prompt using the CACHED search context —
+        # that way every model gets its own query-section format
+        # (GPT markdown / Claude XML / Gemini numbered) instead of the
+        # first model's format baked in. (#90)
         base_model = compliant_model_ids[0]
         base_result = await self.enhance(
             query=query,
@@ -702,9 +704,7 @@ class AIPEAEnhancer:
         )
 
         # If the base enhancement was blocked (e.g. injection detected),
-        # do not wrap the block message in model-specific formatting.
-        # Passthrough results (enhancement disabled) also set was_enhanced=False
-        # but contain a valid prompt that should still be formatted per model.
+        # do not rebuild per-model prompts.
         is_blocked = (
             not base_result.was_enhanced
             and base_result.original_query != base_result.enhanced_prompt
@@ -715,15 +715,36 @@ class AIPEAEnhancer:
             )
             return results
 
+        # Compute complexity string from the cached analysis — same
+        # mapping as enhance() lines 588-593.
+        complexity_score = base_result.query_analysis.complexity
+        if complexity_score >= 0.7:
+            complexity = "complex"
+        elif complexity_score >= 0.4:
+            complexity = "medium"
+        else:
+            complexity = "simple"
+
+        query_type_value = base_result.query_analysis.query_type.value
+
         for model_id in compliant_model_ids:
-            # Get model-specific formatting
             model_family = get_model_family(model_id)
 
-            # Create model-specific prompt with per-model search formatting
-            model_prompt = await self._prompt_engine.create_model_specific_prompt(
-                base_prompt=base_result.enhanced_prompt,
-                model_type=model_family,
+            # Rebuild the full per-model prompt using the cached
+            # search_context.  formulate_search_aware_prompt dispatches
+            # on model_type to emit "## Query" for GPT, "<query>...</query>"
+            # for Claude, and the numbered format for Gemini — the whole
+            # point of the #90 fix.  Search context framing header
+            # (wave 17 #86) is embedded inside formulate_search_aware_prompt
+            # so nothing is lost.
+            model_prompt = await self._prompt_engine.formulate_search_aware_prompt(
+                query=query,
+                complexity=complexity,
                 search_context=base_result.search_context,
+                model_type=model_family,
+                query_type=query_type_value,
+                strategy=None,
+                embed_search_context=True,
             )
 
             results[model_id] = EnhancedRequest(
@@ -736,7 +757,7 @@ class AIPEAEnhancer:
                 metadata={
                     "model_family": model_family,
                     "base_enhancement_time_ms": base_result.enhancement_time_ms,
-                    "query_type": base_result.query_analysis.query_type.value,
+                    "query_type": query_type_value,
                 },
             )
 

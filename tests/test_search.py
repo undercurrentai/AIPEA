@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -1236,6 +1237,103 @@ class TestHTTPTimeoutEnvVar:
 
         assert isinstance(HTTP_TIMEOUT, float)
         assert HTTP_TIMEOUT > 0
+
+
+# =============================================================================
+# REGRESSION TESTS — Wave 18 #81
+# =============================================================================
+
+
+class TestWave18LazyHTTPTimeout:
+    """Regression: HTTP timeout must resolve lazily at request time, not be
+    frozen at module import time. (Bug #81)
+    """
+
+    def test_resolve_http_timeout_reads_env_at_call_time(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_resolve_http_timeout picks up env changes between calls."""
+        from aipea.search import _resolve_http_timeout
+
+        monkeypatch.setenv("AIPEA_HTTP_TIMEOUT", "15.0")
+        assert _resolve_http_timeout() == 15.0
+
+        monkeypatch.setenv("AIPEA_HTTP_TIMEOUT", "45.0")
+        assert _resolve_http_timeout() == 45.0
+
+    @pytest.mark.asyncio
+    async def test_exa_search_uses_lazy_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ExaSearchProvider.search resolves timeout at request time, not import time."""
+        import aipea.search as search_mod
+
+        monkeypatch.setenv("AIPEA_HTTP_TIMEOUT", "7.5")
+
+        captured: dict[str, Any] = {}
+
+        class _FakeAsyncClient:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                captured["timeout"] = kwargs.get("timeout")
+
+            async def __aenter__(self) -> _FakeAsyncClient:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                return None
+
+            async def post(self, *args: Any, **kwargs: Any) -> Any:
+                class _FakeResponse:
+                    status_code = 200
+
+                    def json(self) -> dict[str, Any]:
+                        return {"results": []}
+
+                    def raise_for_status(self) -> None:
+                        return None
+
+                return _FakeResponse()
+
+        monkeypatch.setattr(search_mod.httpx, "AsyncClient", _FakeAsyncClient)
+        provider = search_mod.ExaSearchProvider(api_key="fake-key")
+        await provider.search("test query", num_results=1)
+        assert captured["timeout"] == 7.5
+
+    @pytest.mark.asyncio
+    async def test_firecrawl_search_uses_lazy_timeout(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """FirecrawlProvider.search resolves timeout at request time, not import time."""
+        import aipea.search as search_mod
+
+        monkeypatch.setenv("AIPEA_HTTP_TIMEOUT", "12.25")
+
+        captured: dict[str, Any] = {}
+
+        class _FakeAsyncClient:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                captured["timeout"] = kwargs.get("timeout")
+
+            async def __aenter__(self) -> _FakeAsyncClient:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                return None
+
+            async def post(self, *args: Any, **kwargs: Any) -> Any:
+                class _FakeResponse:
+                    status_code = 200
+
+                    def json(self) -> dict[str, Any]:
+                        return {"data": []}
+
+                    def raise_for_status(self) -> None:
+                        return None
+
+                return _FakeResponse()
+
+        monkeypatch.setattr(search_mod.httpx, "AsyncClient", _FakeAsyncClient)
+        provider = search_mod.FirecrawlProvider(api_key="fake-key")
+        await provider.search("test query", num_results=1)
+        assert captured["timeout"] == 12.25
 
 
 # =============================================================================

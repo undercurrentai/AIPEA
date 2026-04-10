@@ -171,6 +171,10 @@ class QualityAssessor:
         (more readable) and rewards added question marks (clarifying).
         Also rewards structural markers (bullets, numbered lists, headings).
         """
+        # Whitespace-only or empty enhanced prompts contribute no clarity. (#93)
+        if not enhanced.strip():
+            return 0.0
+
         orig_avg = _avg_sentence_length(original)
         enh_avg = _avg_sentence_length(enhanced)
 

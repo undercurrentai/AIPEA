@@ -145,13 +145,13 @@ else:
         if connectivity:
             console.print("\n[bold]Connectivity Tests[/bold]")
             if cfg.has_exa():
-                if not _test_exa_connectivity(cfg.exa_api_key):
+                if not _test_exa_connectivity(cfg.exa_api_key, cfg.exa_api_url):
                     errors.append("Exa API connectivity test failed")
             else:
                 console.print("  Exa: [dim]skipped (no key)[/dim]")
 
             if cfg.has_firecrawl():
-                if not _test_firecrawl_connectivity(cfg.firecrawl_api_key):
+                if not _test_firecrawl_connectivity(cfg.firecrawl_api_key, cfg.firecrawl_api_url):
                     errors.append("Firecrawl API connectivity test failed")
             else:
                 console.print("  Firecrawl: [dim]skipped (no key)[/dim]")
@@ -167,13 +167,16 @@ else:
                 console.print(f"  [red]![/red] {error}")
             raise typer.Exit(1)
 
-    def _test_exa_connectivity(api_key: str, *, silent: bool = False) -> bool:
-        """Ping Exa API to verify the key works."""
-        import os as _os
+    def _test_exa_connectivity(api_key: str, api_url: str, *, silent: bool = False) -> bool:
+        """Ping Exa API to verify the key works.
 
+        ``api_url`` is passed in by the caller (typically from the resolved
+        :class:`AIPEAConfig`) so custom endpoints persisted in .env or
+        global TOML are honored. (#92)
+        """
         try:
             resp = httpx.post(
-                _os.environ.get("AIPEA_EXA_API_URL", "https://api.exa.ai/search"),
+                api_url,
                 headers={"x-api-key": api_key, "Content-Type": "application/json"},
                 json={"query": "test", "numResults": 1},
                 timeout=10.0,
@@ -191,13 +194,15 @@ else:
                 console.print(f"  Exa: [red]Error — {exc}[/red]")
             return False
 
-    def _test_firecrawl_connectivity(api_key: str, *, silent: bool = False) -> bool:
-        """Ping Firecrawl API to verify the key works."""
-        import os as _os
+    def _test_firecrawl_connectivity(api_key: str, api_url: str, *, silent: bool = False) -> bool:
+        """Ping Firecrawl API to verify the key works.
 
+        ``api_url`` is passed in by the caller so custom endpoints
+        persisted in .env or global TOML are honored. (#92)
+        """
         try:
             resp = httpx.post(
-                _os.environ.get("AIPEA_FIRECRAWL_API_URL", "https://api.firecrawl.dev/v1/search"),
+                api_url,
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
@@ -390,7 +395,7 @@ else:
     def _doctor_connectivity(chk: _DoctorChecks, cfg: AIPEAConfig) -> None:
         """Check API connectivity using consistent PASS/WARN/FAIL format."""
         if cfg.has_exa():
-            if _test_exa_connectivity(cfg.exa_api_key, silent=True):
+            if _test_exa_connectivity(cfg.exa_api_key, cfg.exa_api_url, silent=True):
                 chk.ok("Exa connectivity")
             else:
                 chk.fail("Exa connectivity", "API request failed")
@@ -398,7 +403,9 @@ else:
             chk.warn("Exa connectivity", "skipped (no key)")
 
         if cfg.has_firecrawl():
-            if _test_firecrawl_connectivity(cfg.firecrawl_api_key, silent=True):
+            if _test_firecrawl_connectivity(
+                cfg.firecrawl_api_key, cfg.firecrawl_api_url, silent=True
+            ):
                 chk.ok("Firecrawl connectivity")
             else:
                 chk.fail("Firecrawl connectivity", "API request failed")
@@ -636,9 +643,9 @@ else:
         if validate:
             console.print("\n[bold]Validating...[/bold]")
             if cfg.has_exa():
-                _test_exa_connectivity(cfg.exa_api_key)
+                _test_exa_connectivity(cfg.exa_api_key, cfg.exa_api_url)
             if cfg.has_firecrawl():
-                _test_firecrawl_connectivity(cfg.firecrawl_api_key)
+                _test_firecrawl_connectivity(cfg.firecrawl_api_key, cfg.firecrawl_api_url)
 
         # Summary
         console.print()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import stat
 from pathlib import Path
 
@@ -1029,3 +1030,136 @@ class TestDotenvQuoteEdgeCases:
         # Should be the raw string with leading quote, NOT a newline-expanded value
         assert result["KEY"] == '"path\\nvalue'
         assert "\n" not in result["KEY"]  # no newline expansion
+
+
+# ============================================================================
+# REGRESSION TESTS — Wave 18 #94
+# ============================================================================
+
+
+class TestWave18UnicodeEscapeDecode:
+    """Regression: _parse_dotenv must decode \\uXXXX escapes emitted by
+    _escape_config_value, so control characters in API keys round-trip
+    correctly between save_dotenv / load_config. (Bug #94)
+    """
+
+    def test_parse_decodes_unicode_escape(self, tmp_path: Path) -> None:
+        """\\u0001 in a double-quoted value decodes to U+0001."""
+        env_file = tmp_path / ".env"
+        env_file.write_text('KEY="value\\u0001x"\n')
+        result = _parse_dotenv(env_file)
+        assert result["KEY"] == "value\x01x"
+
+    def test_parse_decodes_multiple_unicode_escapes(self, tmp_path: Path) -> None:
+        """Multiple \\uXXXX sequences all decode."""
+        env_file = tmp_path / ".env"
+        env_file.write_text('KEY="a\\u0001b\\u001fc\\u007fd"\n')
+        result = _parse_dotenv(env_file)
+        assert result["KEY"] == "a\x01b\x1fc\x7fd"
+
+    def test_literal_backslash_u_not_decoded(self, tmp_path: Path) -> None:
+        """A literal backslash followed by u0041 (escaped \\\\u0041) must NOT become 'A'.
+
+        The \\\\ protection sentinel ensures literal backslashes survive the
+        unicode-escape pass unchanged.
+        """
+        env_file = tmp_path / ".env"
+        # In the file: KEY="\\u0041" — that's an escaped backslash + literal "u0041"
+        env_file.write_text('KEY="\\\\u0041"\n')
+        result = _parse_dotenv(env_file)
+        assert result["KEY"] == "\\u0041"  # literal backslash + "u0041"
+
+    def test_round_trip_control_characters(self, tmp_path: Path) -> None:
+        """save_dotenv + _parse_dotenv round-trips control characters."""
+        env_file = tmp_path / ".env"
+        original_key = "key\x01with\x1fcontrol\x7fchars"
+        cfg = AIPEAConfig(exa_api_key=original_key)
+        save_dotenv(env_file, cfg)
+        parsed = _parse_dotenv(env_file)
+        assert parsed["EXA_API_KEY"] == original_key
+
+    def test_round_trip_toml_control_characters(self, tmp_path: Path) -> None:
+        """save_toml_config + _parse_toml_config round-trips control characters."""
+        toml_file = tmp_path / "config.toml"
+        original_key = "firecrawl\x01key\x1fwith\x7fcontrol"
+        cfg = AIPEAConfig(firecrawl_api_key=original_key)
+        save_toml_config(toml_file, cfg)
+        parsed = _parse_toml_config(toml_file)
+        assert parsed["firecrawl_api_key"] == original_key
+
+
+# ============================================================================
+# REGRESSION TESTS — Wave 18 #91
+# ============================================================================
+
+
+class TestWave18AtomicWrite:
+    """Regression: save_dotenv and save_toml_config must write secret files
+    with ``0o600`` permissions from the first byte (no umask race). (Bug #91)
+    """
+
+    def test_dotenv_has_0o600_permissions_on_unix(self, tmp_path: Path) -> None:
+        """After save_dotenv, the .env file must have mode 0o600 on POSIX."""
+        import os as _os
+        import sys
+
+        if sys.platform == "win32":
+            pytest.skip("POSIX permissions do not apply to Windows")
+        env_file = tmp_path / ".env"
+        cfg = AIPEAConfig(exa_api_key="test-key")
+        save_dotenv(env_file, cfg)
+        mode = _os.stat(env_file).st_mode & 0o777
+        assert mode == 0o600, f"Expected 0o600, got {oct(mode)}"
+
+    def test_toml_has_0o600_permissions_on_unix(self, tmp_path: Path) -> None:
+        """After save_toml_config, the TOML file must have mode 0o600 on POSIX."""
+        import os as _os
+        import sys
+
+        if sys.platform == "win32":
+            pytest.skip("POSIX permissions do not apply to Windows")
+        toml_file = tmp_path / "config.toml"
+        cfg = AIPEAConfig(firecrawl_api_key="test-key")
+        save_toml_config(toml_file, cfg)
+        mode = _os.stat(toml_file).st_mode & 0o777
+        assert mode == 0o600, f"Expected 0o600, got {oct(mode)}"
+
+    def test_dotenv_content_written_correctly(self, tmp_path: Path) -> None:
+        """Atomic write produces identical content to the old write_text path."""
+        env_file = tmp_path / ".env"
+        cfg = AIPEAConfig(exa_api_key="exa-123", firecrawl_api_key="fc-456")
+        save_dotenv(env_file, cfg)
+        content = env_file.read_text(encoding="utf-8")
+        assert 'EXA_API_KEY="exa-123"' in content
+        assert 'FIRECRAWL_API_KEY="fc-456"' in content
+
+    def test_no_temp_file_leaked_on_success(self, tmp_path: Path) -> None:
+        """A successful save must leave no .env.*.tmp files behind."""
+        env_file = tmp_path / ".env"
+        cfg = AIPEAConfig(exa_api_key="abc")
+        save_dotenv(env_file, cfg)
+        leftover = list(tmp_path.glob(".env.*.tmp"))
+        assert leftover == []
+
+    def test_temp_file_cleaned_up_on_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If os.replace fails, the temp file must be unlinked and no target created."""
+        env_file = tmp_path / ".env"
+        cfg = AIPEAConfig(exa_api_key="abc")
+
+        original_replace = os.replace
+
+        def boom(src: object, dst: object) -> None:
+            raise OSError("simulated failure")
+
+        monkeypatch.setattr("aipea.config.os.replace", boom)
+        with pytest.raises(OSError, match="simulated failure"):
+            save_dotenv(env_file, cfg)
+        # Temp file cleaned up
+        leftover = list(tmp_path.glob(".env.*.tmp"))
+        assert leftover == []
+        # Target not created
+        assert not env_file.exists()
+        # Sanity: original os.replace still importable
+        _ = original_replace
