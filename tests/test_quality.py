@@ -179,3 +179,38 @@ class TestQualityAssessor:
         score = assessor.assess("hi", "Explain the concept in detail.")
         # Should not crash; specificity gain uses fallback
         assert 0.0 <= score.overall <= 1.0
+
+
+# =============================================================================
+# REGRESSION TESTS — Wave 18 #93
+# =============================================================================
+
+
+class TestWave18ClarityWhitespaceGuard:
+    """Regression: _score_clarity must return 0.0 for whitespace-only enhanced prompts.
+
+    Bug #93 — Before the fix, whitespace-only enhanced prompts produced
+    a clarity score of ~0.632 via the exp(-1) fallback path, misleadingly
+    suggesting meaningful clarity improvement from no output.
+    """
+
+    @pytest.mark.unit
+    def test_empty_enhanced_returns_zero_clarity(self) -> None:
+        """Empty string enhanced -> clarity = 0.0."""
+        assert QualityAssessor._score_clarity("some original query", "") == 0.0
+
+    @pytest.mark.unit
+    def test_whitespace_only_enhanced_returns_zero_clarity(self) -> None:
+        """Whitespace-only enhanced (spaces, tabs, newlines) -> clarity = 0.0."""
+        assert QualityAssessor._score_clarity("original", "   \n\n\t  ") == 0.0
+        assert QualityAssessor._score_clarity("original", "\r\n") == 0.0
+
+    @pytest.mark.unit
+    def test_real_enhanced_prompt_still_scored(self) -> None:
+        """Non-whitespace enhanced prompts retain their normal clarity score."""
+        score = QualityAssessor._score_clarity(
+            "Tell me about AI",
+            "Explain artificial intelligence. Include examples.",
+        )
+        assert score > 0.0
+        assert score <= 1.0
