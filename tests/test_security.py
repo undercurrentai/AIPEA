@@ -962,6 +962,33 @@ class TestWave19DuplicateAlternativeReDoS:
         # And the result must not claim custom_blocked (since pattern was skipped)
         assert not any(f.startswith("custom_blocked:") for f in result.flags)
 
+    # Ultrathink audit: 3+ alternative duplicates are WORSE than 2-alternative
+    # (empirically (a|a|a)*b hits >11s at only 18 chars, vs ~1.3s at 25 chars
+    # for (a|a)*b). The wave-19 heuristic only caught 2-alternative; extended
+    # to cover any quantified group whose first two alternatives are identical,
+    # regardless of how many additional alternatives follow.
+    _REDOS_TRIPLE = "(" + "|".join(["a"] * 3) + ")*b"
+    _REDOS_QUAD = "(" + "|".join(["foo"] * 2 + ["bar", "baz"]) + ")+x"
+
+    @pytest.mark.unit
+    def test_triple_duplicate_alternative_rejected(self) -> None:
+        """3-alternative duplicate `(X|X|X)*` (worse than 2-alt) must be rejected."""
+        scanner = SecurityScanner()
+        assert not scanner._is_regex_safe(self._REDOS_TRIPLE)
+
+    @pytest.mark.unit
+    def test_first_two_duplicate_with_trailing_distinct_rejected(self) -> None:
+        """`(foo|foo|bar|baz)+` (first two duplicate, more follow) must be rejected."""
+        scanner = SecurityScanner()
+        assert not scanner._is_regex_safe(self._REDOS_QUAD)
+
+    @pytest.mark.unit
+    def test_distinct_three_alternatives_still_allowed(self) -> None:
+        """Non-duplicated `(a|b|c)*` must remain safe."""
+        scanner = SecurityScanner()
+        safe_three = "(" + "|".join(["a", "b", "c"]) + ")*d"
+        assert scanner._is_regex_safe(safe_three)
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

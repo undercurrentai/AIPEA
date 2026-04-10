@@ -413,10 +413,15 @@ class SecurityScanner:
             logger.debug("Pattern rejected: contains overlapping alternatives with quantifiers")
             return False
 
-        # Check for duplicated alternatives in quantified groups, e.g. (a|a)*b.
-        # Python's re engine backtracks exponentially on such patterns (a 25-char
-        # input takes >1s to fail). Wave 18 coverage missed this class. (#107)
-        duplicate_alt_quant = r"\(([^|)]+)\|\1\)[+*]"
+        # Check for duplicated alternatives in quantified groups, e.g. (a|a)*b
+        # and (a|a|a)*b. Python's re engine backtracks exponentially on such
+        # patterns: `(a|a)*b` hits ~1.3s on 25 chars, and `(a|a|a)*b` hits
+        # >11s on only 18 chars (scales as alternatives^n). The heuristic
+        # matches any quantified group whose first two alternatives are
+        # identical, regardless of how many additional alternatives follow,
+        # via a backref capture. Non-consecutive duplicates like `(a|b|a)+`
+        # are rare in hand-written patterns and not caught here. (#107)
+        duplicate_alt_quant = r"\(([^|)]+)\|\1(?:\|[^)]*)?\)[+*]"
         if re.search(duplicate_alt_quant, pattern):
             logger.debug("Pattern rejected: duplicated alternative in quantified group")
             return False

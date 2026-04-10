@@ -1191,5 +1191,70 @@ class TestWave19InitDbBroadException:
                 OfflineKnowledgeBase(db_path=db_path, tier=StorageTier.STANDARD)
 
 
+class TestUltrathinkAddKnowledgeLockReleaseOnRollback:
+    """Ultrathink-audit extension of wave-19 bug #102.
+
+    The wave-19 fix wraps the node+FTS writes in a single transaction
+    under `with self._with_db_lock() as conn:` with an explicit rollback
+    on any `sqlite3.Error`. A failure mode the wave-19 regression tests
+    don't verify is that the lock is actually RELEASED after the
+    rollback+re-raise path — a leaked lock would hang every subsequent
+    KB operation forever. Verify by triggering a rollback and then
+    successfully running a second add_knowledge.
+    """
+
+    @pytest.mark.asyncio
+    async def test_lock_released_after_rollback(self) -> None:
+        """After a rollback + re-raise, the db lock must release so the
+        next add_knowledge call can proceed."""
+        import sqlite3
+
+        class FlakyOnceConnection(sqlite3.Connection):
+            failed: bool = False
+
+            def execute(self, sql: str, *params: object) -> sqlite3.Cursor:  # type: ignore[override]
+                if not type(self).failed and "INSERT INTO knowledge_fts" in sql:
+                    type(self).failed = True
+                    raise sqlite3.OperationalError("simulated FTS failure (once)")
+                return super().execute(sql, *params)  # type: ignore[arg-type]
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = os.path.join(td, "lock_release.db")
+            kb = OfflineKnowledgeBase(db_path=db_path, tier=StorageTier.STANDARD)
+            try:
+                if kb._conn is not None:
+                    kb._conn.close()
+                flaky = sqlite3.connect(
+                    db_path, factory=FlakyOnceConnection, check_same_thread=False
+                )
+                flaky.row_factory = sqlite3.Row
+                kb._conn = flaky
+
+                # First call fails and rolls back
+                with pytest.raises(sqlite3.OperationalError, match="simulated"):
+                    await kb.add_knowledge(
+                        content="first attempt content", domain=KnowledgeDomain.MILITARY
+                    )
+
+                # Lock must have released — second call should succeed
+                # within a bounded wait. If the lock leaked, this would
+                # hang indefinitely; asyncio.wait_for caps it.
+                import asyncio
+
+                node_id = await asyncio.wait_for(
+                    kb.add_knowledge(
+                        content="second attempt content after rollback",
+                        domain=KnowledgeDomain.MILITARY,
+                    ),
+                    timeout=5.0,
+                )
+                assert node_id
+                # Sanity: only the second node persisted (first rolled back)
+                stats = await kb.get_storage_stats()
+                assert stats["node_count"] == 1
+            finally:
+                kb.close()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -197,16 +197,27 @@ def _parse_dotenv(path: Path, *, strict: bool = False) -> dict[str, str]:
 
 
 def _parse_toml_config(path: Path) -> dict[str, str]:
-    """Parse ``~/.aipea/config.toml`` and return the ``[aipea]`` section."""
+    """Parse ``~/.aipea/config.toml`` and return the ``[aipea]`` section.
+
+    Handles a leading UTF-8 BOM (U+FEFF) that Windows editors like Notepad
+    often emit. `tomllib` rejects a BOM with `TOMLDecodeError: Invalid
+    statement (at line 1, column 1)` because the TOML spec disallows it,
+    but a user-created global config should not silently break. We strip
+    the BOM if present before handing the bytes to `tomllib.loads`.
+    Ultrathink-audit extension of the wave 19 #104 fix, which only covered
+    `_parse_dotenv`.
+    """
     values: dict[str, str] = {}
     try:
-        with path.open("rb") as fh:
-            data = tomllib.load(fh)
+        raw = path.read_bytes()
+        if raw.startswith(b"\xef\xbb\xbf"):
+            raw = raw[3:]
+        data = tomllib.loads(raw.decode("utf-8"))
         section = data.get("aipea", {})
         if isinstance(section, dict):
             for k, v in section.items():
                 values[k] = str(v)
-    except (OSError, tomllib.TOMLDecodeError) as exc:
+    except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
         logger.debug("Could not parse TOML config %s: %s", path, exc)
     return values
 

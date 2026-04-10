@@ -222,10 +222,61 @@ tests, zero deferred.
   rejected, plus variant rejected, distinct alternatives still
   allowed, custom pattern DoS is refused not hung).
 
+### Wave 19 Ultrathink Audit Extensions (2026-04-10)
+
+The post-fix ultrathink audit (`/ultrathink` quality-gate phase) surfaced
+four adjacent issues in the same code paths as the primary wave-19 bugs.
+Each extension has its own regression test class (`TestUltrathink*`).
+
+- **#107 extension** — Duplicate-alternative ReDoS at 3+ alternatives is
+  **worse** than 2-alt (empirically `(a|a|a)*b` hits 11.2s at only 18
+  chars vs ~1.3s at 25 chars for `(a|a)*b`), and the wave-19 heuristic
+  `\(([^|)]+)\|\1\)[+*]` only caught the 2-alternative case. Extended to
+  `\(([^|)]+)\|\1(?:\|[^)]*)?\)[+*]` which matches any quantified group
+  whose first two alternatives are identical, regardless of how many
+  additional alternatives follow. 3 regression tests added
+  (`TestWave19DuplicateAlternativeReDoS::test_triple_duplicate_alternative_rejected`,
+  `test_first_two_duplicate_with_trailing_distinct_rejected`,
+  `test_distinct_three_alternatives_still_allowed`).
+
+- **#96 extension** — The original bug-hunt agent report called out
+  "SSN, MRN, or SECRET//NOFORN marker" as examples that must not leak
+  through search snippets. The wave-19 fix filtered PHI (MRN, patient
+  name, DOB) and classified markers but missed PII (SSN, bank account,
+  credit card, bearer token). Under HIPAA Safe Harbor, these direct
+  identifiers ARE PHI. Extended `_scan_search_results` to also filter
+  `pii_detected:*` flags in HIPAA and TACTICAL modes. 3 regression
+  tests added (`TestUltrathinkScanSearchResultsPiiFiltering`:
+  HIPAA SSN filtered, TACTICAL SSN filtered, GENERAL SSN not filtered).
+
+- **#104 extension** — The wave-19 fix switched `_parse_dotenv` to the
+  `utf-8-sig` codec to strip a leading BOM. During audit we discovered
+  `_parse_toml_config` had the same class of bug: `tomllib.load`
+  rejects a BOM-prefixed TOML with `TOMLDecodeError: Invalid statement
+  (at line 1, column 1)` because the TOML spec disallows it. A
+  Notepad-created `~/.aipea/config.toml` would silently fail to load.
+  Fix: strip a leading BOM via `raw.startswith(b"\xef\xbb\xbf")` before
+  handing bytes to `tomllib.loads`; also widened the except clause to
+  include `UnicodeDecodeError` for garbage bytes. 3 regression tests
+  added (`TestUltrathinkTomlConfigBom`: BOM parses cleanly, non-BOM
+  still parses, corrupt returns empty).
+
+- **#102 extension** — The wave-19 atomicity fix wraps node+FTS writes
+  in a single transaction with rollback-and-re-raise on any
+  `sqlite3.Error`. A failure mode the primary regression tests do not
+  cover is whether the `_with_db_lock()` actually releases on the
+  rollback path — a leaked lock would hang every subsequent KB
+  operation. Added a regression test that triggers a once-flaky FTS
+  failure, verifies the first call rolls back, then runs a second
+  `add_knowledge` within an `asyncio.wait_for(..., timeout=5.0)`
+  bound to catch a hang rather than hanging the test suite
+  (`TestUltrathinkAddKnowledgeLockReleaseOnRollback::test_lock_released_after_rollback`).
+
 **Metrics**:
-- Tests: 916 → **958 passed**, 35 skipped (+42 regression tests)
-- Coverage: 91.94% → **92.36%** (well above 75% floor and 85% review)
-- Source LOC: ~9,580 → ~9,700 (approx, from fix additions)
+- Tests: 916 → **968 passed**, 35 skipped (+52 regression tests total:
+  42 wave-19 primary + 10 ultrathink extensions)
+- Coverage: 91.94% → **92.37%** (well above 75% floor and 85% review)
+- Source LOC: ~9,580 → ~9,720 (approx, from fix + extension additions)
 
 ---
 
@@ -1007,4 +1058,4 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 Wave 16 deferred: #79 (Exa score clamping), #80 (stats atomicity), #81 (timeout eagerness). All LOW severity with no functional impact.
 
 ---
-*Last updated: 2026-04-10 (Wave 18 — 7 deferred bugs resolved, 1 reclassified as INTENTIONAL, 916 passing tests, 91.94% coverage)*
+*Last updated: 2026-04-10 (Wave 19 — 13 bugs fixed + 4 ultrathink audit extensions, 0 deferred, 968 passing tests, 92.37% coverage)*

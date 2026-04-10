@@ -922,22 +922,28 @@ class AIPEAEnhancer:
                         result.title or result.url,
                     )
                     continue
-                # PHI / classified markers are surfaced as flags rather than
-                # is_blocked by SecurityScanner.scan. In HIPAA mode we MUST
-                # NOT forward PHI-containing web snippets to downstream
-                # models; in TACTICAL mode, ditto for classified markers.
-                # (#96)
-                if hipaa_mode and any(flag.startswith("phi_detected:") for flag in scan.flags):
+                # PHI / classified markers / PII are surfaced as flags
+                # rather than is_blocked by SecurityScanner.scan. In HIPAA
+                # mode we must not forward PHI-containing or PII-containing
+                # web snippets to downstream models — HIPAA Safe Harbor
+                # explicitly classifies SSN, account numbers, and similar
+                # direct identifiers as PHI, so PII flags also warrant
+                # filtering in HIPAA mode (ultrathink audit, wave 19).
+                # In TACTICAL mode ditto for classified markers and PII
+                # (direct identifiers should not leak to an external LLM
+                # in an air-gapped workflow). (#96)
+                has_phi = any(f.startswith("phi_detected:") for f in scan.flags)
+                has_pii = any(f.startswith("pii_detected:") for f in scan.flags)
+                has_classified = any(f.startswith("classified_marker:") for f in scan.flags)
+                if hipaa_mode and (has_phi or has_pii):
                     logger.warning(
-                        "Search result filtered (PHI in HIPAA mode): %s",
+                        "Search result filtered (PHI/PII in HIPAA mode): %s",
                         result.title or result.url,
                     )
                     continue
-                if tactical_mode and any(
-                    flag.startswith("classified_marker:") for flag in scan.flags
-                ):
+                if tactical_mode and (has_classified or has_pii):
                     logger.warning(
-                        "Search result filtered (classified marker in TACTICAL mode): %s",
+                        "Search result filtered (classified/PII in TACTICAL mode): %s",
                         result.title or result.url,
                     )
                     continue

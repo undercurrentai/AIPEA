@@ -2439,3 +2439,116 @@ class TestWave19EnhanceForModelsEmptyQuery:
         enhancer = AIPEAEnhancer()
         result = await enhancer.enhance_for_models("   \n\t  ", ["gpt-5.2", "claude-opus-4-6"])
         assert result == {}
+
+
+class TestUltrathinkScanSearchResultsPiiFiltering:
+    """Ultrathink-audit extension of wave-19 bug #96.
+
+    The wave-19 fix filtered PHI (HIPAA) and classified markers (TACTICAL)
+    from search snippets based on scan flags. The original bug report
+    called out 'SSN, MRN, or SECRET//NOFORN marker' as examples that
+    should not leak to downstream models. SSN is a PII pattern (not PHI),
+    so the wave-19 fix missed it. Under HIPAA Safe Harbor, SSN / bank
+    account numbers / credit cards / bearer tokens ARE direct identifiers
+    and must be treated as PHI. Same rationale for TACTICAL mode: direct
+    identifiers should not leak to an external LLM in an air-gapped flow."""
+
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_hipaa_mode_filters_ssn_pii(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """In HIPAA mode, a snippet containing an SSN (PII) must be filtered."""
+        enhancer = AIPEAEnhancer()
+        ctx = AIPEASearchContext(
+            query="medical billing",
+            results=[
+                SearchResult(
+                    title="Safe",
+                    url="https://example.com/safe",
+                    snippet="Billing cycle overview and payment processing.",
+                    score=0.9,
+                ),
+                SearchResult(
+                    title="PIILeak",
+                    url="https://example.com/pii",
+                    snippet="Contact record: 123-45-6789 on file.",
+                    score=0.8,
+                ),
+            ],
+            timestamp=datetime.now(UTC),
+            source="test",
+            confidence=0.8,
+        )
+        hipaa_ctx = SecurityContext(compliance_mode=ComplianceMode.HIPAA)
+        filtered = enhancer._scan_search_results(ctx, hipaa_ctx)
+        titles = [r.title for r in filtered.results]
+        assert "PIILeak" not in titles, "SSN-containing result should be filtered in HIPAA mode"
+        assert "Safe" in titles
+
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_tactical_mode_filters_ssn_pii(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """In TACTICAL mode, a snippet containing an SSN must be filtered."""
+        enhancer = AIPEAEnhancer()
+        ctx = AIPEASearchContext(
+            query="personnel record",
+            results=[
+                SearchResult(
+                    title="PIILeak",
+                    url="https://example.com/pii",
+                    snippet="Record: 123-45-6789 archived 2020.",
+                    score=0.8,
+                ),
+                SearchResult(
+                    title="Clean",
+                    url="https://example.com/clean",
+                    snippet="Personnel records policy summary.",
+                    score=0.9,
+                ),
+            ],
+            timestamp=datetime.now(UTC),
+            source="test",
+            confidence=0.8,
+        )
+        tactical_ctx = SecurityContext(compliance_mode=ComplianceMode.TACTICAL)
+        filtered = enhancer._scan_search_results(ctx, tactical_ctx)
+        titles = [r.title for r in filtered.results]
+        assert "PIILeak" not in titles
+        assert "Clean" in titles
+
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_general_mode_does_not_filter_ssn_pii(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """In GENERAL mode, SSN-containing snippets pass through.
+
+        PII is flagged in GENERAL mode but not filtered — research use
+        cases may legitimately include SSN text in the output.
+        """
+        enhancer = AIPEAEnhancer()
+        ctx = AIPEASearchContext(
+            query="public registry",
+            results=[
+                SearchResult(
+                    title="WithSSN",
+                    url="https://example.com/",
+                    snippet="Form requires 123-45-6789 on Line 3.",
+                    score=0.9,
+                ),
+            ],
+            timestamp=datetime.now(UTC),
+            source="test",
+            confidence=0.8,
+        )
+        general_ctx = SecurityContext(compliance_mode=ComplianceMode.GENERAL)
+        filtered = enhancer._scan_search_results(ctx, general_ctx)
+        # In GENERAL mode, PII is flagged but the result is not filtered —
+        # research/general use cases may legitimately include SSN text.
+        assert len(filtered.results) == 1

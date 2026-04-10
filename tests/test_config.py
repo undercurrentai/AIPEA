@@ -1283,3 +1283,37 @@ class TestWave19SaveDotenvStrictRead:
         """strict=True on a missing file still returns {} (FileNotFoundError path)."""
         env_file = tmp_path / "does-not-exist.env"
         assert _parse_dotenv(env_file, strict=True) == {}
+
+
+class TestUltrathinkTomlConfigBom:
+    """Ultrathink-audit extension of wave-19 bug #104.
+
+    The wave-19 fix made `_parse_dotenv` BOM-safe via `encoding="utf-8-sig"`.
+    During ultrathink audit we discovered `_parse_toml_config` had the same
+    class of bug: `tomllib.load` rejects a leading BOM with
+    `TOMLDecodeError: Invalid statement (at line 1, column 1)` because the
+    TOML spec disallows it. A Notepad-created `~/.aipea/config.toml` would
+    silently fail to load, with all config values defaulting. Fix: strip
+    a leading BOM before handing bytes to `tomllib.loads`."""
+
+    def test_bom_prefixed_toml_parses_cleanly(self, tmp_path: Path) -> None:
+        """A TOML config with a leading UTF-8 BOM must parse."""
+        cfg = tmp_path / "config.toml"
+        cfg.write_bytes(b'\xef\xbb\xbf[aipea]\nexa_api_key = "bom-key"\n')
+        result = _parse_toml_config(cfg)
+        assert result == {"exa_api_key": "bom-key"}
+
+    def test_non_bom_toml_still_parses(self, tmp_path: Path) -> None:
+        """Regular UTF-8 TOML (no BOM) must continue to parse."""
+        cfg = tmp_path / "config.toml"
+        cfg.write_text('[aipea]\nexa_api_key = "no-bom-key"\n', encoding="utf-8")
+        result = _parse_toml_config(cfg)
+        assert result == {"exa_api_key": "no-bom-key"}
+
+    def test_corrupt_toml_returns_empty(self, tmp_path: Path) -> None:
+        """Garbage non-UTF-8 bytes must not crash the parser."""
+        cfg = tmp_path / "config.toml"
+        cfg.write_bytes(b"\xff\xfe\x00\x01 not a valid toml document")
+        # Should return {} via the except clause, not raise.
+        result = _parse_toml_config(cfg)
+        assert result == {}
