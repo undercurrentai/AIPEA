@@ -1029,3 +1029,59 @@ class TestDotenvQuoteEdgeCases:
         # Should be the raw string with leading quote, NOT a newline-expanded value
         assert result["KEY"] == '"path\\nvalue'
         assert "\n" not in result["KEY"]  # no newline expansion
+
+
+# ============================================================================
+# REGRESSION TESTS — Wave 18 #94
+# ============================================================================
+
+
+class TestWave18UnicodeEscapeDecode:
+    """Regression: _parse_dotenv must decode \\uXXXX escapes emitted by
+    _escape_config_value, so control characters in API keys round-trip
+    correctly between save_dotenv / load_config. (Bug #94)
+    """
+
+    def test_parse_decodes_unicode_escape(self, tmp_path: Path) -> None:
+        """\\u0001 in a double-quoted value decodes to U+0001."""
+        env_file = tmp_path / ".env"
+        env_file.write_text('KEY="value\\u0001x"\n')
+        result = _parse_dotenv(env_file)
+        assert result["KEY"] == "value\x01x"
+
+    def test_parse_decodes_multiple_unicode_escapes(self, tmp_path: Path) -> None:
+        """Multiple \\uXXXX sequences all decode."""
+        env_file = tmp_path / ".env"
+        env_file.write_text('KEY="a\\u0001b\\u001fc\\u007fd"\n')
+        result = _parse_dotenv(env_file)
+        assert result["KEY"] == "a\x01b\x1fc\x7fd"
+
+    def test_literal_backslash_u_not_decoded(self, tmp_path: Path) -> None:
+        """A literal backslash followed by u0041 (escaped \\\\u0041) must NOT become 'A'.
+
+        The \\\\ protection sentinel ensures literal backslashes survive the
+        unicode-escape pass unchanged.
+        """
+        env_file = tmp_path / ".env"
+        # In the file: KEY="\\u0041" — that's an escaped backslash + literal "u0041"
+        env_file.write_text('KEY="\\\\u0041"\n')
+        result = _parse_dotenv(env_file)
+        assert result["KEY"] == "\\u0041"  # literal backslash + "u0041"
+
+    def test_round_trip_control_characters(self, tmp_path: Path) -> None:
+        """save_dotenv + _parse_dotenv round-trips control characters."""
+        env_file = tmp_path / ".env"
+        original_key = "key\x01with\x1fcontrol\x7fchars"
+        cfg = AIPEAConfig(exa_api_key=original_key)
+        save_dotenv(env_file, cfg)
+        parsed = _parse_dotenv(env_file)
+        assert parsed["EXA_API_KEY"] == original_key
+
+    def test_round_trip_toml_control_characters(self, tmp_path: Path) -> None:
+        """save_toml_config + _parse_toml_config round-trips control characters."""
+        toml_file = tmp_path / "config.toml"
+        original_key = "firecrawl\x01key\x1fwith\x7fcontrol"
+        cfg = AIPEAConfig(firecrawl_api_key=original_key)
+        save_toml_config(toml_file, cfg)
+        parsed = _parse_toml_config(toml_file)
+        assert parsed["firecrawl_api_key"] == original_key

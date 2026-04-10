@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import stat
 import tomllib
 from dataclasses import dataclass, field
@@ -133,8 +134,16 @@ def _parse_dotenv(path: Path) -> dict[str, str]:
                         .replace('\\"', '"')
                         .replace("\\n", "\n")
                         .replace("\\r", "\r")
-                        .replace("\x00", "\\")
                     )
+                    # Decode \uXXXX escapes emitted by _escape_config_value. (#94)
+                    # Runs BEFORE the \x00 sentinel is restored so literal
+                    # backslashes (e.g., raw "\\u0041") are never decoded.
+                    value = re.sub(
+                        r"\\u([0-9a-fA-F]{4})",
+                        lambda m: chr(int(m.group(1), 16)),
+                        value,
+                    )
+                    value = value.replace("\x00", "\\")
             else:
                 # No closing quote found — treat entire raw value as unquoted
                 value = raw_value
