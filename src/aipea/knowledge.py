@@ -882,9 +882,17 @@ class OfflineKnowledgeBase:
         return await asyncio.to_thread(self._get_storage_stats_sync)
 
     def _get_storage_stats_sync(self) -> dict[str, int | float]:
-        """Synchronous implementation of get_storage_stats (runs in thread pool)."""
-        node_count = self._get_node_count_sync()
-        db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
+        """Synchronous implementation of get_storage_stats (runs in thread pool).
+
+        Reads node_count and db_size under a single DB lock so the two
+        metrics are mutually consistent — no stale count / fresh file-size
+        mismatch if another thread writes to the DB mid-call. (#80)
+        """
+        with self._with_db_lock() as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM knowledge_nodes")
+            row = cursor.fetchone()
+            node_count = row[0] if row else 0
+            db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
         capacity = self.tier.capacity_bytes
         utilization = (db_size / capacity * 100) if capacity > 0 else 0
 
