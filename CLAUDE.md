@@ -4,7 +4,7 @@
 ```yaml
 version: 3.0.1
 status: ACTIVE
-tier: 2  # Standard (~8.8K LOC, 2 contributors, internal consumers)
+tier: 2  # Standard (~9.4K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
 inherits_from: ../../CLAUDE.md  # Undercurrent Holdings root
 maintainer: joshuakirby
@@ -26,7 +26,7 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~8,832 |
+| **Source LOC** | ~9,449 |
 | **Exports** | 36 symbols in `__all__` |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
