@@ -574,7 +574,15 @@ class ExaSearchProvider(SearchProvider):
                 data = response.json()
 
             results = []
-            for item in data.get("results", []):
+            # Defensive: Exa may return `{"results": null}` or non-list values
+            # under error conditions; coerce to empty list to preserve graceful
+            # degradation contract. (#82)
+            raw_results = data.get("results")
+            if not isinstance(raw_results, list):
+                raw_results = []
+            for item in raw_results:
+                if not isinstance(item, dict):
+                    continue
                 # Exa may return `text: null`; fall back to summary safely.
                 raw_snippet = item.get("text")
                 if raw_snippet is None:
@@ -610,7 +618,7 @@ class ExaSearchProvider(SearchProvider):
                 source=self.provider_name,
                 confidence=0.0,
             )
-        except (httpx.HTTPError, KeyError, ValueError) as e:
+        except (httpx.HTTPError, KeyError, ValueError, TypeError, AttributeError) as e:
             logger.warning("Exa search failed: %s", e)
             return SearchContext(
                 query=query,
@@ -714,7 +722,14 @@ class FirecrawlProvider(SearchProvider):
                 data = response.json()
 
             results = []
-            for item in data.get("data", []):
+            # Defensive: Firecrawl may return `{"data": null}` or non-list
+            # values under error conditions. (#83)
+            raw_data = data.get("data")
+            if not isinstance(raw_data, list):
+                raw_data = []
+            for item in raw_data:
+                if not isinstance(item, dict):
+                    continue
                 markdown_content = item.get("markdown") or ""
                 snippet = str(markdown_content)[:1000] if markdown_content else ""
                 metadata = item.get("metadata")
@@ -750,7 +765,7 @@ class FirecrawlProvider(SearchProvider):
                 source=self.provider_name,
                 confidence=0.0,
             )
-        except (httpx.HTTPError, KeyError, ValueError) as e:
+        except (httpx.HTTPError, KeyError, ValueError, TypeError, AttributeError) as e:
             logger.warning("Firecrawl search failed: %s", e)
             return SearchContext(
                 query=query,
@@ -817,7 +832,9 @@ class FirecrawlProvider(SearchProvider):
             inner = data.get("data")
             inner = inner if isinstance(inner, dict) else {}
             final_analysis = inner.get("finalAnalysis") or ""
-            sources = inner.get("sources") or []
+            # Defensive: sources may be null, a scalar, or contain non-dict items. (#84)
+            raw_sources = inner.get("sources")
+            sources = raw_sources if isinstance(raw_sources, list) else []
 
             results = []
             if final_analysis:
@@ -831,6 +848,8 @@ class FirecrawlProvider(SearchProvider):
                 )
 
             for source in sources[:5]:  # Limit to 5 sources
+                if not isinstance(source, dict):
+                    continue
                 results.append(
                     SearchResult(
                         title=source.get("title") or "Source",
@@ -858,7 +877,7 @@ class FirecrawlProvider(SearchProvider):
                 source=f"{self.provider_name}_deep",
                 confidence=0.0,
             )
-        except (httpx.HTTPError, KeyError, ValueError) as e:
+        except (httpx.HTTPError, KeyError, ValueError, TypeError, AttributeError) as e:
             logger.warning("Firecrawl deep research failed: %s", e)
             return SearchContext(
                 query=query,

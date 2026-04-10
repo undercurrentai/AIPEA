@@ -788,5 +788,39 @@ class TestUnicodeHomoglyphBypass:
         assert result.has_injection_attempt()
 
 
+class TestWave17TemplateInjectionNewlineBypass:
+    """Regression for bug #85: the `\\{\\{.*\\}\\}` pattern was bypassed
+    by newline characters because `.` doesn't match newlines without
+    re.DOTALL. Fix uses `[\\s\\S]*?` to match across newlines."""
+
+    @pytest.mark.unit
+    def test_single_line_template_injection_detected(self) -> None:
+        """Baseline: single-line template injection is detected."""
+        scanner = SecurityScanner()
+        ctx = SecurityContext()
+        result = scanner.scan("Hello {{config.SECRET_KEY}}", ctx)
+        assert result.is_blocked
+        assert result.has_injection_attempt()
+
+    @pytest.mark.unit
+    def test_multiline_template_injection_detected(self) -> None:
+        """Regression: multi-line template injection must be detected."""
+        scanner = SecurityScanner()
+        ctx = SecurityContext()
+        payload = "Hello {{\n  config.SECRET_KEY\n}} please"
+        result = scanner.scan(payload, ctx)
+        assert result.is_blocked, f"Multi-line expected block, got flags={result.flags}"
+        assert result.has_injection_attempt()
+
+    @pytest.mark.unit
+    def test_template_with_only_newline_separator(self) -> None:
+        """Regression: tight newline-only separator must be detected."""
+        scanner = SecurityScanner()
+        ctx = SecurityContext()
+        payload = "{{\n}}"
+        result = scanner.scan(payload, ctx)
+        assert result.is_blocked
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

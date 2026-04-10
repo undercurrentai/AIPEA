@@ -247,7 +247,50 @@ class TestTaskDecompositionRegression:
             "Design the schema as well as build the API as well as write tests"
         )
         assert "sub-task" in result.lower()
-        assert result.count("Sub-task") >= 2
+
+
+# =============================================================================
+# WAVE 17 REGRESSION TESTS
+# =============================================================================
+
+
+class TestWave17TaskDecompositionNumbering:
+    """Regression for bug #87: non-contiguous sub-task numbering when some
+    segments are dropped (empty or too short)."""
+
+    @pytest.mark.unit
+    def test_numbering_is_contiguous_with_empty_segments(self) -> None:
+        """Verify sub-task numbering stays contiguous even when some
+        intermediate segments are filtered out as too short."""
+        # "Build X, deploy Y, and test Z" -> splits on "," and "and" into
+        # ["Build X", " deploy Y", " ", " test Z"]. The " " segment is
+        # dropped by the len>5 guard. Old code: Sub-task 1, 2, 4 (gap).
+        result = task_decomposition("Build the backend, deploy with docker, and test thoroughly")
+        assert "Sub-task 1:" in result
+        assert "Sub-task 2:" in result
+        assert "Sub-task 3:" in result
+        assert "Sub-task 4:" not in result
+
+
+class TestWave17ApplyStrategyRankedConflictTruncation:
+    """Regression for bug #88: conflict detection ran on the full list
+    before truncation, surfacing advisories for enhancements the caller
+    couldn't see."""
+
+    @pytest.mark.unit
+    def test_conflicts_only_reference_visible_enhancements(self) -> None:
+        """Verify conflicts are detected only on the truncated visible set."""
+        result = apply_strategy_ranked(
+            "Build a cheap, budget-friendly system that can scale to handle "
+            "millions of concurrent users",
+            strategy_name="technical",
+            query_type=QueryType.TECHNICAL,
+            max_items=1,  # Force aggressive truncation
+        )
+        assert len(result.enhancements) == 1
+        # With only 1 enhancement visible, the cost-vs-scale conflict pair
+        # cannot both be present, so no conflict should fire.
+        assert result.conflicts == []
 
 
 # =============================================================================

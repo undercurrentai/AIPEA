@@ -681,10 +681,14 @@ def task_decomposition(query: str) -> str:
         query,
         flags=re.IGNORECASE,
     )
-    for i, segment in enumerate(segments, 1):
+    # Use a separate counter for accepted sub-tasks so dropped segments
+    # (empty or too-short) don't create gaps in the numbering. (#87)
+    task_num = 0
+    for segment in segments:
         segment = segment.strip()
         if segment and len(segment) > 5:
-            parts.append(f"Sub-task {i}: {segment}")
+            task_num += 1
+            parts.append(f"Sub-task {task_num}: {segment}")
 
     if parts:
         return "Decomposition: " + " | ".join(parts)
@@ -961,11 +965,13 @@ def apply_strategy_ranked(
     # Sort by relevance (highest first)
     all_enhancements.sort(key=lambda e: e.relevance, reverse=True)
 
-    # Detect conflicts
-    conflicts = _detect_conflicts(all_enhancements)
+    # Truncate first, then detect conflicts only against the visible set
+    # so callers don't see advisories referencing enhancements they can't see. (#88)
+    visible = all_enhancements[:max_items]
+    conflicts = _detect_conflicts(visible)
 
     return StrategyResult(
-        enhancements=all_enhancements[:max_items],
+        enhancements=visible,
         conflicts=conflicts,
         strategy_name=name,
     )
