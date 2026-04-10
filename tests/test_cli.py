@@ -388,3 +388,38 @@ class TestDoctorConnectivityNoDoubleOutput:
         # Count occurrences of "Exa" — should not have both "Exa: OK" and "Exa connectivity"
         lines_with_exa_ok = [ln for ln in result.output.splitlines() if "Exa:" in ln and "OK" in ln]
         assert len(lines_with_exa_ok) <= 1, f"Duplicate Exa output: {lines_with_exa_ok}"
+
+
+class TestWave17GitignoreReadCrash:
+    """Regression for bug #89: `doctor` and `configure` crashed on
+    `.gitignore` files that were non-UTF-8 encoded or unreadable."""
+
+    def test_doctor_handles_non_utf8_gitignore(self, tmp_path: Path) -> None:
+        """Verify doctor doesn't crash on non-UTF-8 .gitignore."""
+        import os
+
+        # Write a .gitignore file with invalid UTF-8 bytes
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            (tmp_path / ".gitignore").write_bytes(b"\xff\xfe\x00invalid utf-8")
+            result = runner.invoke(app, ["doctor"])
+            # Must not crash with a traceback
+            assert "Traceback" not in (result.output or "")
+            assert result.exit_code in (0, 1)
+        finally:
+            os.chdir(original_cwd)
+
+    def test_doctor_handles_missing_gitignore(self, tmp_path: Path) -> None:
+        """Verify doctor doesn't crash when no .gitignore exists."""
+        import os
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            # No .gitignore file
+            result = runner.invoke(app, ["doctor"])
+            assert "Traceback" not in (result.output or "")
+            assert result.exit_code in (0, 1)
+        finally:
+            os.chdir(original_cwd)

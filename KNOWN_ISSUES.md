@@ -1,6 +1,92 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-16 + Quality Gate: 2026-03-14)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-17 + Quality Gate: 2026-04-10)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Wave 17 Fixes (2026-04-10) — 8 bugs fixed, 5 deferred
+
+Lane A (Codex) was **skipped** because the OpenAI API quota was exceeded on the
+model probe. Lane B (Claude systematic sweep) ran with 3 parallel debugger
+agents covering all 14 source files and found 13 new bugs (5 MEDIUM + 8 LOW).
+
+### 82. ExaSearchProvider crashes (TypeError) on `{"results": null}` — FIXED
+- **File**: `src/aipea/search.py:577-620`
+- **Severity**: MEDIUM | **Confidence**: 0.90
+- **Source**: Claude sweep agent (core modules, wave 17)
+- **Fix**: Coerce `data.get("results")` to `[]` when not a list; skip non-dict items; widen except clause to include `TypeError, AttributeError`. 2 regression tests added.
+
+### 83. FirecrawlProvider crashes (TypeError) on `{"data": null}` — FIXED
+- **File**: `src/aipea/search.py:724-768`
+- **Severity**: MEDIUM | **Confidence**: 0.90
+- **Source**: Claude sweep agent (core modules, wave 17)
+- **Fix**: Same pattern as #82 — defensive list coercion + non-dict skip + wider except clause. 1 regression test added.
+
+### 84. Firecrawl `deep_research` crashes (AttributeError) on non-dict sources — FIXED
+- **File**: `src/aipea/search.py:831-882`
+- **Severity**: MEDIUM | **Confidence**: 0.90
+- **Source**: Claude sweep agent (core modules, wave 17)
+- **Fix**: Coerce sources list, skip non-dict items, wider except clause. 1 regression test added.
+
+### 85. Template injection `{{...}}` bypassed by newline characters — FIXED
+- **File**: `src/aipea/security.py:301`
+- **Severity**: MEDIUM | **Confidence**: 0.90
+- **Source**: Claude sweep agent (core modules, wave 17)
+- **Fix**: Changed pattern from `\{\{.*\}\}` to `\{\{[\s\S]*?\}\}` to match across newlines (non-greedy). Same class of bypass as wave 12 #51/#24 but for template injection. 3 regression tests added.
+
+### 86. `create_model_specific_prompt` drops "Supplementary Context" security framing — FIXED
+- **File**: `src/aipea/engine.py:1036-1051`
+- **Severity**: MEDIUM | **Confidence**: 0.90
+- **Source**: Claude sweep agent (facade/entry layer, wave 17)
+- **Fix**: Added the same prompt-injection mitigation header that `formulate_search_aware_prompt` uses. `enhance_for_models` callers now get defense-in-depth framing on their multi-model prompts. 2 regression tests added.
+
+### 87. `task_decomposition` produces non-contiguous sub-task numbering — FIXED
+- **File**: `src/aipea/strategies.py:678-691`
+- **Severity**: LOW | **Confidence**: 0.90
+- **Source**: Claude sweep agent (facade/entry layer, wave 17)
+- **Fix**: Use a separate `task_num` counter for accepted sub-tasks instead of `enumerate()` index, so skipped (too-short) segments don't create numbering gaps. 1 regression test added.
+
+### 88. `apply_strategy_ranked` conflict detection runs before truncation — FIXED
+- **File**: `src/aipea/strategies.py:961-975`
+- **Severity**: LOW | **Confidence**: 0.90
+- **Source**: Claude sweep agent (facade/entry layer, wave 17)
+- **Fix**: Truncate to `max_items` first, then detect conflicts on the visible set only. Previously, conflicts could reference enhancements the caller couldn't see. 1 regression test added.
+
+### 89. `doctor`/`configure` crash on non-UTF-8 or unreadable `.gitignore` — FIXED
+- **File**: `src/aipea/cli.py:309-325, 631` (extracted `_warn_if_env_not_in_gitignore` helper)
+- **Severity**: LOW | **Confidence**: 0.80
+- **Source**: Claude sweep agent (utility/config layer, wave 17)
+- **Fix**: Wrap `read_text()` in try/except for `OSError` and `UnicodeDecodeError`, downgrade to warning. Extracted the .gitignore check into a helper to keep `configure` under McCabe 15. 2 regression tests added.
+
+### Wave 17 — Deferred (5 issues)
+
+### 90. `enhance_for_models` bakes first compliant model's query section into all models — DEFERRED
+- **File**: `src/aipea/enhancer.py:694-727` + `engine.py:962-1049`
+- **Severity**: MEDIUM | **Confidence**: 0.90
+- **Source**: Claude sweep agent (facade/entry layer, wave 17)
+- **Rationale**: Wave 15 fix #74 only addressed search-context formatting, not the query-section format (markdown vs XML vs numbered list). Fix requires significant refactor of how per-model prompts are built — deferred to a future wave where we can rework the multi-model pipeline properly.
+
+### 91. `save_dotenv`/`save_toml_config` TOCTOU race (umask → chmod window) — DEFERRED
+- **File**: `src/aipea/config.py:460-464, 510-514`
+- **Severity**: MEDIUM | **Confidence**: 0.90
+- **Source**: Claude sweep agent (utility/config layer, wave 17)
+- **Rationale**: Secrets are briefly world-readable between `write_text()` (default umask 0o644) and `chmod(0o600)`. Fix requires atomic file write via `os.open(path, O_WRONLY|O_CREAT|O_TRUNC, 0o600)` + `os.fdopen` — significant change to file-writing utilities. Impact is limited to shared hosts where another user can race the chmod; on single-user machines the exposure window is nil. Deferred pending prioritization.
+
+### 92. `_test_exa/firecrawl_connectivity` ignore `cfg.*_api_url` — DEFERRED
+- **File**: `src/aipea/cli.py:170-219`
+- **Severity**: MEDIUM | **Confidence**: 0.90
+- **Source**: Claude sweep agent (utility/config layer, wave 17)
+- **Rationale**: Silent regression of wave 15 fix #73 — users who persist custom endpoints via `.env`/TOML have their connectivity tests probe the public default URL instead. Fix requires refactoring function signatures to accept the config object across multiple call sites (`check`, `doctor`). Deferred until we can do it in one clean pass.
+
+### 93. `_score_clarity` returns 0.63 for whitespace-only enhanced prompt — DEFERRED
+- **File**: `src/aipea/quality.py:179-180`
+- **Severity**: LOW | **Confidence**: 0.60
+- **Source**: Claude sweep agent (core modules, wave 17)
+- **Rationale**: Math edge case — `_avg_sentence_length` returns 0.0 for whitespace, fallback sets `len_ratio = 1.0`, producing `1 - exp(-1) ≈ 0.632`. Marginal impact; upstream enhancers don't produce whitespace-only output in practice.
+
+### 94. `_escape_config_value` emits `\uXXXX` but `_parse_dotenv` doesn't decode it — DEFERRED
+- **File**: `src/aipea/config.py:129-137, 389-399`
+- **Severity**: LOW | **Confidence**: 0.85
+- **Source**: Claude sweep agent (utility/config layer, wave 17)
+- **Rationale**: Wave 14 fix #72 added `\uXXXX` escaping for TOML control chars but the `.env` reader doesn't decode them. Round-trip corruption only triggers for control characters in .env values, which API keys and URLs don't contain in practice. Not actively harmful; fix is a 1-line `re.sub` in `_parse_dotenv`, deferred for bundling with other config improvements.
 
 ## Wave 16 Fixes (2026-03-14) — 4 bugs fixed, 3 deferred
 
@@ -583,4 +669,4 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 Wave 16 deferred: #79 (Exa score clamping), #80 (stats atomicity), #81 (timeout eagerness). All LOW severity with no functional impact.
 
 ---
-*Last updated: 2026-04-09 (Post-Wave 16 — 3 deferred LOW bugs remain, 878 passing tests, 91.74% coverage)*
+*Last updated: 2026-04-10 (Wave 17 — 8 bugs fixed, 5 deferred, 891 passing tests, 91.77% coverage)*

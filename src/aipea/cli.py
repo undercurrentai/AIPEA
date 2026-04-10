@@ -308,16 +308,22 @@ else:
 
         gitignore_path = Path.cwd() / ".gitignore"
         if gitignore_path.exists():
-            content = gitignore_path.read_text(encoding="utf-8")
-            gitignore_entries = [
-                ln.strip()
-                for ln in content.splitlines()
-                if ln.strip() and not ln.strip().startswith("#")
-            ]
-            if any(entry in (".env", "/.env") for entry in gitignore_entries):
-                chk.ok(".gitignore", ".env is listed")
-            else:
-                chk.warn(".gitignore", ".env is NOT listed — secrets may be committed!")
+            try:
+                content = gitignore_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as e:
+                # Defensive: .gitignore may be non-UTF-8 or unreadable. (#89)
+                chk.warn(".gitignore", f"unable to read: {e}")
+                content = None
+            if content is not None:
+                gitignore_entries = [
+                    ln.strip()
+                    for ln in content.splitlines()
+                    if ln.strip() and not ln.strip().startswith("#")
+                ]
+                if any(entry in (".env", "/.env") for entry in gitignore_entries):
+                    chk.ok(".gitignore", ".env is listed")
+                else:
+                    chk.warn(".gitignore", ".env is NOT listed — secrets may be committed!")
         else:
             chk.warn(".gitignore", "file not found")
 
@@ -517,6 +523,36 @@ else:
                 )
             )
 
+    def _warn_if_env_not_in_gitignore() -> None:
+        """Check .gitignore for .env entry and warn if missing.
+
+        Extracted from ``configure`` to keep its McCabe complexity under the
+        project's 15-ceiling and to defensively handle non-UTF-8 or unreadable
+        ``.gitignore`` files. (#89)
+        """
+        gitignore = Path.cwd() / ".gitignore"
+        if not gitignore.exists():
+            console.print(
+                "[yellow]Warning: No .gitignore found — "
+                "create one and add .env to prevent committing secrets![/yellow]"
+            )
+            return
+        try:
+            content = gitignore.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            console.print(f"[yellow]Warning: unable to read .gitignore ({e})[/yellow]")
+            return
+        gi_entries = [
+            ln.strip()
+            for ln in content.splitlines()
+            if ln.strip() and not ln.strip().startswith("#")
+        ]
+        if not any(entry in (".env", "/.env") for entry in gi_entries):
+            console.print(
+                "[yellow]Warning: .env is not in .gitignore — "
+                "add it to prevent committing secrets![/yellow]"
+            )
+
     # ================================================================
     # aipea configure
     # ================================================================
@@ -594,25 +630,7 @@ else:
             save_dotenv(target, cfg)
             console.print(f"\n[green]Saved to {target}[/green]")
 
-            # Check .gitignore
-            gitignore = Path.cwd() / ".gitignore"
-            if gitignore.exists():
-                content = gitignore.read_text(encoding="utf-8")
-                gi_entries = [
-                    ln.strip()
-                    for ln in content.splitlines()
-                    if ln.strip() and not ln.strip().startswith("#")
-                ]
-                if not any(entry in (".env", "/.env") for entry in gi_entries):
-                    console.print(
-                        "[yellow]Warning: .env is not in .gitignore — "
-                        "add it to prevent committing secrets![/yellow]"
-                    )
-            else:
-                console.print(
-                    "[yellow]Warning: No .gitignore found — "
-                    "ensure .env is not committed to version control![/yellow]"
-                )
+            _warn_if_env_not_in_gitignore()
 
         # Validate keys
         if validate:

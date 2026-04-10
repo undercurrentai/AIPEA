@@ -1494,5 +1494,124 @@ class TestApiUrlResolvers:
             assert _resolve_firecrawl_api_url() == "https://config.fc.test/v1/search"
 
 
+# =============================================================================
+# WAVE 17 REGRESSION TESTS
+# =============================================================================
+
+
+class TestWave17NullHandling:
+    """Regression tests for bugs #82, #83, #84 — providers must gracefully
+    degrade (return empty SearchContext) when APIs return null lists or
+    non-dict items, rather than propagating TypeError/AttributeError."""
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_exa_handles_null_results_field(self) -> None:
+        """Regression #82: Exa `{"results": null}` must return empty context."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from aipea.search import ExaSearchProvider, SearchContext
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"results": None}
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch("aipea.search.httpx.AsyncClient", return_value=mock_client):
+            provider = ExaSearchProvider(api_key="test-key")
+            result = await provider.search("test query")
+
+        assert isinstance(result, SearchContext)
+        assert result.results == []
+        assert result.is_empty()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_exa_handles_non_dict_items(self) -> None:
+        """Regression #82: Exa list with non-dict items must skip invalid items."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from aipea.search import ExaSearchProvider
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            "results": ["invalid string", None, {"title": "Valid", "url": "https://x.com"}]
+        }
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch("aipea.search.httpx.AsyncClient", return_value=mock_client):
+            provider = ExaSearchProvider(api_key="test-key")
+            result = await provider.search("test")
+
+        # Only the valid dict should produce a result
+        assert len(result.results) == 1
+        assert result.results[0].title == "Valid"
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_firecrawl_handles_null_data_field(self) -> None:
+        """Regression #83: Firecrawl `{"data": null}` must return empty context."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from aipea.search import FirecrawlProvider, SearchContext
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"data": None}
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch("aipea.search.httpx.AsyncClient", return_value=mock_client):
+            provider = FirecrawlProvider(api_key="test-key")
+            result = await provider.search("test query")
+
+        assert isinstance(result, SearchContext)
+        assert result.results == []
+        assert result.is_empty()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_firecrawl_deep_research_handles_non_dict_sources(self) -> None:
+        """Regression #84: deep_research sources with non-dict items must
+        skip invalid entries instead of raising AttributeError."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from aipea.search import FirecrawlProvider
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            "data": {
+                "finalAnalysis": "Research summary",
+                "sources": ["https://bad.url", None, {"title": "Valid", "url": "https://x.com"}],
+            }
+        }
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch("aipea.search.httpx.AsyncClient", return_value=mock_client):
+            provider = FirecrawlProvider(api_key="test-key")
+            result = await provider.deep_research("test")
+
+        # Should not raise. Contains finalAnalysis + 1 valid source.
+        assert len(result.results) == 2
+        assert any(r.title == "Valid" for r in result.results)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

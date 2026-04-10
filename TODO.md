@@ -3,7 +3,7 @@
 Canonical tracker for all pending work. Replaces scattered items from ROADMAP.md,
 NEXT_STEPS.md, KNOWN_ISSUES.md, SPECIFICATION.md, and discovery findings.
 
-Last updated: 2026-04-09
+Last updated: 2026-04-10
 
 ---
 
@@ -28,20 +28,30 @@ Last updated: 2026-04-09
 - [ ] **FedRAMP enforcement** — beyond config stub; actual enforcement logic in `security.py:611-626` (README notes "planned")
 - [ ] **BDI Reasoning** (P4, conditional) — only if AIPEA evolves into an autonomous agent participating in multi-agent orchestration
 
-## Deferred Bugs (LOW severity)
+## Deferred Bugs (from bug-hunt waves)
 
-All LOW severity with no functional impact. Full details in [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+Full details in [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+
+### MEDIUM severity (wave 17 — needs larger refactor)
+
+- [ ] **#90**: `enhance_for_models` bakes first model's query-section format into all models — regression of wave 15 fix #74; requires reworking per-model prompt pipeline
+- [ ] **#91**: `save_dotenv`/`save_toml_config` TOCTOU race (umask → chmod window exposes secrets) — requires atomic file write via `os.open(..., 0o600)`
+- [ ] **#92**: `_test_exa/firecrawl_connectivity` ignore `cfg.*_api_url` — silent regression of wave 15 #73; requires refactoring signatures across multiple call sites
+
+### LOW severity (acceptable design tradeoffs)
 
 - [ ] **#79**: Exa score clamping vs normalization (`search.py:583-589`) — clamping works; normalization would require collecting all scores first
 - [ ] **#80**: Storage stats atomicity (`knowledge.py:884-896`) — stats are informational only
 - [ ] **#81**: HTTP_TIMEOUT eager vs URL lazy resolution inconsistency (`search.py:113`) — timeout frozen at import time is documented behavior
+- [ ] **#93**: `_score_clarity` returns 0.63 for whitespace-only enhanced prompt — marginal impact; upstream enhancers don't produce whitespace in practice
+- [ ] **#94**: `.env` writer emits `\uXXXX` escapes that the reader doesn't decode — asymmetric serialization; not harmful for printable secrets
 
 ## Opportunities (nice-to-haves)
 
 - [ ] Mutation testing (`make mut`) in CI
 - [ ] Benchmark regression detection (`make perf`) in CI
 - [ ] SBOM generation in `publish.yml`
-- [ ] Dynamic coverage badge (Codecov/Coveralls) to replace static shield
+- [x] ~~Dynamic coverage badge (Codecov/Coveralls) to replace static shield~~ — done 2026-04-09 via PR #9
 - [ ] Float validation dedup — extract `_clamp_score()` helper
 - [ ] `QueryRouter.route()` complexity reduction
 

@@ -1601,5 +1601,43 @@ class TestEmbedSearchContext:
         assert "Supplementary Context from Web Search" in prompt
 
 
+class TestWave17CreateModelSpecificPromptSecurityFraming:
+    """Regression for bug #86: ``create_model_specific_prompt`` dropped the
+    prompt-injection mitigation header. ``enhance_for_models`` calls this
+    method, so multi-model callers lost defense-in-depth framing around
+    search context."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_security_framing_included_with_search_context(self) -> None:
+        """Verify the Supplementary Context header appears in multi-model path."""
+        engine = PromptEngine()
+        ctx = SearchContext(
+            query="test",
+            results=[SearchResult(title="Article", url="https://t.co", snippet="info", score=0.9)],
+            source="exa",
+            confidence=0.8,
+        )
+        prompt = await engine.create_model_specific_prompt(
+            base_prompt="BASE PROMPT",
+            model_type="openai",
+            search_context=ctx,
+        )
+        assert "Supplementary Context from Web Search" in prompt
+        assert "verify claims" in prompt
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_no_framing_without_search_context(self) -> None:
+        """The header only appears when search context is present."""
+        engine = PromptEngine()
+        prompt = await engine.create_model_specific_prompt(
+            base_prompt="BASE PROMPT",
+            model_type="openai",
+            search_context=None,
+        )
+        assert "Supplementary Context from Web Search" not in prompt
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

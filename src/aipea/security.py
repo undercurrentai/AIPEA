@@ -298,7 +298,7 @@ class SecurityScanner:
         r"(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:",  # Conversation separator injection
         r"DROP\s+TABLE",
         r"UNION\s+SELECT",
-        r"\{\{.*\}\}",  # Template injection
+        r"\{\{[\s\S]*?\}\}",  # Template injection (DOTALL-compatible, non-greedy)
         r"<script[^>]*>",  # XSS attempt
     ]
 
