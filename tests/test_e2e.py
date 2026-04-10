@@ -721,7 +721,10 @@ class TestE2EPromptEnhancement:
             model_id="claude-opus-4-6",
             force_offline=True,
         )
-        assert "2026" in result.enhanced_prompt
+        from datetime import UTC, datetime
+
+        current_year = str(datetime.now(UTC).year)
+        assert current_year in result.enhanced_prompt
 
     async def test_contains_original_query(self) -> None:
         """Verify enhanced prompt contains the original topic."""

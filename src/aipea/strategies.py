@@ -935,6 +935,7 @@ def apply_strategy_ranked(
     if strategy is None:
         logger.warning("Unknown strategy %r, falling back to 'general'", name)
         strategy = STRATEGY_REGISTRY["general"]
+        name = strategy.name
 
     domain = _QUERY_TYPE_DOMAIN.get(query_type, "general")
     all_enhancements: list[ScoredEnhancement] = []
