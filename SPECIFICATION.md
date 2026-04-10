@@ -1279,8 +1279,11 @@ class AIPEAEnhancer:
         model_ids: list[str],
         security_level: SecurityLevel = SecurityLevel.UNCLASSIFIED,
     ) -> dict[str, EnhancedRequest]: ...
-    # enhance_for_models calls enhance(embed_search_context=False) internally,
-    # then applies per-model search context formatting via create_model_specific_prompt().
+    # enhance_for_models calls enhance(embed_search_context=False) once to
+    # run the security scan, query analysis, and search-context fetch, then
+    # rebuilds each model's prompt via formulate_search_aware_prompt() with
+    # the cached search_context so every model gets its own query-section
+    # format (GPT markdown, Claude XML, Gemini numbered). (wave 18 #90)
 
     def close(self) -> None: ...
     def __enter__(self) -> AIPEAEnhancer: ...

@@ -414,8 +414,11 @@ def _atomic_write_secret(path: Path, content: str) -> None:
 
     Uses ``tempfile.mkstemp`` to create a fresh file in the target directory
     with ``0o600`` permissions from the very first byte — no umask window
-    during which another local user could read the plaintext. The temp
-    file is then atomically replaced over the target via ``os.replace``.
+    during which another local user could read the plaintext. Data is
+    flushed and ``fsync``-ed to disk before the rename, so a crash
+    between write and rename cannot leave a zero-byte file in place.
+    The temp file is then atomically replaced over the target via
+    ``os.replace``.
 
     Ensures the parent directory exists. On any exception the partial
     temp file is cleaned up and the original is left untouched.
@@ -431,6 +434,12 @@ def _atomic_write_secret(path: Path, content: str) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(content)
+            # Durability: force kernel to flush page cache to disk before
+            # rename so a crash between write and replace cannot leave a
+            # truncated or zero-byte file on next boot. (ultrathink finding)
+            f.flush()
+            with contextlib.suppress(OSError):
+                os.fsync(f.fileno())
         os.replace(tmp_path, str(path))
     except Exception:
         with contextlib.suppress(OSError):

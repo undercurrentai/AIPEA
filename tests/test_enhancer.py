@@ -868,7 +868,8 @@ class TestAIPEAEnhancerEnhanceForModels:
         with patch.object(enhancer, "enhance", new_callable=AsyncMock, return_value=base_result):
             requests = await enhancer.enhance_for_models("test query", ["gpt-4"])
 
-        # Search context should appear exactly once (injected by create_model_specific_prompt)
+        # Search context should appear exactly once — embedded by
+        # formulate_search_aware_prompt during the per-model rebuild (#90).
         assert requests["gpt-4"].enhanced_prompt.count(shared_url) == 1
 
     @pytest.mark.unit

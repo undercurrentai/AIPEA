@@ -892,7 +892,12 @@ class OfflineKnowledgeBase:
             cursor = conn.execute("SELECT COUNT(*) FROM knowledge_nodes")
             row = cursor.fetchone()
             node_count = row[0] if row else 0
-            db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
+            # Use try/except rather than exists()+stat() to avoid a residual
+            # TOCTOU window between the two syscalls. (ultrathink finding)
+            try:
+                db_size = self.db_path.stat().st_size
+            except OSError:
+                db_size = 0
         capacity = self.tier.capacity_bytes
         utilization = (db_size / capacity * 100) if capacity > 0 else 0
 
