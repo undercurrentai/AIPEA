@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (Wave 18 — 7 deferred bugs resolved, 1 reclassified)
+- **enhancer**: `enhance_for_models()` now rebuilds the per-model prompt via `formulate_search_aware_prompt()` using the cached search context, so every model gets its own query-section format (GPT markdown, Claude XML, Gemini numbered) instead of baking the first model's format into all outputs (#90)
+- **config**: `save_dotenv` and `save_toml_config` now write atomically via `tempfile.mkstemp` + `os.replace`, eliminating the umask/chmod TOCTOU window during which secret files could briefly be world-readable on shared hosts (#91)
+- **cli**: `_test_exa_connectivity` and `_test_firecrawl_connectivity` now accept an `api_url` parameter; callers pass `cfg.exa_api_url` / `cfg.firecrawl_api_url` so custom endpoints persisted in `.env` or global TOML are honored (silent regression of wave 15 #73) (#92)
+- **knowledge**: `_get_storage_stats_sync` now reads `node_count` and `db_size_bytes` under a single `_with_db_lock()` block, preventing stale-count / fresh-file-size mismatches from concurrent writes (#80)
+- **search**: Exa and Firecrawl providers now call `_resolve_http_timeout()` at request time instead of using the module-level `HTTP_TIMEOUT` constant frozen at import; aligns HTTP timeout resolution with the already-lazy URL resolution from wave 15 #73 (#81)
+- **quality**: `_score_clarity` returns `0.0` for whitespace-only enhanced prompts instead of the misleading `1 - exp(-1) ≈ 0.632` fallback (#93)
+- **config**: `_parse_dotenv` now decodes `\uXXXX` escapes emitted by `_escape_config_value` via `re.sub`, closing the round-trip gap opened by wave 14 #72. Literal backslashes (raw `\\u0041`) are preserved unchanged thanks to the existing `\x00` protection sentinel (#94)
+
+### Reclassified
+- **search**: Exa API score clamping moved from DEFERRED to INTENTIONAL. Exa's official Python SDK spec documents neural scores as `[0, 1]` (https://docs.exa.ai/sdks/python-sdk-specification); normalizing would destroy those absolute semantics and make scores batch-dependent. The `SearchResult.__post_init__` defensive clamp remains as a safety net against malformed upstream responses (#79)
+
 ## [1.3.2] - 2026-04-09
 
 ### Changed

@@ -1,6 +1,117 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-17 + Quality Gate: 2026-04-10)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-18 + Quality Gate: 2026-04-10)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Wave 18 Fixes (2026-04-10) — 7 deferred bugs resolved, 1 reclassified
+
+Wave 18 addressed every entry previously marked DEFERRED in the wave 16 + 17
+sections below. Seven bugs were fixed with regression tests; one (#79) was
+reclassified as INTENTIONAL after verifying the Exa API contract. See
+`docs/bug-hunt/WAVE18.md` for the verification trail.
+
+### 90. `enhance_for_models` per-model query-section format — FIXED
+- **File**: `src/aipea/enhancer.py:689-760`
+- **Severity**: MEDIUM
+- **Fix**: Dropped the single-base + `create_model_specific_prompt` wrapping
+  path. The base `enhance()` call still runs once for the security scan,
+  query analysis, and search-context fetch, but the per-model loop now calls
+  `_prompt_engine.formulate_search_aware_prompt()` with the cached
+  `search_context` so each model gets its own query-section format (GPT
+  markdown, Claude XML, Gemini numbered). 4 regression tests added
+  (`TestWave18PerModelQuerySection`). Known trade-off: offline Ollama LLM
+  analysis is only applied on the base call and is not re-applied per model
+  in the rebuild — acceptable because `enhance_for_models` is used for
+  online multi-model orchestration.
+
+### 91. `save_dotenv`/`save_toml_config` TOCTOU race — FIXED
+- **File**: `src/aipea/config.py:413-442, 495, 545`
+- **Severity**: MEDIUM
+- **Fix**: Added `_atomic_write_secret()` helper that creates the file via
+  `tempfile.mkstemp(dir=target.parent)` — which guarantees mode `0o600` from
+  the first byte via `O_EXCL` — then atomically `os.replace()`s it over the
+  target. No umask/chmod race window. Both `save_dotenv` and
+  `save_toml_config` now delegate to the helper. 5 regression tests added.
+
+### 92. `_test_exa/firecrawl_connectivity` honor `cfg.*_api_url` — FIXED
+- **File**: `src/aipea/cli.py:170-222, 148-157, 401-418, 650-654`
+- **Severity**: MEDIUM
+- **Fix**: Added `api_url: str` parameter to both connectivity helpers;
+  `check`, `configure --validate`, and `_doctor_connectivity` all now pass
+  `cfg.exa_api_url` / `cfg.firecrawl_api_url` so custom endpoints persisted
+  in `.env` or global TOML are honored. 3 regression tests added.
+
+### 79. Exa API scores — RECLASSIFIED AS INTENTIONAL
+- **File**: `src/aipea/search.py:583-597`
+- **Severity**: LOW (was DEFERRED in wave 16)
+- **Decision**: Exa's Python SDK spec documents neural search scores as
+  "A number from 0 to 1 representing similarity"
+  (https://docs.exa.ai/sdks/python-sdk-specification). Normalizing would
+  destroy those absolute semantics and make scores batch-dependent. The
+  defensive clamp in `SearchResult.__post_init__` (`search.py:212-214`)
+  remains as a safety net against malformed API responses. See the
+  "Intentional Design Decisions" section below for the full rationale.
+
+### 80. Storage stats read under single DB lock — FIXED
+- **File**: `src/aipea/knowledge.py:884-903`
+- **Severity**: LOW
+- **Fix**: Inlined the `COUNT(*)` query and the `Path.stat()` call inside a
+  single `_with_db_lock()` block so `node_count` and `db_size_bytes` are
+  read atomically. 2 regression tests added (including a mock that
+  verifies exactly one lock acquisition per call).
+
+### 81. HTTP timeout resolves lazily at request time — FIXED
+- **File**: `src/aipea/search.py:557, 705, 113`
+- **Severity**: LOW
+- **Fix**: Exa and Firecrawl providers now call `_resolve_http_timeout()`
+  when constructing the httpx `AsyncClient`, so runtime env / config
+  changes take effect without a process restart. The module-level
+  `HTTP_TIMEOUT` constant is retained as a back-compat alias (tests import
+  it). 3 regression tests added.
+
+### 93. `_score_clarity` returns 0.0 for whitespace-only enhanced — FIXED
+- **File**: `src/aipea/quality.py:166-175`
+- **Severity**: LOW
+- **Fix**: Added a `if not enhanced.strip(): return 0.0` guard at the top
+  of `_score_clarity`. Previously the `enh_avg == 0` fallback path produced
+  `1 - exp(-1) ≈ 0.632`, misleadingly suggesting clarity from empty output.
+  3 regression tests added.
+
+### 94. `_parse_dotenv` decodes `\\uXXXX` round-trip — FIXED
+- **File**: `src/aipea/config.py:130-147`
+- **Severity**: LOW
+- **Fix**: Added a `re.sub(r"\\\\u([0-9a-fA-F]{4})", ...)` pass in the
+  `_parse_dotenv` double-quoted-value unescape block. Runs after the other
+  replaces and before the `\\x00` → `\\` sentinel restoration so literal
+  backslashes (raw `\\\\u0041`) are never mistakenly decoded. Closes the
+  round-trip gap opened by wave 14 #72. 5 regression tests added (round-trip
+  for both `.env` and TOML, plus literal-backslash protection).
+
+---
+
+## Intentional Design Decisions
+
+These behaviors were flagged by bug-hunt waves but, after verification
+against upstream documentation or architectural intent, are recorded here
+as intentional rather than deferred or fixed.
+
+### #79. Exa API score clamping (vs normalization)
+- **File**: `src/aipea/search.py:583-597` + `SearchResult.__post_init__`
+  clamp at `search.py:212-214`
+- **Verification**: Exa's Python SDK spec documents neural search scores
+  as `score: Optional[float] — A number from 0 to 1 representing similarity`
+  (https://docs.exa.ai/sdks/python-sdk-specification, 2026-04 snapshot).
+  Auto search dropped the `score` field entirely in July 2025
+  (https://docs.exa.ai/changelog/auto-keyword-score-deprecation); AIPEA
+  pins `type: neural` at `search.py:566` so scores are guaranteed to come
+  in the documented `[0, 1]` range.
+- **Why clamping is correct**: A score of `0.85` from Exa is an absolute
+  similarity measurement, not a percentile. Min-max normalization across a
+  batch would destroy that absolute meaning (the same URL could have
+  different scores in different result sets) and would contradict the
+  `SearchResult.__post_init__` defensive clamp that already handles any
+  genuinely malformed upstream response. No code change is warranted.
+
+---
 
 ## Wave 17 Fixes (2026-04-10) — 8 bugs fixed, 5 deferred
 
@@ -56,33 +167,33 @@ agents covering all 14 source files and found 13 new bugs (5 MEDIUM + 8 LOW).
 - **Source**: Claude sweep agent (utility/config layer, wave 17)
 - **Fix**: Wrap `read_text()` in try/except for `OSError` and `UnicodeDecodeError`, downgrade to warning. Extracted the .gitignore check into a helper to keep `configure` under McCabe 15. 2 regression tests added.
 
-### Wave 17 — Deferred (5 issues)
+### Wave 17 — Deferred (resolved in wave 18)
 
-### 90. `enhance_for_models` bakes first compliant model's query section into all models — DEFERRED
+### 90. `enhance_for_models` bakes first compliant model's query section into all models — FIXED (wave 18)
 - **File**: `src/aipea/enhancer.py:694-727` + `engine.py:962-1049`
 - **Severity**: MEDIUM | **Confidence**: 0.90
 - **Source**: Claude sweep agent (facade/entry layer, wave 17)
 - **Rationale**: Wave 15 fix #74 only addressed search-context formatting, not the query-section format (markdown vs XML vs numbered list). Fix requires significant refactor of how per-model prompts are built — deferred to a future wave where we can rework the multi-model pipeline properly.
 
-### 91. `save_dotenv`/`save_toml_config` TOCTOU race (umask → chmod window) — DEFERRED
+### 91. `save_dotenv`/`save_toml_config` TOCTOU race (umask → chmod window) — FIXED (wave 18)
 - **File**: `src/aipea/config.py:460-464, 510-514`
 - **Severity**: MEDIUM | **Confidence**: 0.90
 - **Source**: Claude sweep agent (utility/config layer, wave 17)
 - **Rationale**: Secrets are briefly world-readable between `write_text()` (default umask 0o644) and `chmod(0o600)`. Fix requires atomic file write via `os.open(path, O_WRONLY|O_CREAT|O_TRUNC, 0o600)` + `os.fdopen` — significant change to file-writing utilities. Impact is limited to shared hosts where another user can race the chmod; on single-user machines the exposure window is nil. Deferred pending prioritization.
 
-### 92. `_test_exa/firecrawl_connectivity` ignore `cfg.*_api_url` — DEFERRED
+### 92. `_test_exa/firecrawl_connectivity` ignore `cfg.*_api_url` — FIXED (wave 18)
 - **File**: `src/aipea/cli.py:170-219`
 - **Severity**: MEDIUM | **Confidence**: 0.90
 - **Source**: Claude sweep agent (utility/config layer, wave 17)
 - **Rationale**: Silent regression of wave 15 fix #73 — users who persist custom endpoints via `.env`/TOML have their connectivity tests probe the public default URL instead. Fix requires refactoring function signatures to accept the config object across multiple call sites (`check`, `doctor`). Deferred until we can do it in one clean pass.
 
-### 93. `_score_clarity` returns 0.63 for whitespace-only enhanced prompt — DEFERRED
+### 93. `_score_clarity` returns 0.63 for whitespace-only enhanced prompt — FIXED (wave 18)
 - **File**: `src/aipea/quality.py:179-180`
 - **Severity**: LOW | **Confidence**: 0.60
 - **Source**: Claude sweep agent (core modules, wave 17)
 - **Rationale**: Math edge case — `_avg_sentence_length` returns 0.0 for whitespace, fallback sets `len_ratio = 1.0`, producing `1 - exp(-1) ≈ 0.632`. Marginal impact; upstream enhancers don't produce whitespace-only output in practice.
 
-### 94. `_escape_config_value` emits `\uXXXX` but `_parse_dotenv` doesn't decode it — DEFERRED
+### 94. `_escape_config_value` emits `\uXXXX` but `_parse_dotenv` doesn't decode it — FIXED (wave 18)
 - **File**: `src/aipea/config.py:129-137, 389-399`
 - **Severity**: LOW | **Confidence**: 0.85
 - **Source**: Claude sweep agent (utility/config layer, wave 17)
@@ -114,21 +225,21 @@ agents covering all 14 source files and found 13 new bugs (5 MEDIUM + 8 LOW).
 - **Source**: Claude sweep agent (facade/entry layer, wave 16)
 - **Fix**: `_test_exa_connectivity` and `_test_firecrawl_connectivity` unconditionally printed status, then `_doctor_connectivity` also printed via `chk.ok()`/`chk.fail()`. Added `silent: bool = False` keyword param; doctor passes `silent=True`. 1 regression test added.
 
-### Wave 16 — Deferred (3 LOW severity)
+### Wave 16 — Deferred (resolved in wave 18)
 
-### 79. Exa API scores silently clamped to [0,1] instead of normalized — DEFERRED
+### 79. Exa API scores silently clamped to [0,1] instead of normalized — RECLASSIFIED (wave 18, INTENTIONAL)
 - **File**: `src/aipea/search.py:583-589`
 - **Severity**: LOW | **Confidence**: 0.70
 - **Source**: Claude sweep agent (core modules, wave 16)
 - **Rationale**: Already tracked as intentional design decision #11. Clamping produces acceptable results; normalization would require collecting all scores first.
 
-### 80. Storage stats reads not atomic (node_count vs file_size) — DEFERRED
+### 80. Storage stats reads not atomic (node_count vs file_size) — FIXED (wave 18)
 - **File**: `src/aipea/knowledge.py:884-896`
 - **Severity**: LOW | **Confidence**: 0.60
 - **Source**: Claude sweep agent (core modules, wave 16)
 - **Rationale**: Stats are informational only. Minor inconsistency between node count and file size has no functional impact.
 
-### 81. HTTP_TIMEOUT eager vs URL lazy resolution inconsistency — DEFERRED
+### 81. HTTP_TIMEOUT eager vs URL lazy resolution inconsistency — FIXED (wave 18)
 - **File**: `src/aipea/search.py:113`
 - **Severity**: LOW | **Confidence**: 0.55
 - **Source**: Claude sweep agent (core modules, wave 16)
