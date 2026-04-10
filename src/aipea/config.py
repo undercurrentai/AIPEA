@@ -83,7 +83,31 @@ class AIPEAConfig:
 # ---------------------------------------------------------------------------
 
 
-def _parse_dotenv(path: Path) -> dict[str, str]:
+def _read_dotenv_text(path: Path, *, strict: bool) -> str | None:
+    """Read a ``.env`` file as text, handling missing and unreadable files.
+
+    Uses the ``utf-8-sig`` codec so a leading UTF-8 BOM (U+FEFF) emitted
+    by Windows editors like Notepad is transparently stripped from the
+    first key name. Without this, the first key in a BOM-prefixed ``.env``
+    would be parsed as ``"\\ufeffKEY"`` and silently treated as a non-AIPEA
+    key by ``save_dotenv``, corrupting subsequent writes. (#104)
+
+    Returns None if the file is missing, or — when strict is False — if
+    the file exists but cannot be read (e.g. PermissionError). When strict
+    is True, any non-missing I/O error is propagated so ``save_dotenv`` can
+    refuse to write rather than silently destroy non-AIPEA keys. (#99)
+    """
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except FileNotFoundError:
+        return None
+    except OSError:
+        if strict:
+            raise
+        return None
+
+
+def _parse_dotenv(path: Path, *, strict: bool = False) -> dict[str, str]:
     """Parse a ``.env`` file into a dict of key-value pairs.
 
     Supports:
@@ -91,11 +115,17 @@ def _parse_dotenv(path: Path) -> dict[str, str]:
     - ``export KEY=VALUE``
     - Blank lines and ``#`` comments
     - Inline comments after unquoted values
+
+    Args:
+        path: Path to the ``.env`` file.
+        strict: When True, raise on I/O errors (including PermissionError)
+            instead of returning an empty dict. ``save_dotenv`` passes True
+            to prevent silent destruction of a user's non-AIPEA keys when
+            the file exists but is unreadable. (#99)
     """
     values: dict[str, str] = {}
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
+    text = _read_dotenv_text(path, strict=strict)
+    if text is None:
         return values
 
     for line in text.splitlines():
@@ -467,7 +497,12 @@ def save_dotenv(path: Path, config: AIPEAConfig) -> None:
         "AIPEA_EXA_API_URL",
         "AIPEA_FIRECRAWL_API_URL",
     }
-    existing = _parse_dotenv(path)
+    # Use strict parse so a PermissionError on an existing-but-unreadable
+    # .env raises OSError rather than silently returning an empty preserve
+    # set, which would destroy the user's non-AIPEA keys (DATABASE_URL,
+    # SECRET_KEY, etc.) on the next atomic replace. A missing file still
+    # returns {} via the FileNotFoundError branch in _parse_dotenv. (#99)
+    existing = _parse_dotenv(path, strict=True)
 
     lines = [
         "# AIPEA Configuration",

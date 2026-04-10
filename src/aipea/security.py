@@ -51,6 +51,16 @@ _CONFUSABLE_MAP: dict[str, str] = {
     "\u0443": "y",  # U+0443 Cyrillic u
     "\u0456": "i",  # U+0456 Cyrillic i (Ukrainian)
     "\u0455": "s",  # U+0455 Cyrillic dze
+    # Uppercase counterparts of the three lowercase Cyrillic extensions
+    # above, which NFKC does NOT normalise to Latin. Without these entries,
+    # an attacker can use capital-letter homoglyphs (U+0406 + "gnore
+    # previous instructions", U+0405 + "ECRET") to bypass injection and
+    # classified-marker detection that correctly trips on the lowercase
+    # counterparts. (#97)
+    "\u0406": "I",  # U+0406 Cyrillic Ukrainian/Byelorussian I (uppercase of \u0456)
+    "\u0405": "S",  # U+0405 Cyrillic Dze (uppercase of \u0455)
+    "\u0408": "J",  # U+0408 Cyrillic Je
+    "\u0458": "j",  # U+0458 Cyrillic je (lowercase counterpart of \u0408)
     # Greek -> Latin
     "\u0391": "A",  # U+0391 Greek Alpha
     "\u0392": "B",  # U+0392 Greek Beta
@@ -275,11 +285,25 @@ class SecurityScanner:
     }
 
     # HIPAA-specific PHI patterns - only checked in HIPAA mode
+    #
+    # NOTE on patient_name: the label "patient" must match case-insensitively,
+    # but the two name tokens MUST remain case-sensitive so the pattern only
+    # fires on proper names (e.g. "patient: John Smith"), not on common
+    # clinical phrases like "the patient has good vitals". The `(?i:patient)`
+    # inline group enables IGNORECASE just for the label; the rest of the
+    # pattern is compiled WITHOUT re.IGNORECASE (see __init__ below) because
+    # the flag would otherwise make [A-Z] and [a-z] match case-insensitively
+    # (a Python regex gotcha), producing a massive HIPAA false-positive
+    # surface on any query containing "patient" + two ordinary words. (#95)
     PHI_PATTERNS: ClassVar[dict[str, str]] = {
         "mrn": r"\b(MRN|medical record)\s*[:=]?\s*\d+\b",
         "dob": r"\b(DOB|date of birth)\s*[:=]?\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",
-        "patient_name": r"\bpatient\s*[:=]?\s*[A-Z][a-z]+\s+[A-Z][a-z]+\b",
+        "patient_name": r"\b(?i:patient)\s*[:=]?\s*[A-Z][a-z]+\s+[A-Z][a-z]+\b",
     }
+
+    # PHI patterns that must be compiled WITHOUT re.IGNORECASE because they
+    # rely on case-sensitive character classes to avoid false positives. (#95)
+    _PHI_CASE_SENSITIVE: ClassVar[frozenset[str]] = frozenset({"patient_name"})
 
     # Classified content markers - only checked in TACTICAL mode
     CLASSIFIED_MARKERS: ClassVar[list[str]] = [
@@ -307,9 +331,17 @@ class SecurityScanner:
         self._compiled_pii: dict[str, re.Pattern[str]] = {
             name: re.compile(pattern, re.IGNORECASE) for name, pattern in self.PII_PATTERNS.items()
         }
-        self._compiled_phi: dict[str, re.Pattern[str]] = {
-            name: re.compile(pattern, re.IGNORECASE) for name, pattern in self.PHI_PATTERNS.items()
-        }
+        # PHI patterns are compiled per-entry: those in _PHI_CASE_SENSITIVE
+        # MUST NOT use re.IGNORECASE because the flag makes [A-Z]/[a-z]
+        # character classes case-insensitive, defeating name-capitalisation
+        # guards. Case-insensitive label matching is obtained via the
+        # (?i:...) inline flag inside the pattern itself. (#95)
+        self._compiled_phi: dict[str, re.Pattern[str]] = {}
+        for name, pattern in self.PHI_PATTERNS.items():
+            if name in self._PHI_CASE_SENSITIVE:
+                self._compiled_phi[name] = re.compile(pattern)
+            else:
+                self._compiled_phi[name] = re.compile(pattern, re.IGNORECASE)
         self._compiled_injection: list[re.Pattern[str]] = [
             re.compile(pattern, re.IGNORECASE) for pattern in self.INJECTION_PATTERNS
         ]
@@ -379,6 +411,14 @@ class SecurityScanner:
         overlapping_pattern = r"\([^|]+\|[^)]+\?\)[+*]"
         if re.search(overlapping_pattern, pattern):
             logger.debug("Pattern rejected: contains overlapping alternatives with quantifiers")
+            return False
+
+        # Check for duplicated alternatives in quantified groups, e.g. (a|a)*b.
+        # Python's re engine backtracks exponentially on such patterns (a 25-char
+        # input takes >1s to fail). Wave 18 coverage missed this class. (#107)
+        duplicate_alt_quant = r"\(([^|)]+)\|\1\)[+*]"
+        if re.search(duplicate_alt_quant, pattern):
+            logger.debug("Pattern rejected: duplicated alternative in quantified group")
             return False
 
         # Try to compile the pattern to catch syntax errors

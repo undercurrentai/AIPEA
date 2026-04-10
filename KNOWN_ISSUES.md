@@ -1,6 +1,233 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-18 + Quality Gate: 2026-04-10)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-19 + Quality Gate: 2026-04-10)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
+
+## Wave 19 Fixes (2026-04-10) — 13 bugs fixed, 0 deferred
+
+Lane A (Codex) was **skipped** because the OpenAI API quota was exceeded on
+the model probe. Lane B (Claude systematic sweep) ran with 3 parallel
+debugger agents covering all 14 source files and found **13 new bugs**
+(8 MEDIUM + 5 LOW, no CRITICAL/HIGH). All 13 fixed with 42 regression
+tests, zero deferred.
+
+### 95. `patient_name` PHI regex false-positive flood in HIPAA mode — FIXED
+- **File**: `src/aipea/security.py:278-324`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (strategies/security/cli, wave 19)
+- **Root cause**: The `patient_name` PHI regex was compiled with
+  `re.IGNORECASE`, which is a Python gotcha — the flag makes
+  `[A-Z]`/`[a-z]` character classes case-insensitive, defeating the
+  proper-name capitalisation guard. The pattern collapsed to
+  `"patient <any two words>"`, flagging benign clinical phrases like
+  "the patient has good vitals" as PHI in every HIPAA-mode request.
+- **Fix**: Added `_PHI_CASE_SENSITIVE = frozenset({"patient_name"})`
+  and compiled matching patterns WITHOUT `re.IGNORECASE`; the label
+  `patient` matches case-insensitively via the `(?i:patient)` inline
+  flag group. 5 regression tests added (4 false-positive denials + 1
+  real proper-name positive).
+
+### 96. `_scan_search_results` compliance leak in HIPAA/TACTICAL mode — FIXED
+- **File**: `src/aipea/enhancer.py:844, 862-949`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (enhancer+search, wave 19)
+- **Root cause**: `_scan_search_results` hardcoded
+  `SecurityContext(compliance_mode=GENERAL)`, so `SecurityScanner.scan`
+  never ran PHI checks (HIPAA-gated) or classified-marker checks
+  (TACTICAL-gated) on scraped web snippets. A user who explicitly
+  selected the stricter tier received search results containing MRNs,
+  patient names, SECRET markers, etc. embedded verbatim into the prompt
+  forwarded to downstream models — defeating the point of the tier.
+- **Fix**: Added `caller_ctx` parameter that threads the active
+  `SecurityContext` through; built a scan context mirroring the
+  caller's compliance mode; added flag-based filtering so snippets with
+  `phi_detected:*` (HIPAA) or `classified_marker:*` (TACTICAL) are
+  filtered even though those scans surface as flags rather than
+  `is_blocked`. 5 regression tests added (HIPAA MRN + patient-name
+  filters, TACTICAL marker filter, GENERAL no-over-filter, MRN
+  passthrough in GENERAL).
+
+### 97. Incomplete uppercase Cyrillic homoglyph map — FIXED
+- **File**: `src/aipea/security.py:52-66`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (strategies/security/cli, wave 19)
+- **Root cause**: Wave 15 #56 added a 35-entry confusable map but only
+  covered lowercase Ukrainian U+0456 and Cyrillic U+0455; the uppercase
+  counterparts U+0406 and U+0405 were missing. Since NFKC does NOT
+  normalise these Cyrillic capitals to Latin, an attacker could bypass
+  injection detection and TACTICAL-mode classified-marker detection by
+  substituting U+0406 for `I` in "Ignore" or U+0405 for `S` in "SECRET"
+  — visually identical, functionally invisible.
+- **Fix**: Added U+0406→I, U+0405→S, U+0408→J (Cyrillic Je) and
+  U+0458→j to `_CONFUSABLE_MAP`. 3 regression tests added (uppercase
+  injection, uppercase classified marker, map completeness).
+
+### 98. Formatter URL fields bypass escaping — FIXED
+- **File**: `src/aipea/search.py:336-348, 396-409`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (enhancer+search, wave 19)
+- **Root cause**: Wave 12 #54/#55 fixed title/snippet escaping across
+  the three formatters, but `_format_openai` and `_format_generic`
+  still emitted `result.url` without any escaping. The Anthropic
+  formatter already html-escaped URL, so parity was the fix. A scraped
+  page with a URL containing `"https://evil.com\n# IGNORE..."` would
+  inject a live markdown H1 into the downstream GPT prompt, or
+  `"https://evil.com\n1. ..."` would inject a numbered-list item into
+  the Gemini prompt.
+- **Fix**: Apply `_escape_markdown` / `_escape_plaintext` to
+  `result.url` in the openai and generic formatters. 3 regression
+  tests added (markdown injection, plaintext injection, benign URL
+  round-trip).
+
+### 99. `save_dotenv` silent data loss on unreadable existing `.env` — FIXED
+- **File**: `src/aipea/config.py:86-137, 470-486`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (knowledge+engine+config+quality, wave 19)
+- **Root cause**: `_parse_dotenv` caught `OSError` (which includes
+  `PermissionError`) and returned an empty dict — indistinguishable
+  from a missing file. `save_dotenv` then called `_atomic_write_secret`
+  with nothing to preserve, and `os.replace` only requires parent-
+  directory write permission, so the rewrite always succeeded. A user
+  whose `.env` had been locked down (e.g. accidental `chmod 200`) lost
+  every non-AIPEA entry (`DATABASE_URL`, `SECRET_KEY`, etc.) on the
+  next `aipea configure` run. Silent, reproducible data loss.
+- **Fix**: Extracted `_read_dotenv_text` helper (cuts McCabe below 15)
+  that distinguishes `FileNotFoundError` (return None cleanly) from
+  other `OSError` (raise when `strict=True`). `_parse_dotenv` accepts
+  a `strict` kwarg; `save_dotenv` passes `strict=True` so a
+  `PermissionError` propagates instead of silently destroying keys.
+  4 regression tests added (unreadable raises, missing ok, strict
+  propagates, strict + missing returns empty).
+
+### 100. `Firecrawl.deep_research` hardcoded API URL — FIXED
+- **File**: `src/aipea/search.py:820-828`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (enhancer+search, wave 19)
+- **Root cause**: Wave 15 #73 established that Firecrawl API URLs must
+  be resolvable at runtime via `AIPEA_FIRECRAWL_API_URL`, but only
+  `FirecrawlProvider.search()` was updated. `deep_research()` kept
+  `"https://api.firecrawl.dev/v1/deep-research"` hardcoded, silently
+  leaking to production when tests stubbed the env var and breaking
+  enterprise customers routing all Firecrawl traffic through an
+  internal mirror.
+- **Fix**: Derive the deep-research URL from the resolved search URL
+  via `str.replace("/v1/search", "/v1/deep-research")`, falling back
+  to the hardcoded default when no substitution matches. 2 regression
+  tests added (env-var override route, unrecognised-suffix fallback).
+
+### 101. `formulate_search_aware_prompt` divergent family dispatch — FIXED
+- **File**: `src/aipea/engine.py:33-40, 961-980`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (knowledge+engine+config+quality, wave 19)
+- **Root cause**: The function used an ad-hoc substring chain
+  (`"gemini" in model_lower or "google" in model_lower`) that missed
+  Gemma ids (`gemma3:1b`, currently the active offline model per
+  MEMORY.md). The canonical `get_model_family` in `_types.py` correctly
+  maps gemma to the `gemini` family, but this branch fell through to
+  the generic `"Query ({complexity} complexity):"` format while the
+  sibling `SearchContext.formatted_for_model` call in the same function
+  used `get_model_family` and picked the Gemini-family numbered format
+  — a prompt with two different formatting philosophies.
+- **Fix**: Import `get_model_family` and dispatch through it, so
+  formatting can never drift from the canonical detector again. 4
+  regression tests added (gemma raw id, gpt, claude, unknown fallback).
+
+### 102. `_add_knowledge_sync` non-atomic node+FTS write — FIXED
+- **File**: `src/aipea/knowledge.py:708-760`
+- **Severity**: MEDIUM | **Confidence**: MEDIUM
+- **Source**: Claude sweep agent (knowledge+engine+config+quality, wave 19)
+- **Root cause**: The knowledge_nodes upsert was committed BEFORE the
+  FTS delete+insert, which ran in a separate try/except that only
+  caught `sqlite3.OperationalError` — so any `IntegrityError`,
+  `DatabaseError`, etc. propagated out leaving a half-written KB: the
+  node retrievable by id, invisible to FTS search, until the next
+  process restart's `_sync_fts_index` rebuilt the index.
+- **Fix**: Moved both writes into a single transaction with a single
+  commit; widened the except clause to `sqlite3.Error`; explicit
+  rollback + re-raise on failure. 2 regression tests added (FTS
+  failure rolls back node insert, happy-path round-trip intact).
+
+### 103. `enhance_for_models` no empty-query guard — FIXED
+- **File**: `src/aipea/enhancer.py:673-684`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Claude sweep agent (enhancer+search, wave 19)
+- **Root cause**: `enhance()` had an explicit empty-query short-circuit
+  that returned a dedicated result with `was_enhanced=False` and a
+  note. `enhance_for_models` had no such guard, so an empty or
+  whitespace-only query slipped through the `is_blocked` check (both
+  `original` and `enhanced` were `""`) and the per-model loop built
+  per-model prompts with literally empty query sections. Callers
+  received a non-empty dict of malformed prompts instead of the clean
+  empty signal the matching method provided.
+- **Fix**: Added the same early return at the top of
+  `enhance_for_models`, returning `{}` on empty or whitespace-only
+  query. 2 regression tests added (empty string, whitespace-only).
+
+### 104. `_parse_dotenv` BOM mishandling — FIXED
+- **File**: `src/aipea/config.py:86-110`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Claude sweep agent (knowledge+engine+config+quality, wave 19)
+- **Root cause**: `_parse_dotenv` used `encoding="utf-8"` and relied
+  on `line.strip()` to clean each line — but `strip()` does not remove
+  U+FEFF (UTF-8 BOM), which Windows editors like Notepad often emit.
+  The first key in a BOM-prefixed `.env` was parsed as `"\ufeffKEY"`,
+  silently treated as non-AIPEA by `save_dotenv`, and written back
+  under the BOM-decorated name — so the user's real `EXA_API_KEY` was
+  never loaded and every subsequent `configure` cycle compounded the
+  problem.
+- **Fix**: One-line change: `encoding="utf-8-sig"`. The `utf-8-sig`
+  codec transparently strips a leading BOM and behaves identically to
+  `utf-8` otherwise. 3 regression tests added (BOM-prefixed parses
+  cleanly, non-BOM still parses, BOM round-trip through `save_dotenv`).
+
+### 105. `_score_density` discontinuous at `delta = 0` — FIXED
+- **File**: `src/aipea/quality.py:217-246`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Claude sweep agent (knowledge+engine+config+quality, wave 19)
+- **Root cause**: The positive branch started from 0
+  (`delta/0.15` → delta=+0.001 scored 0.0067) while the negative branch
+  started from 0.5 (`0.5 + delta` → delta=-0.001 scored 0.499). A tiny
+  density improvement scored dramatically worse than a tiny density
+  regression — a 70x cliff at the sign boundary.
+- **Fix**: Made the positive branch also start from the 0.5 baseline:
+  `0.5 + (delta / 0.15) * 0.5` so delta=0→0.5 and delta=+0.15→1.0
+  (matching the docstring intent). Now monotonic and continuous.
+  4 regression tests added (zero delta baseline, tiny positive above
+  baseline, no-discontinuity sweep, large positive saturation).
+
+### 106. `_init_db` narrow exception class leaks connection — FIXED
+- **File**: `src/aipea/knowledge.py:304-313`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Source**: Claude sweep agent (knowledge+engine+config+quality, wave 19)
+- **Root cause**: `_init_db` only caught `sqlite3.OperationalError`, so
+  any other `sqlite3.Error` subclass (IntegrityError, DatabaseError,
+  ProgrammingError, NotSupportedError) escaped past the cleanup block
+  with `self._conn` still referencing the half-initialized connection
+  and no explicit close.
+- **Fix**: Widened to `sqlite3.Error` and wrapped the close in
+  `contextlib.suppress(sqlite3.Error)` to tolerate double-close races.
+  1 regression test added (DatabaseError during CREATE TABLE
+  propagates and the partial connection is cleaned up).
+
+### 107. `_is_regex_safe` false negative on `(a|a)*b` — FIXED
+- **File**: `src/aipea/security.py:395-401`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Source**: Claude sweep agent (strategies/security/cli, wave 19)
+- **Root cause**: The safety heuristics covered nested quantifiers,
+  character-class-in-quantified-group, and possessive-overlap, but
+  missed the duplicated-alternative class `(X|X)+` / `(X|X)*` which
+  causes Python's regex engine to backtrack exponentially — a 25-char
+  input against `^(a|a)*b$` took >1 second locally.
+- **Fix**: Added `re.search(r"\(([^|)]+)\|\1\)[+*]", pattern)` check
+  to `_is_regex_safe`. 4 regression tests added (star variant
+  rejected, plus variant rejected, distinct alternatives still
+  allowed, custom pattern DoS is refused not hung).
+
+**Metrics**:
+- Tests: 916 → **958 passed**, 35 skipped (+42 regression tests)
+- Coverage: 91.94% → **92.36%** (well above 75% floor and 85% review)
+- Source LOC: ~9,580 → ~9,700 (approx, from fix additions)
+
+---
 
 ## Wave 18 Fixes (2026-04-10) — 7 deferred bugs resolved, 1 reclassified
 

@@ -1071,5 +1071,125 @@ class TestWave18StorageStatsAtomicity:
                 kb.close()
 
 
+class TestWave19AddKnowledgeAtomicity:
+    """Regression for bug #102: `_add_knowledge_sync` committed the
+    knowledge_nodes upsert BEFORE attempting the FTS delete+insert, then
+    committed the FTS block separately in a try/except that only caught
+    `sqlite3.OperationalError`. A failure in the FTS block (or any other
+    `sqlite3.Error` subclass) left the KB in a half-written state —
+    the node was retrievable by id but invisible to FTS search until the
+    next process restart triggered `_sync_fts_index`. Fix: both writes
+    share a single transaction and rollback on any sqlite3.Error."""
+
+    @pytest.mark.asyncio
+    async def test_fts_failure_rolls_back_node_insert(self) -> None:
+        """If the FTS insert fails, the knowledge node must also be rolled back.
+
+        sqlite3.Connection is an immutable C type in CPython so we cannot
+        monkey-patch `execute` on the class. Instead we subclass the
+        connection and install it via `sqlite3.connect(..., factory=...)`
+        after the KB is constructed, swapping the KB's internal `_conn`
+        reference so the next add_knowledge call routes through our
+        flaky subclass.
+        """
+        import sqlite3
+
+        class FlakyConnection(sqlite3.Connection):
+            def execute(self, sql: str, *params: object) -> sqlite3.Cursor:  # type: ignore[override]
+                if "INSERT INTO knowledge_fts" in sql:
+                    raise sqlite3.OperationalError("simulated FTS failure")
+                return super().execute(sql, *params)  # type: ignore[arg-type]
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = os.path.join(td, "atomic.db")
+            kb = OfflineKnowledgeBase(db_path=db_path, tier=StorageTier.STANDARD)
+            try:
+                # Close the normal connection, reopen as FlakyConnection so
+                # the upsert succeeds but the FTS insert raises.
+                if kb._conn is not None:
+                    kb._conn.close()
+                flaky = sqlite3.connect(db_path, factory=FlakyConnection, check_same_thread=False)
+                flaky.row_factory = sqlite3.Row
+                kb._conn = flaky
+
+                with pytest.raises(sqlite3.OperationalError, match="simulated"):
+                    await kb.add_knowledge(
+                        content="Wave 19 regression content",
+                        domain=KnowledgeDomain.MILITARY,
+                    )
+
+                # Node must NOT exist after rollback — no half-written state.
+                stats = await kb.get_storage_stats()
+                assert stats["node_count"] == 0, (
+                    f"Expected 0 nodes after rollback, got {stats['node_count']}"
+                )
+            finally:
+                kb.close()
+
+    @pytest.mark.asyncio
+    async def test_happy_path_still_persists_node_and_fts(self) -> None:
+        """The atomicity fix must not regress the normal success path."""
+        with tempfile.TemporaryDirectory() as td:
+            db_path = os.path.join(td, "happy.db")
+            kb = OfflineKnowledgeBase(db_path=db_path, tier=StorageTier.STANDARD)
+            try:
+                node_id = await kb.add_knowledge(
+                    content="Wave 19 happy-path content about tactics",
+                    domain=KnowledgeDomain.MILITARY,
+                )
+                assert node_id
+                # Node retrievable by id
+                node = await kb.get_by_id(node_id)
+                assert node is not None
+                # FTS search returns the node (search returns
+                # KnowledgeSearchResult wrapping a .nodes list)
+                result = await kb.search("tactics")
+                assert len(result.nodes) >= 1
+                assert any(n.id == node_id for n in result.nodes)
+            finally:
+                kb.close()
+
+
+class TestWave19InitDbBroadException:
+    """Regression for bug #106: `_init_db` only caught
+    `sqlite3.OperationalError`, leaking the half-initialized connection
+    when any other `sqlite3.Error` subclass was raised (IntegrityError,
+    DatabaseError, etc.). Fix: widen to `sqlite3.Error` and use
+    `contextlib.suppress` for the close to tolerate double-close races."""
+
+    @pytest.mark.asyncio
+    async def test_init_catches_database_error(self) -> None:
+        """A DatabaseError during init must close the connection and re-raise.
+
+        Because sqlite3.Connection is immutable, we patch sqlite3.connect
+        to return a subclass whose .execute raises DatabaseError on the
+        first DDL call. The KB __init__ path calls _init_db synchronously,
+        so no event loop is required for this assertion.
+        """
+        import sqlite3
+        from unittest.mock import patch
+
+        class FlakyInitConnection(sqlite3.Connection):
+            def execute(self, sql: str, *params: object) -> sqlite3.Cursor:  # type: ignore[override]
+                if "CREATE TABLE IF NOT EXISTS knowledge_nodes" in sql:
+                    raise sqlite3.DatabaseError("simulated corruption")
+                return super().execute(sql, *params)  # type: ignore[arg-type]
+
+        real_connect = sqlite3.connect
+
+        def flaky_connect(*args: object, **kwargs: object) -> sqlite3.Connection:
+            # Route through the flaky subclass.
+            kwargs["factory"] = FlakyInitConnection
+            return real_connect(*args, **kwargs)  # type: ignore[arg-type]
+
+        with tempfile.TemporaryDirectory() as td:
+            db_path = os.path.join(td, "init_err.db")
+            with (
+                patch("aipea.knowledge.sqlite3.connect", side_effect=flaky_connect),
+                pytest.raises(sqlite3.Error, match="simulated"),
+            ):
+                OfflineKnowledgeBase(db_path=db_path, tier=StorageTier.STANDARD)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -301,9 +301,12 @@ class OfflineKnowledgeBase:
                 self._sync_fts_index(conn)
 
                 logger.debug("Database schema initialized")
-            except sqlite3.OperationalError:
-                # Close failed connection and reset so _get_connection() creates fresh one
-                conn.close()
+            except sqlite3.Error:
+                # Widened from OperationalError to Error so IntegrityError,
+                # DatabaseError, ProgrammingError etc. also trigger cleanup
+                # and don't leak the half-initialised connection. (#106)
+                with contextlib.suppress(sqlite3.Error):
+                    conn.close()
                 self._conn = None
                 raise
 
@@ -706,33 +709,39 @@ class OfflineKnowledgeBase:
         now = datetime.now(UTC).isoformat()
 
         with self._with_db_lock() as conn:
-            conn.execute(
-                """
-                INSERT INTO knowledge_nodes
-                (id, domain, content_hash, compressed_content, relevance_score,
-                 security_classification, last_accessed, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    domain = excluded.domain,
-                    content_hash = excluded.content_hash,
-                    compressed_content = excluded.compressed_content,
-                    security_classification = excluded.security_classification
-                """,
-                (
-                    node_id,
-                    domain.value,
-                    content_hash,
-                    compressed,
-                    relevance_score,
-                    classification,
-                    now,
-                    now,
-                ),
-            )
-            conn.commit()
-
-            # Update FTS index: delete old entry (if upsert) then insert plaintext
+            # Atomic insert: the knowledge_nodes upsert and the matching
+            # FTS delete+insert are committed together under a single
+            # transaction so an FTS failure rolls the node back rather
+            # than leaving the KB in a half-written state where the node
+            # is retrievable by id but invisible to FTS search until the
+            # next process restart triggers _sync_fts_index. (#102)
             try:
+                conn.execute(
+                    """
+                    INSERT INTO knowledge_nodes
+                    (id, domain, content_hash, compressed_content, relevance_score,
+                     security_classification, last_accessed, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        domain = excluded.domain,
+                        content_hash = excluded.content_hash,
+                        compressed_content = excluded.compressed_content,
+                        security_classification = excluded.security_classification
+                    """,
+                    (
+                        node_id,
+                        domain.value,
+                        content_hash,
+                        compressed,
+                        relevance_score,
+                        classification,
+                        now,
+                        now,
+                    ),
+                )
+
+                # Update FTS index in the SAME transaction: delete old entry
+                # (if upsert) then insert plaintext.
                 rowid = conn.execute(
                     "SELECT rowid FROM knowledge_nodes WHERE id = ?", (node_id,)
                 ).fetchone()
@@ -742,9 +751,17 @@ class OfflineKnowledgeBase:
                         "INSERT INTO knowledge_fts(rowid, content, domain) VALUES (?, ?, ?)",
                         (rowid[0], content, domain.value),
                     )
-                    conn.commit()
-            except sqlite3.OperationalError as e:
-                logger.debug("FTS update skipped: %s", e)
+
+                conn.commit()
+            except sqlite3.Error as exc:
+                # Roll back the whole unit (node + FTS) on any SQLite error.
+                # Widened from OperationalError to Error so IntegrityError,
+                # DatabaseError, etc. also trigger rollback instead of
+                # leaving a half-written node. (#102)
+                with contextlib.suppress(sqlite3.Error):
+                    conn.rollback()
+                logger.warning("add_knowledge rolled back: %s", exc)
+                raise
 
         logger.info("Added knowledge node: id=%s, domain=%s", node_id, domain.value)
         return node_id

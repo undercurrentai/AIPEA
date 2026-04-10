@@ -36,6 +36,7 @@ from aipea._types import (
     ProcessingTier,
     QueryType,
     SearchStrategy,
+    get_model_family,
 )
 from aipea.search import (
     ModelType,
@@ -958,13 +959,19 @@ class PromptEngine:
         # Get base template (includes query-type instructions)
         template = self._get_prompt_template(complexity, query_type)
 
-        # Model-aware query formatting (Defect 3)
-        model_lower = model_type.lower()
-        if "openai" in model_lower or "gpt" in model_lower:
+        # Model-aware query formatting. Delegate to the canonical family
+        # detector in _types so this dispatch never drifts from
+        # get_model_family (e.g. a caller passing "gemma3:1b" correctly
+        # routes to the Gemini-family numbered format instead of falling
+        # through to the generic branch while the sibling
+        # SearchContext.formatted_for_model below uses the canonical
+        # detector — the two branches previously disagreed). (#101)
+        family = get_model_family(model_type)
+        if family == "openai":
             query_section = f"## Query\n{query}"
-        elif "claude" in model_lower or "anthropic" in model_lower:
+        elif family == "claude":
             query_section = f"<query>\n{query}\n</query>"
-        elif "gemini" in model_lower or "google" in model_lower:
+        elif family == "gemini":
             query_section = f"Query:\n1. {query}"
         else:
             query_section = f"Query ({complexity} complexity): {query}"
