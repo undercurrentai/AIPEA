@@ -446,8 +446,7 @@ class TestWave18ConnectivityUsesCfgUrls:
         # Persist custom URL via .env in a fresh cwd
         env_file = tmp_path / ".env"
         env_file.write_text(
-            'EXA_API_KEY="fake-exa-key"\n'
-            'AIPEA_EXA_API_URL="https://custom.exa.example/v1/search"\n'
+            'EXA_API_KEY="fake-exa-key"\nAIPEA_EXA_API_URL="https://custom.exa.example/v1/search"\n'
         )
         import os as _os
 

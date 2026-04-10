@@ -151,9 +151,7 @@ else:
                 console.print("  Exa: [dim]skipped (no key)[/dim]")
 
             if cfg.has_firecrawl():
-                if not _test_firecrawl_connectivity(
-                    cfg.firecrawl_api_key, cfg.firecrawl_api_url
-                ):
+                if not _test_firecrawl_connectivity(cfg.firecrawl_api_key, cfg.firecrawl_api_url):
                     errors.append("Firecrawl API connectivity test failed")
             else:
                 console.print("  Firecrawl: [dim]skipped (no key)[/dim]")
@@ -169,9 +167,7 @@ else:
                 console.print(f"  [red]![/red] {error}")
             raise typer.Exit(1)
 
-    def _test_exa_connectivity(
-        api_key: str, api_url: str, *, silent: bool = False
-    ) -> bool:
+    def _test_exa_connectivity(api_key: str, api_url: str, *, silent: bool = False) -> bool:
         """Ping Exa API to verify the key works.
 
         ``api_url`` is passed in by the caller (typically from the resolved
@@ -198,9 +194,7 @@ else:
                 console.print(f"  Exa: [red]Error — {exc}[/red]")
             return False
 
-    def _test_firecrawl_connectivity(
-        api_key: str, api_url: str, *, silent: bool = False
-    ) -> bool:
+    def _test_firecrawl_connectivity(api_key: str, api_url: str, *, silent: bool = False) -> bool:
         """Ping Firecrawl API to verify the key works.
 
         ``api_url`` is passed in by the caller so custom endpoints

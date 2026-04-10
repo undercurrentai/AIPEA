@@ -1262,9 +1262,7 @@ class TestWave18LazyHTTPTimeout:
         assert _resolve_http_timeout() == 45.0
 
     @pytest.mark.asyncio
-    async def test_exa_search_uses_lazy_timeout(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_exa_search_uses_lazy_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """ExaSearchProvider.search resolves timeout at request time, not import time."""
         import aipea.search as search_mod
 
