@@ -109,7 +109,8 @@ def _get_api_key(env_var: str, constructor_value: str | None) -> str:
     return str(getattr(cfg, field_name, "")) if field_name else ""
 
 
-# Resolved once at import time; config file changes require process restart.
+# Back-compat alias; live call sites invoke _resolve_http_timeout() directly
+# so runtime config changes take effect without a process restart. (#81)
 HTTP_TIMEOUT = _resolve_http_timeout()
 
 
@@ -553,7 +554,7 @@ class ExaSearchProvider(SearchProvider):
         logger.info("Exa search: query_len=%d, num_results=%d", len(query), num_results)
 
         try:
-            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            async with httpx.AsyncClient(timeout=_resolve_http_timeout()) as client:
                 response = await client.post(
                     _resolve_exa_api_url(),
                     headers={
@@ -701,7 +702,7 @@ class FirecrawlProvider(SearchProvider):
         logger.info("Firecrawl search: query_len=%d, num_results=%d", len(query), num_results)
 
         try:
-            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            async with httpx.AsyncClient(timeout=_resolve_http_timeout()) as client:
                 response = await client.post(
                     _resolve_firecrawl_api_url(),
                     headers={
