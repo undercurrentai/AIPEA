@@ -239,9 +239,9 @@ self-assessment.
 
 ### P5d: Promote mutation testing to gating + add performance regression suite
 
-**Problem**: 91.79% line coverage doesn't prove operator correctness. `mutmut`
-currently runs nightly with `continue-on-error`. No latency SLOs exist, so
-semantic search and FTS paths can degrade silently.
+**Problem**: 92.37% line coverage (post-wave-19) doesn't prove operator
+correctness. `mutmut` currently runs nightly with `continue-on-error`. No
+latency SLOs exist, so semantic search and FTS paths can degrade silently.
 
 **Action**:
 1. **Mutation**: Resolve the enum-trampoline issue noted in `KNOWN_ISSUES.md`.
@@ -258,7 +258,7 @@ semantic search and FTS paths can degrade silently.
 > dependency. Treat that approval as the first step of this roadmap item.
 
 **Effort**: ~1 week.
-**Result**: Catches the slow drift that 752 unit tests won't.
+**Result**: Catches the slow drift that 968 unit tests won't.
 
 ### P5e: Build a commercial validation surface (non-engineering)
 
