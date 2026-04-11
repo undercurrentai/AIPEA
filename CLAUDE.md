@@ -1,8 +1,8 @@
 # CLAUDE.md - AIPEA
-> Version: 3.0.2 | Updated: 2026-04-10 | Owner: @joshuakirby
+> Version: 3.0.3 | Updated: 2026-04-10 | Owner: @joshuakirby
 
 ```yaml
-version: 3.0.2
+version: 3.0.3
 status: ACTIVE
 tier: 2  # Standard (~9.8K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
@@ -28,6 +28,7 @@ token_budget: 8000
 | **License** | MIT |
 | **Source LOC** | ~9,790 |
 | **Exports** | 36 symbols in `__all__` |
+| **Build backend** | hatchling — **do NOT run `poetry install` / `poetry lock` / `poetry run` in this directory**. It silently creates an orphan venv in `~/Library/Caches/pypoetry/virtualenvs/aipea-*`. Use `make install` (pip + `.venv/`). |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
 ---

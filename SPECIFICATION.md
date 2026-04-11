@@ -1,5 +1,5 @@
 # AIPEA Specification
-> **AI Prompt Engineer Agent** | Version 1.3.1 | 2026-03-15
+> **AI Prompt Engineer Agent** | Version 1.3.2 | 2026-04-10
 
 ```yaml
 status: ACCEPTED
@@ -1155,7 +1155,7 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full roadmap with 6 prioritized
 
 ### 11.1 Public Exports (`aipea/__init__.py`)
 
-> **Note**: The actual `__init__.py` exports 34 symbols. The listing below shows the
+> **Note**: The actual `__init__.py` exports 36 symbols. The listing below shows the
 > full internal API surface (including non-exported internals) for reference. Symbols
 > marked with `# (not in __all__)` are accessible but not part of the public API.
 
@@ -1383,5 +1383,5 @@ Stored in `docs/design-reference/` for historical reference:
 
 ---
 
-*AIPEA Specification v1.0.0 — AI Prompt Engineer Agent*
-*Undercurrent Holdings | 2026-02-14*
+*AIPEA Specification v1.3.2 — AI Prompt Engineer Agent*
+*Undercurrent Holdings | 2026-04-10 (wave 19 in [Unreleased])*
