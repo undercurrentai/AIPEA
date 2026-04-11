@@ -54,3 +54,10 @@ aipea_knowledge.db
 
 # AFA workflow config
 .afa.yaml
+
+# Poetry — AIPEA uses hatchling (see pyproject.toml [build-system]);
+# a stray `poetry install` pointed at this directory would otherwise
+# drop a lockfile in-tree. Keep both out so the build backend stays
+# unambiguous.
+poetry.lock
+poetry.toml
