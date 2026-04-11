@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-04-11
+
+**Security-relevant release.** Closes two findings users should upgrade for immediately:
+
+- **#96 — HIPAA/TACTICAL compliance leak** in `_scan_search_results`: hardcoded `SecurityContext(compliance_mode=GENERAL)` meant PHI and classified markers in scraped web snippets were never filtered for HIPAA- or TACTICAL-mode callers, and could be embedded verbatim into the downstream prompt.
+- **#107 — ReDoS** in `_is_regex_safe`: duplicated-alternative quantified groups (`(X|X)+`) were not flagged, making the regex validator itself vulnerable to the DoS class it was supposed to prevent.
+
+Plus 11 additional fixes from bug-hunt Wave 19 and 4 ultrathink audit extensions. See details below. Also introduces `SECURITY.md` with a formal vulnerability disclosure policy and honest scope framing (HIPAA/TACTICAL are detection + allowlist only; FedRAMP is an unenforced config stub).
+
+### Added
+- `SECURITY.md` — vulnerability disclosure policy, scope, supported versions
+
 ### Fixed (Wave 19 — 13 bugs fixed, 4 ultrathink audit extensions, 0 deferred)
 - **security**: `patient_name` PHI regex was compiled with `re.IGNORECASE`, a Python gotcha that makes `[A-Z]`/`[a-z]` character classes case-insensitive and collapsed the pattern to "patient + any two words" — every HIPAA-mode query containing "patient" (e.g. "the patient has good vitals") was flagged as PHI. Compile without the flag and scope case-insensitivity to the label via `(?i:patient)` (#95)
 - **enhancer**: `_scan_search_results` hardcoded `SecurityContext(compliance_mode=GENERAL)`, so `SecurityScanner.scan` never ran PHI checks (HIPAA-gated) or classified-marker checks (TACTICAL-gated) on scraped web snippets. A user who selected HIPAA/TACTICAL could receive search results containing MRNs, patient names, or SECRET markers embedded verbatim into the prompt forwarded to downstream models — silent compliance leak. Thread the caller's `security_context` through and filter on `phi_detected:*` / `classified_marker:*` / `pii_detected:*` (ultrathink extension for HIPAA Safe Harbor compliance) flags (#96)
