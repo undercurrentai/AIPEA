@@ -50,6 +50,14 @@ parent: ../../CLAUDE.md
 
 ### 2.1 Research Findings
 
+> **HISTORICAL SNAPSHOT.** Findings recorded at the time of the original
+> v3.0.0 audit (2026-02-14). Some rows carry per-row `(updated YYYY-MM-DD)`
+> stamps for spot-updates, but this section is **not** continuously
+> maintained. For current project state see `CLAUDE.md §0 Quick Reference`
+> or run `make test` / `wc -l src/aipea/*.py`. For the authoritative
+> change history of the project since this audit, see the Change Log
+> table at the end of this file.
+
 | Source | Query | Finding |
 |--------|-------|---------|
 | pyproject.toml | Build system | hatchling build backend — supports `hatch build` for PyPI |
@@ -240,6 +248,7 @@ parent: ../../CLAUDE.md
 | 2026-04-10 | Wave 18 deferred-resolution + ultrathink | 7 fixes (#80, #81, #90-#94), 1 reclassified INTENTIONAL (#79 — Exa neural scores documented [0,1]); per-model query-section rebuild, atomic tempfile+fsync secret write, cfg.*_api_url plumbing, lazy HTTP_TIMEOUT, storage-stats lock, whitespace clarity guard, \uXXXX dotenv decode, SPECIFICATION.md drift fix; 916 passing, 91.94% coverage, ~9,580 source LOC, 0 DEFERRED |
 | 2026-04-10 | Wave 19 bug hunt + ultrathink | 13 fixes (#95-#107), 4 ultrathink audit extensions (3+ alt ReDoS, HIPAA Safe Harbor PII filtering, TOML BOM, lock-release test), 0 deferred: patient_name IGNORECASE gotcha, search-result compliance leak in HIPAA/TACTICAL, uppercase Cyrillic homoglyph gap, formatter URL escaping parity, save_dotenv silent data loss on unreadable .env, Firecrawl deep_research hardcoded URL, engine Gemma family dispatch, add_knowledge two-commit atomicity, enhance_for_models empty-query guard, dotenv UTF-8 BOM, quality density score discontinuity, _init_db narrow exception, _is_regex_safe duplicate-alternative ReDoS; 968 passing, 92.37% coverage, ~9,790 source LOC, 0 DEFERRED |
 | 2026-04-10 | Docs-sync post-wave-19 | CLAUDE.md v3.0.2→v3.0.3 (added Build backend row to §0 Quick Reference discouraging `poetry install` — prevention against the orphan Poetry venv footgun discovered in this session). SPECIFICATION.md header 1.3.1→1.3.2, footer v1.0.0→v1.3.2, `__init__.py exports 34 symbols` → `36 symbols`. docs/ROADMAP.md P5d refreshed: 91.79%→92.37% coverage, 752→968 unit tests (post-wave-19 baseline). No source changes. |
+| 2026-04-10 | Rigor follow-ups (flagged items 1/2/4 from /docs-sync) | CLAUDE.md v3.0.3→v3.0.4: new §11 "Metric-Citing Docs" subsection establishing commit/release/date anchor convention for live metrics in Markdown docs, with historical-snapshot-section exception. SPECIFICATION.md §3.1/§3.2/§3.3 per-module "Test coverage" lines clarified as "AgoraIV extraction baseline; see CI for current" — removes ambiguity with current live metrics. This file §2.1 "Research Findings" gained a HISTORICAL SNAPSHOT banner so casual readers don't misread the frozen 2026-02-14 figures as current. Executed via rigor 6-phase protocol; no source changes. |
 
 *Audit completed: 2026-02-14 | Auditor: Claude Code (Opus 4.6) | Protocol: v4.0*
-*Last amended: 2026-04-10 (docs-sync post-wave-19)*
+*Last amended: 2026-04-10 (rigor follow-ups: items 1/2/4 from /docs-sync)*
