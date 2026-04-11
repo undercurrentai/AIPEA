@@ -1,8 +1,11 @@
 # CLAUDE.md - AIPEA
-> Version: 3.0.5 | Updated: 2026-04-11 | Owner: @joshuakirby
+> **Agent Contract v3.0.5** (governs this file) | **Library:** `aipea` v1.3.3 (PyPI) | Updated: 2026-04-11 | Owner: @joshuakirby
+>
+> *Note: the `version` field below is the version of this Agent Contract document, not the AIPEA library. The library version lives in `pyproject.toml` and `src/aipea/__init__.py`.*
 
 ```yaml
-version: 3.0.5
+agent_contract_version: 3.0.5  # version of THIS file; NOT the aipea library
+library_version_source: pyproject.toml  # canonical aipea library version
 status: ACTIVE
 tier: 2  # Standard (~9.8K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
