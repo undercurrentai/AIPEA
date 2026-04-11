@@ -232,9 +232,17 @@ class QualityAssessor:
 
         # Delta in content-word ratio.  Positive = denser.
         delta = enh_r - orig_r
-        # Normalise: even a +0.15 delta is excellent
-        if delta > 0:
-            return _clamp(delta / 0.15)
+        # Score continuously around a 0.5 baseline so a tiny positive delta
+        # doesn't drop below a tiny negative delta. Previously the two
+        # branches crossed discontinuously at delta=0 (delta=+0.001 scored
+        # 0.007 while delta=-0.001 scored 0.499), producing non-monotonic
+        # quality scores on near-neutral density changes. (#105)
+        #
+        # - delta = +0.15 (docstring "excellent")  ->  1.0
+        # - delta = 0     (no change)              ->  0.5
+        # - delta = -0.5  (worst realistic drop)   ->  0.0
+        if delta >= 0:
+            return _clamp(0.5 + (delta / 0.15) * 0.5)
         # No penalty for slight drop when the enhanced prompt is much longer
         # (longer prompts naturally dilute ratio a bit)
         return _clamp(0.5 + delta)

@@ -2236,3 +2236,319 @@ class TestEnhancerResourceManagement:
         with AIPEAEnhancer() as enhancer:
             assert enhancer._offline_kb is not None
         mock_kb_instance.close.assert_called_once()
+
+
+class TestWave19ScanSearchResultsCompliance:
+    """Regression for bug #96: `_scan_search_results` hardcoded a GENERAL
+    SecurityContext, so PHI patterns (HIPAA) and classified markers
+    (TACTICAL) were never applied to scraped web snippets — a silent
+    compliance leak where search results containing SSNs or SECRET markers
+    were embedded verbatim into the enhanced prompt sent to downstream
+    models in HIPAA / TACTICAL mode. The fix plumbs the caller's security
+    context through so mode-gated scans actually run."""
+
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_hipaa_mode_filters_phi_mrn(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """In HIPAA mode, a snippet with an MRN must be filtered.
+
+        Previously the hardcoded GENERAL context skipped the PHI check
+        entirely, so MRNs and other PHI patterns were silently embedded
+        into the enhanced prompt forwarded to downstream models.
+        """
+        enhancer = AIPEAEnhancer()
+        ctx = AIPEASearchContext(
+            query="medical test",
+            results=[
+                SearchResult(
+                    title="Safe",
+                    url="https://example.com/safe",
+                    snippet="General cancer treatment overview.",
+                    score=0.9,
+                ),
+                SearchResult(
+                    title="Leak",
+                    url="https://example.com/phi",
+                    snippet="Record shows MRN:987654 for this admission.",
+                    score=0.8,
+                ),
+            ],
+            timestamp=datetime.now(UTC),
+            source="test",
+            confidence=0.8,
+        )
+        hipaa_ctx = SecurityContext(compliance_mode=ComplianceMode.HIPAA)
+        filtered = enhancer._scan_search_results(ctx, hipaa_ctx)
+        titles = [r.title for r in filtered.results]
+        assert "Leak" not in titles, "MRN-containing result should be filtered"
+        assert "Safe" in titles
+
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_general_mode_does_not_filter_mrn(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """In GENERAL mode, MRN is NOT filtered (PHI checks don't run)."""
+        enhancer = AIPEAEnhancer()
+        ctx = AIPEASearchContext(
+            query="test",
+            results=[
+                SearchResult(
+                    title="MRNResult",
+                    url="https://example.com/",
+                    snippet="Medical record MRN: 12345 archived.",
+                    score=0.9,
+                ),
+            ],
+            timestamp=datetime.now(UTC),
+            source="test",
+            confidence=0.8,
+        )
+        general_ctx = SecurityContext(compliance_mode=ComplianceMode.GENERAL)
+        filtered = enhancer._scan_search_results(ctx, general_ctx)
+        # GENERAL mode does not scan PHI; result passes through.
+        assert len(filtered.results) == 1
+
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_hipaa_mode_filters_phi_patient_name(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """In HIPAA mode, a snippet with proper-name PHI must be filtered.
+
+        Previously this slipped through because the hardcoded GENERAL
+        context skipped the PHI check entirely.
+        """
+        enhancer = AIPEAEnhancer()
+        ctx = AIPEASearchContext(
+            query="clinical workflow",
+            results=[
+                SearchResult(
+                    title="PHI Leak",
+                    url="https://example.com/phi",
+                    snippet="patient: John Smith MRN:123456",
+                    score=0.9,
+                ),
+                SearchResult(
+                    title="Benign",
+                    url="https://example.com/benign",
+                    snippet="the patient has good vitals",
+                    score=0.8,
+                ),
+            ],
+            timestamp=datetime.now(UTC),
+            source="test",
+            confidence=0.8,
+        )
+        hipaa_ctx = SecurityContext(compliance_mode=ComplianceMode.HIPAA)
+        filtered = enhancer._scan_search_results(ctx, hipaa_ctx)
+        titles = [r.title for r in filtered.results]
+        assert "PHI Leak" not in titles, "PHI leak should have been filtered"
+        assert "Benign" in titles, "Benign phrase should have been kept"
+
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_tactical_mode_filters_classified_marker(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """In TACTICAL mode, a snippet with a classified marker must be filtered."""
+        enhancer = AIPEAEnhancer()
+        ctx = AIPEASearchContext(
+            query="defense topic",
+            results=[
+                SearchResult(
+                    title="Clean",
+                    url="https://example.com/clean",
+                    snippet="Public doctrine summary about logistics.",
+                    score=0.9,
+                ),
+                SearchResult(
+                    title="Classified",
+                    url="https://example.com/bad",
+                    snippet="This document is TOP SECRET until 2030.",
+                    score=0.8,
+                ),
+            ],
+            timestamp=datetime.now(UTC),
+            source="test",
+            confidence=0.8,
+        )
+        tactical_ctx = SecurityContext(compliance_mode=ComplianceMode.TACTICAL)
+        filtered = enhancer._scan_search_results(ctx, tactical_ctx)
+        titles = [r.title for r in filtered.results]
+        assert "Classified" not in titles
+        assert "Clean" in titles
+
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_general_mode_does_not_over_filter(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """In GENERAL mode, benign clinical phrases must NOT be filtered."""
+        enhancer = AIPEAEnhancer()
+        ctx = AIPEASearchContext(
+            query="medical",
+            results=[
+                SearchResult(
+                    title="Benign",
+                    url="https://example.com/benign",
+                    snippet="the patient has good vitals and is discharged",
+                    score=0.9,
+                ),
+            ],
+            timestamp=datetime.now(UTC),
+            source="test",
+            confidence=0.8,
+        )
+        general_ctx = SecurityContext(compliance_mode=ComplianceMode.GENERAL)
+        filtered = enhancer._scan_search_results(ctx, general_ctx)
+        assert len(filtered.results) == 1
+        assert filtered.results[0].title == "Benign"
+
+
+class TestWave19EnhanceForModelsEmptyQuery:
+    """Regression for bug #103: `enhance_for_models` lacked the empty-query
+    short-circuit that `enhance()` has. An empty query slipped through,
+    producing per-model prompts with literally empty query sections."""
+
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_empty_query_returns_empty_dict(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """Empty query must return {} without running enhancement."""
+        enhancer = AIPEAEnhancer()
+        result = await enhancer.enhance_for_models("", ["gpt-5.2"])
+        assert result == {}
+
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_whitespace_only_query_returns_empty_dict(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """Whitespace-only query must return {} without running enhancement."""
+        enhancer = AIPEAEnhancer()
+        result = await enhancer.enhance_for_models("   \n\t  ", ["gpt-5.2", "claude-opus-4-6"])
+        assert result == {}
+
+
+class TestUltrathinkScanSearchResultsPiiFiltering:
+    """Ultrathink-audit extension of wave-19 bug #96.
+
+    The wave-19 fix filtered PHI (HIPAA) and classified markers (TACTICAL)
+    from search snippets based on scan flags. The original bug report
+    called out 'SSN, MRN, or SECRET//NOFORN marker' as examples that
+    should not leak to downstream models. SSN is a PII pattern (not PHI),
+    so the wave-19 fix missed it. Under HIPAA Safe Harbor, SSN / bank
+    account numbers / credit cards / bearer tokens ARE direct identifiers
+    and must be treated as PHI. Same rationale for TACTICAL mode: direct
+    identifiers should not leak to an external LLM in an air-gapped flow."""
+
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_hipaa_mode_filters_ssn_pii(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """In HIPAA mode, a snippet containing an SSN (PII) must be filtered."""
+        enhancer = AIPEAEnhancer()
+        ctx = AIPEASearchContext(
+            query="medical billing",
+            results=[
+                SearchResult(
+                    title="Safe",
+                    url="https://example.com/safe",
+                    snippet="Billing cycle overview and payment processing.",
+                    score=0.9,
+                ),
+                SearchResult(
+                    title="PIILeak",
+                    url="https://example.com/pii",
+                    snippet="Contact record: 123-45-6789 on file.",
+                    score=0.8,
+                ),
+            ],
+            timestamp=datetime.now(UTC),
+            source="test",
+            confidence=0.8,
+        )
+        hipaa_ctx = SecurityContext(compliance_mode=ComplianceMode.HIPAA)
+        filtered = enhancer._scan_search_results(ctx, hipaa_ctx)
+        titles = [r.title for r in filtered.results]
+        assert "PIILeak" not in titles, "SSN-containing result should be filtered in HIPAA mode"
+        assert "Safe" in titles
+
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_tactical_mode_filters_ssn_pii(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """In TACTICAL mode, a snippet containing an SSN must be filtered."""
+        enhancer = AIPEAEnhancer()
+        ctx = AIPEASearchContext(
+            query="personnel record",
+            results=[
+                SearchResult(
+                    title="PIILeak",
+                    url="https://example.com/pii",
+                    snippet="Record: 123-45-6789 archived 2020.",
+                    score=0.8,
+                ),
+                SearchResult(
+                    title="Clean",
+                    url="https://example.com/clean",
+                    snippet="Personnel records policy summary.",
+                    score=0.9,
+                ),
+            ],
+            timestamp=datetime.now(UTC),
+            source="test",
+            confidence=0.8,
+        )
+        tactical_ctx = SecurityContext(compliance_mode=ComplianceMode.TACTICAL)
+        filtered = enhancer._scan_search_results(ctx, tactical_ctx)
+        titles = [r.title for r in filtered.results]
+        assert "PIILeak" not in titles
+        assert "Clean" in titles
+
+    @pytest.mark.unit
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    def test_general_mode_does_not_filter_ssn_pii(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """In GENERAL mode, SSN-containing snippets pass through.
+
+        PII is flagged in GENERAL mode but not filtered — research use
+        cases may legitimately include SSN text in the output.
+        """
+        enhancer = AIPEAEnhancer()
+        ctx = AIPEASearchContext(
+            query="public registry",
+            results=[
+                SearchResult(
+                    title="WithSSN",
+                    url="https://example.com/",
+                    snippet="Form requires 123-45-6789 on Line 3.",
+                    score=0.9,
+                ),
+            ],
+            timestamp=datetime.now(UTC),
+            source="test",
+            confidence=0.8,
+        )
+        general_ctx = SecurityContext(compliance_mode=ComplianceMode.GENERAL)
+        filtered = enhancer._scan_search_results(ctx, general_ctx)
+        # In GENERAL mode, PII is flagged but the result is not filtered —
+        # research/general use cases may legitimately include SSN text.
+        assert len(filtered.results) == 1

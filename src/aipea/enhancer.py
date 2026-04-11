@@ -672,6 +672,14 @@ class AIPEAEnhancer:
         """
         results: dict[str, EnhancedRequest] = {}
 
+        # Empty-query short circuit. Mirrors enhance()'s early return at
+        # the top of the method: downstream per-model prompt building would
+        # produce templates with literally empty query sections, leaking
+        # malformed prompts instead of signalling the empty input. (#103)
+        if not query or not query.strip():
+            logger.debug("Empty query provided to enhance_for_models()")
+            return results
+
         # Filter model list to those allowed by current compliance policy.
         # If none are allowed, skip enhancement entirely.
         compliance_handler = ComplianceHandler(self._default_compliance)
@@ -837,8 +845,11 @@ class AIPEAEnhancer:
         if search_context and not search_context.is_empty():
             source = search_context.source
             raw_count = len(search_context.results)
-            # Scan search results for injection attacks (Finding 5)
-            search_context = self._scan_search_results(search_context)
+            # Scan search results for injection attacks AND compliance leaks
+            # (PHI in HIPAA mode, classified markers in TACTICAL mode). The
+            # caller's security_context is plumbed through so mode-gated
+            # PHI/classified scans actually run on scraped web content. (#96)
+            search_context = self._scan_search_results(search_context, security_context)
             filtered_count = raw_count - len(search_context.results)
             if filtered_count > 0:
                 enhancement_notes.append(
@@ -856,14 +867,26 @@ class AIPEAEnhancer:
             )
         return search_context
 
-    def _scan_search_results(self, search_context: SearchContext) -> SearchContext:
-        """Scan search result snippets for injection attacks.
+    def _scan_search_results(
+        self,
+        search_context: SearchContext,
+        caller_ctx: SecurityContext | None = None,
+    ) -> SearchContext:
+        """Scan search result snippets for injection attacks and compliance leaks.
 
         Filters out search results whose content triggers the security
-        scanner (e.g., prompt injection attempts in web pages).
+        scanner — either a prompt injection attempt embedded in a scraped
+        page, OR (when the caller is in HIPAA / TACTICAL mode) a snippet
+        containing PHI / classified markers that must not be forwarded to
+        downstream models in those modes. (#96)
 
         Args:
             search_context: Search context with results to scan
+            caller_ctx: The active SecurityContext from the enhance() call.
+                If None (back-compat), a default GENERAL context is used and
+                only injection filtering runs — callers should plumb through
+                the real context so PHI / classified filtering engages in
+                HIPAA / TACTICAL mode.
 
         Returns:
             Filtered SearchContext with dangerous results removed
@@ -871,19 +894,56 @@ class AIPEAEnhancer:
         if search_context.is_empty():
             return search_context
 
-        safe_results: list[SearchResult] = []
-        dummy_security_ctx = SecurityContext(
-            compliance_mode=ComplianceMode.GENERAL,
-            security_level=SecurityLevel.UNCLASSIFIED,
-        )
+        # Mirror the caller's compliance mode into the scan context so
+        # PHI/classified checks actually run. Security level stays
+        # UNCLASSIFIED because the snippet text originates from the web,
+        # not the user's query. (#96)
+        if caller_ctx is not None:
+            scan_ctx = SecurityContext(
+                compliance_mode=caller_ctx.compliance_mode,
+                security_level=SecurityLevel.UNCLASSIFIED,
+            )
+        else:
+            scan_ctx = SecurityContext(
+                compliance_mode=ComplianceMode.GENERAL,
+                security_level=SecurityLevel.UNCLASSIFIED,
+            )
+        hipaa_mode = scan_ctx.compliance_mode == ComplianceMode.HIPAA
+        tactical_mode = scan_ctx.compliance_mode == ComplianceMode.TACTICAL
 
+        safe_results: list[SearchResult] = []
         for result in search_context.results:
             snippet = result.snippet or ""
             if snippet:
-                scan = self._security_scanner.scan(snippet, dummy_security_ctx)
+                scan = self._security_scanner.scan(snippet, scan_ctx)
                 if scan.is_blocked:
                     logger.warning(
                         "Search result filtered (injection detected): %s",
+                        result.title or result.url,
+                    )
+                    continue
+                # PHI / classified markers / PII are surfaced as flags
+                # rather than is_blocked by SecurityScanner.scan. In HIPAA
+                # mode we must not forward PHI-containing or PII-containing
+                # web snippets to downstream models — HIPAA Safe Harbor
+                # explicitly classifies SSN, account numbers, and similar
+                # direct identifiers as PHI, so PII flags also warrant
+                # filtering in HIPAA mode (ultrathink audit, wave 19).
+                # In TACTICAL mode ditto for classified markers and PII
+                # (direct identifiers should not leak to an external LLM
+                # in an air-gapped workflow). (#96)
+                has_phi = any(f.startswith("phi_detected:") for f in scan.flags)
+                has_pii = any(f.startswith("pii_detected:") for f in scan.flags)
+                has_classified = any(f.startswith("classified_marker:") for f in scan.flags)
+                if hipaa_mode and (has_phi or has_pii):
+                    logger.warning(
+                        "Search result filtered (PHI/PII in HIPAA mode): %s",
+                        result.title or result.url,
+                    )
+                    continue
+                if tactical_mode and (has_classified or has_pii):
+                    logger.warning(
+                        "Search result filtered (classified/PII in TACTICAL mode): %s",
                         result.title or result.url,
                     )
                     continue

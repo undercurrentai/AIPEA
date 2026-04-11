@@ -1639,5 +1639,75 @@ class TestWave17CreateModelSpecificPromptSecurityFraming:
         assert "Supplementary Context from Web Search" not in prompt
 
 
+class TestWave19FormulatePromptModelFamilyDispatch:
+    """Regression for bug #101: `formulate_search_aware_prompt` used an
+    ad-hoc substring chain (`"gemini" in model_lower or "google" in
+    model_lower`) that missed Gemma model ids (`gemma3:1b`, `gemma3:270m`),
+    producing inconsistent formatting — the query section fell through to
+    the generic "(complexity) complexity" branch while the search-context
+    block in the same function correctly used `get_model_family` and
+    picked the Gemini-family numbered format. Fix: delegate to the
+    canonical `get_model_family` detector so dispatch cannot drift."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_gemma_raw_id_routes_to_gemini_family(self) -> None:
+        """A raw 'gemma3:1b' id must produce the Gemini-family numbered format."""
+        engine = PromptEngine()
+        prompt = await engine.formulate_search_aware_prompt(
+            query="test query",
+            complexity="medium",
+            search_context=None,
+            model_type="gemma3:1b",
+            query_type="technical",
+        )
+        # Gemini family query section uses "Query:\n1. " prefix
+        assert "Query:\n1. test query" in prompt
+        # Must NOT fall through to generic "(medium complexity)" branch
+        assert "(medium complexity)" not in prompt
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_gpt_id_routes_to_openai_family(self) -> None:
+        """GPT id routes through the openai markdown branch."""
+        engine = PromptEngine()
+        prompt = await engine.formulate_search_aware_prompt(
+            query="test query",
+            complexity="medium",
+            search_context=None,
+            model_type="gpt-5.2",
+            query_type="technical",
+        )
+        assert "## Query\ntest query" in prompt
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_claude_id_routes_to_claude_family(self) -> None:
+        """Claude id routes through the claude XML branch."""
+        engine = PromptEngine()
+        prompt = await engine.formulate_search_aware_prompt(
+            query="test query",
+            complexity="medium",
+            search_context=None,
+            model_type="claude-opus-4-6",
+            query_type="technical",
+        )
+        assert "<query>\ntest query\n</query>" in prompt
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_unknown_model_falls_through_to_generic(self) -> None:
+        """An unknown model_type still falls through to the generic branch."""
+        engine = PromptEngine()
+        prompt = await engine.formulate_search_aware_prompt(
+            query="test query",
+            complexity="medium",
+            search_context=None,
+            model_type="mystery-model-xyz",
+            query_type="technical",
+        )
+        assert "Query (medium complexity): test query" in prompt
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

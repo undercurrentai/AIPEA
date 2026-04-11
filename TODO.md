@@ -3,7 +3,7 @@
 Canonical tracker for all pending work. Replaces scattered items from ROADMAP.md,
 NEXT_STEPS.md, KNOWN_ISSUES.md, SPECIFICATION.md, and discovery findings.
 
-Last updated: 2026-04-10 (Wave 18: 7 deferred bugs fixed, 1 reclassified as INTENTIONAL)
+Last updated: 2026-04-10 (Wave 19: 13 bugs fixed + 4 ultrathink audit extensions, 0 deferred)
 
 ---
 
@@ -30,9 +30,27 @@ Last updated: 2026-04-10 (Wave 18: 7 deferred bugs fixed, 1 reclassified as INTE
 
 ## Deferred Bugs (from bug-hunt waves)
 
-All deferred entries from waves 16-17 were resolved in **Wave 18 (2026-04-10)**.
-Full details in [KNOWN_ISSUES.md](KNOWN_ISSUES.md) § "Wave 18 Fixes" and
-§ "Intentional Design Decisions".
+All deferred entries from waves 16-17 were resolved in **Wave 18 (2026-04-10)**,
+and wave 19 closed out a further 13 findings with zero deferrals plus 4
+ultrathink audit extensions. Full details in
+[KNOWN_ISSUES.md](KNOWN_ISSUES.md) § "Wave 19 Fixes", § "Wave 19 Ultrathink
+Audit Extensions", § "Wave 18 Fixes", and § "Intentional Design Decisions".
+
+### Wave 19 — resolved (2026-04-10)
+
+- [x] **#95** `patient_name` PHI regex IGNORECASE gotcha — FIXED (compile without flag, `(?i:patient)` inline group)
+- [x] **#96** `_scan_search_results` compliance leak — FIXED (thread caller context; filter PHI/classified/PII per mode)
+- [x] **#97** Uppercase Cyrillic homoglyph gap — FIXED (added U+0406, U+0405, U+0408, U+0458)
+- [x] **#98** Formatter URL escaping bypass — FIXED (_escape_markdown/_escape_plaintext on URL field)
+- [x] **#99** `save_dotenv` silent data loss on unreadable `.env` — FIXED (strict parse; raise on PermissionError)
+- [x] **#100** `Firecrawl.deep_research` hardcoded URL — FIXED (derive from resolved search URL)
+- [x] **#101** `formulate_search_aware_prompt` missed Gemma ids — FIXED (delegate to canonical `get_model_family`)
+- [x] **#102** `_add_knowledge_sync` two-commit atomicity — FIXED (single transaction with rollback)
+- [x] **#103** `enhance_for_models` empty-query guard — FIXED (short-circuit matching `enhance()`)
+- [x] **#104** `_parse_dotenv` UTF-8 BOM — FIXED (`utf-8-sig` codec; TOML parser also updated)
+- [x] **#105** `_score_density` discontinuous curve — FIXED (monotonic around delta=0)
+- [x] **#106** `_init_db` narrow exception class — FIXED (widened to `sqlite3.Error`)
+- [x] **#107** `_is_regex_safe` duplicate-alternative ReDoS — FIXED (heuristic + ultrathink extension for 3+ alternatives)
 
 ### Wave 18 — resolved
 

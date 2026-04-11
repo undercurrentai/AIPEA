@@ -1163,3 +1163,157 @@ class TestWave18AtomicWrite:
         assert not env_file.exists()
         # Sanity: original os.replace still importable
         _ = original_replace
+
+
+class TestWave19ParseDotenvBom:
+    """Regression for bug #104: `_parse_dotenv` used `encoding="utf-8"` and
+    then relied on `line.strip()` to clean each line. Neither step removes
+    the UTF-8 BOM (U+FEFF) that Windows editors like Notepad often emit,
+    so the first key in a BOM-prefixed `.env` was parsed as `\\ufeffKEY`
+    instead of `KEY`. Fix: use the `utf-8-sig` codec which transparently
+    strips a leading BOM and behaves identically to `utf-8` otherwise."""
+
+    def test_bom_prefixed_env_parses_cleanly(self, tmp_path: Path) -> None:
+        """A .env with a leading UTF-8 BOM must parse without the BOM in keys."""
+        env_file = tmp_path / ".env"
+        # Write content with explicit BOM
+        env_file.write_bytes(b"\xef\xbb\xbfEXA_API_KEY=sk-test-123\n")
+        parsed = _parse_dotenv(env_file)
+        assert "EXA_API_KEY" in parsed
+        assert "\ufeffEXA_API_KEY" not in parsed
+        assert parsed["EXA_API_KEY"] == "sk-test-123"
+
+    def test_non_bom_env_still_parses(self, tmp_path: Path) -> None:
+        """Regular UTF-8 (no BOM) must still work."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("EXA_API_KEY=sk-no-bom\n", encoding="utf-8")
+        parsed = _parse_dotenv(env_file)
+        assert parsed["EXA_API_KEY"] == "sk-no-bom"
+
+    def test_bom_round_trip_through_save_dotenv(self, tmp_path: Path) -> None:
+        """A BOM-prefixed .env written back via save_dotenv must emerge clean
+        and the key must not be duplicated under the BOM-decorated name."""
+        env_file = tmp_path / ".env"
+        env_file.write_bytes(
+            b"\xef\xbb\xbfEXA_API_KEY=old-value\nDATABASE_URL=postgres://host/db\n"
+        )
+        cfg = AIPEAConfig(exa_api_key="new-value")
+        save_dotenv(env_file, cfg)
+        rewritten = _parse_dotenv(env_file)
+        # EXA_API_KEY updated to new value, not duplicated under BOM key.
+        assert rewritten["EXA_API_KEY"] == "new-value"
+        assert "\ufeffEXA_API_KEY" not in rewritten
+        # Preserved non-AIPEA key.
+        assert rewritten["DATABASE_URL"] == "postgres://host/db"
+
+
+class TestWave19SaveDotenvStrictRead:
+    """Regression for bug #99: `_parse_dotenv` caught `OSError` and
+    returned `{}`, making "missing file" and "permission denied"
+    indistinguishable to `save_dotenv`. A user whose `.env` had been
+    locked down (e.g. `chmod 200` or root-owned in a user-writable dir)
+    would run `aipea configure` and silently lose every non-AIPEA line in
+    the file — `os.replace` only needs parent-directory write permission,
+    so the destructive rewrite always succeeded. Fix: `save_dotenv` passes
+    `strict=True` to `_parse_dotenv`, causing a `PermissionError` /
+    `OSError` on an existing-but-unreadable file to propagate rather than
+    silently erasing the user's non-AIPEA keys."""
+
+    def test_save_dotenv_raises_on_unreadable_existing_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Unreadable existing .env must raise, not silently destroy keys."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("DATABASE_URL=postgres://host/db\n", encoding="utf-8")
+
+        # Monkey-patch Path.read_text to simulate PermissionError only for
+        # our target file. Direct interception is deterministic regardless
+        # of runner euid and cross-platform filesystem semantics.
+        real_read_text = Path.read_text
+
+        def fake_read_text(self: Path, *args: object, **kwargs: object) -> str:
+            if self == env_file:
+                raise PermissionError(f"simulated: cannot read {self}")
+            return real_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(Path, "read_text", fake_read_text)
+
+        cfg = AIPEAConfig(exa_api_key="new-key")
+        with pytest.raises(PermissionError, match="simulated"):
+            save_dotenv(env_file, cfg)
+
+        # Restore before reading to verify target is untouched.
+        monkeypatch.setattr(Path, "read_text", real_read_text)
+        # Original content must survive — no silent destruction.
+        surviving = env_file.read_text(encoding="utf-8")
+        assert "DATABASE_URL=postgres://host/db" in surviving
+
+    def test_save_dotenv_succeeds_on_missing_file(self, tmp_path: Path) -> None:
+        """If the .env doesn't exist, save_dotenv must still create it."""
+        env_file = tmp_path / ".env"
+        assert not env_file.exists()
+        cfg = AIPEAConfig(exa_api_key="fresh-key")
+        save_dotenv(env_file, cfg)
+        assert env_file.exists()
+        parsed = _parse_dotenv(env_file)
+        assert parsed["EXA_API_KEY"] == "fresh-key"
+
+    def test_parse_dotenv_strict_true_propagates_permission_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """strict=True must raise on PermissionError; default False swallows."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("FOO=bar\n", encoding="utf-8")
+        real_read_text = Path.read_text
+
+        def fake_read_text(self: Path, *args: object, **kwargs: object) -> str:
+            if self == env_file:
+                raise PermissionError("no read")
+            return real_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(Path, "read_text", fake_read_text)
+
+        # Default: silent empty dict
+        assert _parse_dotenv(env_file) == {}
+        # Strict: raises
+        with pytest.raises(PermissionError):
+            _parse_dotenv(env_file, strict=True)
+
+    def test_parse_dotenv_strict_true_missing_file_returns_empty(self, tmp_path: Path) -> None:
+        """strict=True on a missing file still returns {} (FileNotFoundError path)."""
+        env_file = tmp_path / "does-not-exist.env"
+        assert _parse_dotenv(env_file, strict=True) == {}
+
+
+class TestUltrathinkTomlConfigBom:
+    """Ultrathink-audit extension of wave-19 bug #104.
+
+    The wave-19 fix made `_parse_dotenv` BOM-safe via `encoding="utf-8-sig"`.
+    During ultrathink audit we discovered `_parse_toml_config` had the same
+    class of bug: `tomllib.load` rejects a leading BOM with
+    `TOMLDecodeError: Invalid statement (at line 1, column 1)` because the
+    TOML spec disallows it. A Notepad-created `~/.aipea/config.toml` would
+    silently fail to load, with all config values defaulting. Fix: strip
+    a leading BOM before handing bytes to `tomllib.loads`."""
+
+    def test_bom_prefixed_toml_parses_cleanly(self, tmp_path: Path) -> None:
+        """A TOML config with a leading UTF-8 BOM must parse."""
+        cfg = tmp_path / "config.toml"
+        cfg.write_bytes(b'\xef\xbb\xbf[aipea]\nexa_api_key = "bom-key"\n')
+        result = _parse_toml_config(cfg)
+        assert result == {"exa_api_key": "bom-key"}
+
+    def test_non_bom_toml_still_parses(self, tmp_path: Path) -> None:
+        """Regular UTF-8 TOML (no BOM) must continue to parse."""
+        cfg = tmp_path / "config.toml"
+        cfg.write_text('[aipea]\nexa_api_key = "no-bom-key"\n', encoding="utf-8")
+        result = _parse_toml_config(cfg)
+        assert result == {"exa_api_key": "no-bom-key"}
+
+    def test_corrupt_toml_returns_empty(self, tmp_path: Path) -> None:
+        """Garbage non-UTF-8 bytes must not crash the parser."""
+        cfg = tmp_path / "config.toml"
+        cfg.write_bytes(b"\xff\xfe\x00\x01 not a valid toml document")
+        # Should return {} via the except clause, not raise.
+        result = _parse_toml_config(cfg)
+        assert result == {}

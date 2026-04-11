@@ -334,11 +334,12 @@ class SearchContext:
 
         for i, result in enumerate(self.results, 1):
             safe_title = _escape_markdown(result.title or "Untitled")
+            safe_url = _escape_markdown(result.url or "")
             safe_snippet = _escape_markdown(result.snippet or "")
             lines.extend(
                 [
                     f"## Source {i}: {safe_title}",
-                    f"**URL:** {result.url or ''}",
+                    f"**URL:** {safe_url}",
                     "",
                     safe_snippet,
                     "",
@@ -395,11 +396,12 @@ class SearchContext:
 
         for i, result in enumerate(self.results, 1):
             safe_title = _escape_plaintext(result.title or "Untitled")
+            safe_url = _escape_plaintext(result.url or "")
             safe_snippet = _escape_plaintext(result.snippet or "")
             lines.extend(
                 [
                     f"{i}. {safe_title}",
-                    f"   URL: {result.url or ''}",
+                    f"   URL: {safe_url}",
                     f"   {safe_snippet}",
                     "",
                 ]
@@ -812,10 +814,20 @@ class FirecrawlProvider(SearchProvider):
             f"max_depth={max_depth}, time_limit={time_limit}s"
         )
 
+        # Derive deep-research endpoint from the resolved search URL so that
+        # AIPEA_FIRECRAWL_API_URL overrides (tests, enterprise proxies,
+        # mirrors) transparently apply to this path too, matching the
+        # behaviour of FirecrawlProvider.search(). (#100)
+        search_url = _resolve_firecrawl_api_url()
+        if "/v1/search" in search_url:
+            deep_research_url = search_url.replace("/v1/search", "/v1/deep-research")
+        else:
+            deep_research_url = "https://api.firecrawl.dev/v1/deep-research"
+
         try:
             async with httpx.AsyncClient(timeout=float(time_limit + 30)) as client:
                 response = await client.post(
-                    "https://api.firecrawl.dev/v1/deep-research",
+                    deep_research_url,
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",

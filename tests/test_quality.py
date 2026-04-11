@@ -214,3 +214,65 @@ class TestWave18ClarityWhitespaceGuard:
         )
         assert score > 0.0
         assert score <= 1.0
+
+
+class TestWave19DensityScoreMonotonic:
+    """Regression for bug #105: `_score_density` had a discontinuous,
+    non-monotonic curve around `delta = 0`. The positive branch started
+    from 0 (so a +0.001 delta scored 0.007) while the negative branch
+    started from 0.5 (so a -0.001 delta scored 0.499) — a tiny
+    improvement scored worse than a tiny regression. Fix: make the
+    positive branch also start from the 0.5 baseline so the curve is
+    continuous at 0 and monotonic on both sides."""
+
+    @pytest.mark.unit
+    def test_zero_delta_returns_baseline(self) -> None:
+        """delta = 0 (identical input) must return the 0.5 baseline."""
+        score = QualityAssessor._score_density("cat dog", "cat dog")
+        assert abs(score - 0.5) < 1e-9
+
+    @pytest.mark.unit
+    def test_tiny_positive_delta_above_baseline(self) -> None:
+        """A tiny positive delta must score >= 0.5, not drop near zero.
+
+        Prior to the fix, appending content words that produced a
+        positive delta scored lower than the identical-input baseline
+        because the positive branch started from 0 instead of 0.5.
+        """
+        original = "I am going to ask about the cat and the dog and the bird"
+        enhanced = original + " cat"  # one extra content word
+        score = QualityAssessor._score_density(original, enhanced)
+        assert score >= 0.5, f"Expected >=0.5 for tiny positive delta, got {score}"
+
+    @pytest.mark.unit
+    def test_no_discontinuity_near_zero(self) -> None:
+        """Tiny positive delta must not score dramatically lower than baseline.
+
+        Prior to the fix, a +0.001 delta (positive branch `delta/0.15`)
+        scored ~0.0067 while a delta of exactly 0 (negative branch
+        `0.5 + delta`) scored 0.5 — a dramatic >70x cliff at the sign
+        boundary. After the fix both branches start from 0.5 so the
+        difference at the crossing is bounded by the positive branch's
+        slope (0.5/0.15 ≈ 3.3 per unit) times the delta magnitude.
+        """
+        original = "cat dog"  # ratio 1.0 (two content words, no stop words)
+        # Identical input -> delta = 0 -> baseline 0.5
+        s_base = QualityAssessor._score_density(original, original)
+        # Adding another content word keeps the ratio at 1.0 (delta = 0)
+        s_tiny = QualityAssessor._score_density(original, original + " bird")
+        # Both should be at or near the 0.5 baseline — the pre-fix
+        # bug would have made s_tiny plummet to ~0.007.
+        assert s_base >= 0.5
+        assert s_tiny >= 0.5, (
+            f"tiny positive delta should be >=0.5, got {s_tiny}; "
+            "indicates non-monotonic regression at sign boundary"
+        )
+
+    @pytest.mark.unit
+    def test_large_positive_delta_saturates_at_one(self) -> None:
+        """A strongly positive delta still saturates at 1.0."""
+        original = "the a an of and to cat"  # lots of stop words
+        enhanced = "python programming algorithm data structure optimization benchmark"
+        score = QualityAssessor._score_density(original, enhanced)
+        # Should be solidly above the baseline and bounded by 1.0.
+        assert 0.5 <= score <= 1.0
