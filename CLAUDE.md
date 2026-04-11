@@ -1,8 +1,8 @@
 # CLAUDE.md - AIPEA
-> Version: 3.0.3 | Updated: 2026-04-10 | Owner: @joshuakirby
+> Version: 3.0.4 | Updated: 2026-04-10 | Owner: @joshuakirby
 
 ```yaml
-version: 3.0.3
+version: 3.0.4
 status: ACTIVE
 tier: 2  # Standard (~9.8K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
@@ -392,6 +392,29 @@ AIPEA supports 4 compliance modes. Changes to compliance behavior require ASK-fi
 | Major (X.0.0) | Breaking public API change, new compliance mode, architecture restructure |
 | Minor (x.Y.0) | New module, new playbook, CI workflow additions |
 | Patch (x.y.Z) | Typo fixes, metric updates, audit-only changes |
+
+### Metric-Citing Docs
+
+When a doc quotes a live metric — test count, coverage %, LOC, wave number,
+PR count, timing — anchor it to a point-in-time so staleness is self-evident
+during future audits. Accepted anchors:
+
+- **Commit anchor**: `(as of 0d9bd5e, 2026-04-10)`
+- **Release anchor**: `(v1.3.2)` or `(post-wave-19)`
+- **Date anchor**: `(as of 2026-04-10)` — weakest; use only when no commit/release is available
+- **Provenance anchor**: `(AgoraIV extraction baseline; see CI for current)` — for numbers inherited from an upstream source and not meant to be kept live
+
+Exception: historical snapshot sections (e.g. `docs/claude/audits/aipea.md`
+§2.1, the investor-review audit at `docs/claude/audits/investor-review-*.md`)
+are intentionally frozen at a single point-in-time. They should carry a
+**section-level** snapshot banner rather than per-row stamps, and must not be
+retroactively edited to "current" values.
+
+**Scope**: this rule applies to Markdown docs in this repo (`*.md` at root,
+`docs/**/*.md`, `CLAUDE.md`, `SPECIFICATION.md`, `CHANGELOG.md`,
+`KNOWN_ISSUES.md`, `TODO.md`, `docs/ROADMAP.md`). It does **not** govern code
+comments, commit messages, or PR descriptions — those already carry implicit
+git anchors.
 
 ### Update Triggers
 

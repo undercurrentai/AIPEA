@@ -214,7 +214,7 @@ They are extracted verbatim from AgoraIV and form AIPEA's independent base layer
 
 **Source**: `aipea_security_context.py` (637 LOC in AgoraIV)
 **Dependencies**: stdlib only (`re`, `logging`, `dataclasses`, `enum`)
-**Test coverage**: 49 tests across 3 test files
+**Test coverage**: 49 tests across 3 test files *(AgoraIV extraction baseline; see CI for current)*
 
 #### 3.1.1 Enums
 
@@ -294,7 +294,7 @@ def quick_scan(query, mode=ComplianceMode.GENERAL) -> ScanResult
 
 **Source**: `aipea_offline_knowledge.py` (711 LOC in AgoraIV)
 **Dependencies**: stdlib only (`sqlite3`, `zlib`, `hashlib`, `threading`, `pathlib`)
-**Test coverage**: 28 tests
+**Test coverage**: 28 tests *(AgoraIV extraction baseline; see CI for current)*
 
 #### 3.2.1 Purpose
 
@@ -380,7 +380,7 @@ CREATE INDEX idx_knowledge_domain_relevance ON knowledge_nodes(domain, relevance
 
 **Source**: `aipea_search_providers.py` (1,071 LOC in AgoraIV)
 **Dependencies**: stdlib + `httpx`
-**Test coverage**: 42 tests
+**Test coverage**: 42 tests *(AgoraIV extraction baseline; see CI for current)*
 
 #### 3.3.1 Provider Architecture
 
