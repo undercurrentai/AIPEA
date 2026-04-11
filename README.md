@@ -2,12 +2,15 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Security Policy](https://img.shields.io/badge/security-policy-brightgreen)](SECURITY.md)
 [![CI](https://github.com/undercurrentai/AIPEA/actions/workflows/ci.yml/badge.svg)](https://github.com/undercurrentai/AIPEA/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/undercurrentai/AIPEA/graph/badge.svg)](https://codecov.io/gh/undercurrentai/AIPEA)
 [![PyPI](https://img.shields.io/pypi/v/aipea)](https://pypi.org/project/aipea/)
 [![Downloads](https://img.shields.io/pypi/dm/aipea)](https://pypi.org/project/aipea/)
 
 A standalone Python library for prompt preprocessing, security screening, query analysis, and context enrichment for LLM systems. Extracted from [Agora IV](https://github.com/undercurrentai/agora-iv) production (v4.1.49).
+
+> **Security:** Report vulnerabilities privately via [GitHub Security Advisories](https://github.com/undercurrentai/AIPEA/security/advisories/new) or email `security@undercurrentholdings.com`. See [`SECURITY.md`](SECURITY.md) for scope, response SLAs, and honest framing of what AIPEA's compliance modes do and do not enforce.
 
 ## Architecture
 
