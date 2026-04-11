@@ -171,6 +171,108 @@ AIPEA needs to:
 
 ---
 
+## P5: Investor Review Follow-ups (2026-04-11)
+
+**Origin**: Independent investor-perspective review of AIPEA v1.3.2
+([docs/claude/audits/investor-review-2026-04-11.md](claude/audits/investor-review-2026-04-11.md))
+scored the project 39/45 (87%). The five items below close the gaps that
+separated it from a 95%+ score. They are ordered by leverage, not by sequencing;
+some are engineering work, some are process/BD work.
+
+### P5a: Second-reviewer coverage on security-critical modules — **HIGHEST LEVERAGE**
+
+**Problem**: Bus-factor 1. Every commit traces to a single human; no external
+code review appears on any PR. This is the single largest investor objection.
+
+**Action**:
+- Contract a part-time senior reviewer (security background) for ~4 hrs/week.
+- Add a `CODEOWNERS` file requiring their review on:
+  - `src/aipea/security.py`
+  - `src/aipea/__init__.py` (public API surface)
+  - `pyproject.toml` (dependency changes)
+- Document review SLA in `CONTRIBUTING.md`.
+
+**Effort**: Process change + ongoing contractor cost.
+**Blocks**: Nothing. Do this first.
+
+### P5b: Resolve FedRAMP — ship it or stop claiming it
+
+**Problem**: `ComplianceMode.FEDRAMP` is prominent in README but
+`src/aipea/security.py:610-626` honestly labels it as a stub. A government
+evaluator will spot this inside the first hour. The current state is the worst
+of both worlds.
+
+**Decision fork**:
+- **Path A (commercial)**: Find a design-partner org that needs FedRAMP.
+  Scope minimum-viable enforcement (model allowlist, audit-trail hook,
+  encryption-at-rest contract) built *with their input*, ship as v1.4.0.
+- **Path B (honest)**: Remove `FEDRAMP` from `ComplianceMode`, strike it from
+  the README, write an ADR in `docs/adr/` explaining why.
+
+**Effort**: A = months (requires external customer); B = one afternoon.
+**Blocks**: A investor narrative ("regulated AI market wedge") if not resolved.
+
+### P5c: Custom exception hierarchy and tightened CLI error handling
+
+**Problem**: Broad `except Exception:` blocks in `src/aipea/cli.py` at lines
+191, 220, 283, 391, 438 and `src/aipea/config.py:444`. Consumers (Agora IV,
+AEGIS) can't discriminate failure modes because no custom exception types
+exist. This is the only consistent code-quality complaint in the audit.
+
+**Action**:
+1. Create `src/aipea/errors.py` with an `AIPEAError` base plus five subclasses:
+   `SecurityScanError`, `EnhancementError`, `KnowledgeStoreError`,
+   `SearchProviderError`, `ConfigError`.
+2. Walk each broad `except Exception:` block; replace with specific types.
+   Keep one outermost catch-all in CLI command handlers (logs full traceback
+   at DEBUG, friendly message at ERROR) — but only one, at the boundary.
+3. Add one regression test per converted block. Run as **bug-hunt Wave 19**.
+
+**Effort**: 1–2 days.
+**Result**: Pushes code craftsmanship from 4/5 to 5/5 in the investor scorecard.
+
+### P5d: Promote mutation testing to gating + add performance regression suite
+
+**Problem**: 91.79% line coverage doesn't prove operator correctness. `mutmut`
+currently runs nightly with `continue-on-error`. No latency SLOs exist, so
+semantic search and FTS paths can degrade silently.
+
+**Action**:
+1. **Mutation**: Resolve the enum-trampoline issue noted in `KNOWN_ISSUES.md`.
+   Move `mutmut` into a dedicated CI job with a mutation-score floor. Ratchet
+   the floor up 1% per release from current baseline; don't aim for 100%.
+2. **Performance**: Add `benchmarks/` with a `pytest-benchmark` suite measuring
+   `enhance_prompt()` p50/p95 latency per tier (Offline / Tactical / Strategic)
+   against ~10 representative queries. Check in a baseline JSON. Add a CI job
+   that fails if p95 regresses by more than 20% versus baseline.
+
+**Effort**: ~1 week.
+**Result**: Catches the slow drift that 752 unit tests won't.
+
+### P5e: Build a commercial validation surface (non-engineering)
+
+**Problem**: The compliance scaffolding (NIST AI RMF, EU AI Act, OPA/Rego) is
+sized for enterprise but there's no visible evidence enterprises are buying.
+An investor's first two questions — "who is using it?" and "who is about to?" —
+have no discoverable answers in this repo.
+
+**Action**:
+1. Create `case-studies/` with two anonymized integration write-ups
+   (Agora IV first; AEGIS second). Include real latency, security-finding,
+   and compliance-mode numbers.
+2. Add `docs/metrics.md` linking PyPI download trends, GitHub stars, dependent
+   repo count. Even small numbers, honestly reported, beat no numbers.
+3. Open GitHub Discussions and commit to one weekly office-hours slot.
+4. Identify three design-partner orgs (one HIPAA, one TACTICAL/defense, one
+   general SaaS); write a one-page outreach pitch for each; send them.
+
+**Effort**: 2–3 weeks of focused BD work.
+**Why it's on the technical roadmap**: The codebase can't do BD work for you,
+but BD outcomes constrain which features (P5b Path A, P3b adaptive learning)
+are worth building.
+
+---
+
 ## Environment Variables (v1.3.0)
 
 All planned environment variables are now implemented. Each follows the standard
@@ -187,4 +289,4 @@ priority chain: env var > `.env` file > `~/.aipea/config.toml` > default.
 
 ---
 
-*AIPEA Roadmap | Extracted from SPECIFICATION.md Section 10 | Updated 2026-03-13*
+*AIPEA Roadmap | Extracted from SPECIFICATION.md Section 10 | Updated 2026-04-11*
