@@ -2,9 +2,9 @@
 
 **Date:** 2026-04-11
 **Subject:** AIPEA v1.3.2 — Python prompt-preprocessing library
-**Scope:** ~9.6K LOC source, ~13.5K LOC tests, 57 commits across 52 days (2026-02-19 → 2026-04-10)
+**Scope:** ~9.6K LOC source, ~13.5K LOC tests, 53 commits across the 50 days from 2026-02-19 to 2026-04-10
 **Lead programmer:** Joshua Kirby
-**Purpose:** Independent evaluation of the project and its lead programmer from a potential investor's perspective, followed by five actionable recommendations.
+**Purpose:** Self-assessment written in investor voice — an evaluation of the project and its lead programmer from the perspective of a potential investor, followed by five actionable recommendations. Scored by the same agent that generated the PR, so the "Honesty" row should be read accordingly.
 
 ---
 
@@ -65,7 +65,7 @@ Most "extracted from production" libraries fail here; this one didn't.
 - **Structure:** Largest file is `enhancer.py` (1373 LOC) but composed as a facade, not a god class.
 - **Docstrings:** Public APIs documented with Args/Returns/Raises throughout.
 - **Anti-patterns:** None major. No dead code, no cargo cult.
-- **Weakness:** Broad `except Exception:` blocks in `src/aipea/cli.py` at lines 191, 220, 283, 391, 438 and `src/aipea/config.py:444`. See Recommendation 3 below.
+- **Weakness:** Genuine broad `except Exception:` swallows at `src/aipea/cli.py:191`, `:220`, `:283`, and `:438`. `cli.py:391` is a residual fallback after a specific `TimeoutExpired` catch; `config.py:444` is a cleanup-and-reraise pattern and is not actually a swallow. See Recommendation 3 below.
 
 ### 5. Test Discipline — 5 / 5
 
@@ -97,9 +97,9 @@ Rare and noteworthy:
 
 ### 8. Shipping Velocity — 4 / 5
 
-- 7 releases in 52 days: 1.1.0 → 1.2.0 → 1.3.0 → 1.3.1 → 1.3.2
+- 5 releases in 50 days: 1.1.0 → 1.2.0 → 1.3.0 → 1.3.1 → 1.3.2
 - Semver respected (new optional features = minor; fixes/metadata = patch)
-- 56 of 57 commits in past 30 days — sustained, focused work
+- 53 commits in the 50-day snapshot window; 39 commits in the most recent 30 days — sustained, focused work
 - PyPI presence is real: `aipea==1.3.2` is published with monthly download badge
 
 ### 9. Risk Profile — 3 / 5
@@ -178,16 +178,16 @@ Either is defensible. The current state is the worst of both worlds.
 
 ### Recommendation 3 — Tighten CLI error handling and introduce a custom exception hierarchy
 
-**Gap addressed:** Code craftsmanship (4/5). Broad `except Exception:` blocks in `src/aipea/cli.py` at lines 191, 220, 283, 391, 438 and `src/aipea/config.py:444`. Library consumers (Agora, AEGIS) can't discriminate "search provider 401'd" from "SQLite file locked" from "regex pattern malformed" — every failure looks the same.
+**Gap addressed:** Code craftsmanship (4/5). Genuine broad `except Exception:` swallows in `src/aipea/cli.py` at lines 191 and 220 (Exa/Firecrawl connectivity probes that log at DEBUG and return `False`), line 283 (rich version lookup — should catch `PackageNotFoundError`), and line 438 (knowledge-base doctor check). Line 391 already catches `subprocess.TimeoutExpired` specifically and only falls through to a residual `except Exception:`, which is a weaker candidate. `config.py:444` is a cleanup-and-reraise pattern (`except Exception: ... raise`), so it is *not* a swallow and is out of scope for this recommendation. Library consumers (Agora, AEGIS) can't discriminate "search provider 401'd" from "SQLite file locked" from "regex pattern malformed" — every genuine swallow looks the same.
 
 **Action:**
 
 1. Create `src/aipea/errors.py` with an `AIPEAError` base and five subclasses: `SecurityScanError`, `EnhancementError`, `KnowledgeStoreError`, `SearchProviderError`, `ConfigError`.
-2. Walk each broad `except Exception:` block and replace it with specific exception types actually expected. Keep one outermost catch-all in CLI command handlers that logs full traceback at DEBUG and a friendly message at ERROR — but only one, at the boundary.
-3. Add one regression test per converted block. Fits naturally into the existing bug-hunt wave methodology — call it Wave 19.
+2. Walk each genuine broad `except Exception:` swallow and replace it with specific exception types actually expected. Keep one outermost catch-all in CLI command handlers that logs full traceback at DEBUG and a friendly message at ERROR — but only one, at the boundary.
+3. Add one regression test per converted block. Fits naturally into the existing bug-hunt wave methodology — file under the next open wave number (Wave 19 is already taken by PR #14).
 
 **Effort:** 1–2 days.
-**Result:** Pushes code craftsmanship from 4/5 to 5/5.
+**Result:** Pushes the code-craftsmanship category from 4/5 toward 5/5 in a subsequent self-assessment.
 
 ### Recommendation 4 — Promote mutation testing and add performance regression gating
 

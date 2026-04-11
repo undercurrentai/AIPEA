@@ -214,22 +214,28 @@ of both worlds.
 
 ### P5c: Custom exception hierarchy and tightened CLI error handling
 
-**Problem**: Broad `except Exception:` blocks in `src/aipea/cli.py` at lines
-191, 220, 283, 391, 438 and `src/aipea/config.py:444`. Consumers (Agora IV,
-AEGIS) can't discriminate failure modes because no custom exception types
-exist. This is the only consistent code-quality complaint in the audit.
+**Problem**: Genuine broad `except Exception:` swallows at `src/aipea/cli.py:191`,
+`:220`, `:283`, and `:438`. `cli.py:391` is a residual fallback after a
+specific `subprocess.TimeoutExpired` catch and is a weaker candidate.
+`config.py:444` is a cleanup-and-reraise pattern (`except Exception: ... raise`)
+and is *not* a swallow — out of scope. Consumers (Agora IV, AEGIS) can't
+discriminate failure modes because no custom exception types exist. This is the
+only consistent code-quality complaint in the self-assessment.
 
 **Action**:
 1. Create `src/aipea/errors.py` with an `AIPEAError` base plus five subclasses:
    `SecurityScanError`, `EnhancementError`, `KnowledgeStoreError`,
    `SearchProviderError`, `ConfigError`.
-2. Walk each broad `except Exception:` block; replace with specific types.
+2. Walk each genuine `except Exception:` swallow and replace with specific
+   types. `cli.py:283` should catch `importlib.metadata.PackageNotFoundError`.
    Keep one outermost catch-all in CLI command handlers (logs full traceback
    at DEBUG, friendly message at ERROR) — but only one, at the boundary.
-3. Add one regression test per converted block. Run as **bug-hunt Wave 19**.
+3. Add one regression test per converted block. Wave 19 is already taken by
+   PR #14 (`fix/bug-hunt-wave-19`); file this under the next open wave number.
 
 **Effort**: 1–2 days.
-**Result**: Pushes code craftsmanship from 4/5 to 5/5 in the investor scorecard.
+**Result**: Pushes code craftsmanship from 4/5 toward 5/5 in a subsequent
+self-assessment.
 
 ### P5d: Promote mutation testing to gating + add performance regression suite
 
@@ -241,10 +247,15 @@ semantic search and FTS paths can degrade silently.
 1. **Mutation**: Resolve the enum-trampoline issue noted in `KNOWN_ISSUES.md`.
    Move `mutmut` into a dedicated CI job with a mutation-score floor. Ratchet
    the floor up 1% per release from current baseline; don't aim for 100%.
+   `mutmut` is already a dev dep, so no approval needed for this half.
 2. **Performance**: Add `benchmarks/` with a `pytest-benchmark` suite measuring
    `enhance_prompt()` p50/p95 latency per tier (Offline / Tactical / Strategic)
    against ~10 representative queries. Check in a baseline JSON. Add a CI job
    that fails if p95 regresses by more than 20% versus baseline.
+
+> **Dependency gate**: `pytest-benchmark` is a new dev dependency and
+> `CLAUDE.md §2.2` / §6.4 require ASK-first approval before adding any new
+> dependency. Treat that approval as the first step of this roadmap item.
 
 **Effort**: ~1 week.
 **Result**: Catches the slow drift that 752 unit tests won't.
