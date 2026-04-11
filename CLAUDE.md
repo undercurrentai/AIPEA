@@ -1,8 +1,8 @@
 # CLAUDE.md - AIPEA
-> Version: 3.0.4 | Updated: 2026-04-10 | Owner: @joshuakirby
+> Version: 3.0.5 | Updated: 2026-04-11 | Owner: @joshuakirby
 
 ```yaml
-version: 3.0.4
+version: 3.0.5
 status: ACTIVE
 tier: 2  # Standard (~9.8K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
@@ -403,6 +403,16 @@ during future audits. Accepted anchors:
 - **Release anchor**: `(v1.3.2)` or `(post-wave-19)`
 - **Date anchor**: `(as of 2026-04-10)` — weakest; use only when no commit/release is available
 - **Provenance anchor**: `(AgoraIV extraction baseline; see CI for current)` — for numbers inherited from an upstream source and not meant to be kept live
+
+**Ambient anchors count.** A prominent doc-level timestamp (`> Version: X |
+Updated: YYYY-MM-DD`), a release-block header (`## [X.Y.Z] - DATE`), or a
+wave-section header (`## Wave N Fixes (YYYY-MM-DD)`) constitutes an implicit
+anchor for all metrics nearby in the same section. Per-metric anchors are
+only required when the metric (a) appears far from any such ambient anchor
+(~50+ lines distant), (b) lives in a file with no clear doc-level timestamp,
+or (c) would be visually confusing without the anchor (e.g. a comparison
+between "current" and "post-wave-N" values in the same sentence). Don't
+over-anchor: one good anchor per section beats four per paragraph.
 
 Exception: historical snapshot sections (e.g. `docs/claude/audits/aipea.md`
 §2.1, the investor-review audit at `docs/claude/audits/investor-review-*.md`)
