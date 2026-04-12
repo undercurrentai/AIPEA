@@ -527,3 +527,196 @@ class TestWave18ConnectivityUsesCfgUrls:
             assert captured["url"] == "https://api.exa.ai/search"
         finally:
             _os.chdir(original_cwd)
+
+
+# ============================================================================
+# REGRESSION TESTS — Wave C3 (ROADMAP §P5c)
+#
+# These tests exercise the four narrowed exception handlers in cli.py so the
+# broad `except Exception:` blocks cannot silently return. Each test raises a
+# specific stdlib or httpx exception and asserts the CLI handler still
+# produces a friendly warning/error without a traceback. See
+# src/aipea/errors.py for the custom exception hierarchy.
+# ============================================================================
+
+
+class TestWaveC3TightenedExceptionHandling:
+    """Regression: specific exceptions in cli.py must not surface as tracebacks."""
+
+    @patch("aipea.cli.httpx.post")
+    @patch("aipea.cli.load_config")
+    def test_exa_connectivity_handles_httpx_timeout(
+        self, mock_load: MagicMock, mock_post: MagicMock
+    ) -> None:
+        """httpx.TimeoutException in Exa connectivity → graceful False, no crash."""
+        import httpx as _httpx
+
+        from aipea.config import AIPEAConfig
+
+        mock_load.return_value = AIPEAConfig(exa_api_key="test-key")
+        mock_post.side_effect = _httpx.TimeoutException("timed out")
+
+        result = runner.invoke(app, ["check", "--connectivity"])
+        assert "Traceback" not in (result.output or "")
+        # check exits non-zero when connectivity fails, which is expected
+        assert result.exit_code in (0, 1)
+        # Error line should mention Exa
+        assert "Exa" in result.output
+
+    @patch("aipea.cli.httpx.post")
+    @patch("aipea.cli.load_config")
+    def test_exa_connectivity_handles_httpx_connect_error(
+        self, mock_load: MagicMock, mock_post: MagicMock
+    ) -> None:
+        """httpx.ConnectError in Exa connectivity → graceful False, no crash."""
+        import httpx as _httpx
+
+        from aipea.config import AIPEAConfig
+
+        mock_load.return_value = AIPEAConfig(exa_api_key="test-key")
+        mock_post.side_effect = _httpx.ConnectError("connection refused")
+
+        result = runner.invoke(app, ["check", "--connectivity"])
+        assert "Traceback" not in (result.output or "")
+        assert result.exit_code in (0, 1)
+        assert "Exa" in result.output
+
+    @patch("aipea.cli.httpx.post")
+    @patch("aipea.cli.load_config")
+    def test_firecrawl_connectivity_handles_httpx_timeout(
+        self, mock_load: MagicMock, mock_post: MagicMock
+    ) -> None:
+        """httpx.TimeoutException in Firecrawl connectivity → graceful False, no crash."""
+        import httpx as _httpx
+
+        from aipea.config import AIPEAConfig
+
+        mock_load.return_value = AIPEAConfig(firecrawl_api_key="test-key")
+        mock_post.side_effect = _httpx.TimeoutException("timed out")
+
+        result = runner.invoke(app, ["check", "--connectivity"])
+        assert "Traceback" not in (result.output or "")
+        assert result.exit_code in (0, 1)
+        assert "Firecrawl" in result.output
+
+    def test_exa_connectivity_does_not_swallow_unrelated_exceptions(self) -> None:
+        """A non-httpx exception from httpx.post should NOT be swallowed by the Exa handler.
+
+        This is the core reason for narrowing from `except Exception:` to
+        `except httpx.HTTPError:` — a programming error in the handler itself
+        (TypeError, AttributeError, KeyError) must propagate rather than be
+        silently reported as a "connectivity error".
+        """
+        import aipea.cli as cli_module
+
+        # Call the private helper directly with a mocked httpx.post that
+        # raises TypeError (a programming error, NOT an httpx.HTTPError).
+        with patch.object(cli_module.httpx, "post") as mock_post:
+            mock_post.side_effect = TypeError("bad argument")
+            # The narrowed except should NOT catch TypeError; it should propagate.
+            with pytest.raises(TypeError, match="bad argument"):
+                cli_module._test_exa_connectivity(  # type: ignore[attr-defined]
+                    "key", "https://api.exa.ai/search", silent=True
+                )
+
+    def test_firecrawl_connectivity_does_not_swallow_unrelated_exceptions(self) -> None:
+        """Same principle for Firecrawl: only httpx.HTTPError is caught."""
+        import aipea.cli as cli_module
+
+        with patch.object(cli_module.httpx, "post") as mock_post:
+            mock_post.side_effect = TypeError("bad argument")
+            with pytest.raises(TypeError, match="bad argument"):
+                cli_module._test_firecrawl_connectivity(  # type: ignore[attr-defined]
+                    "key", "https://api.firecrawl.dev/v1/search", silent=True
+                )
+
+    def test_doctor_handles_missing_rich_package(self) -> None:
+        """`doctor` must tolerate `rich` not being installed (PackageNotFoundError)."""
+        from importlib.metadata import PackageNotFoundError
+
+        # Patch importlib.metadata.version to raise PackageNotFoundError for 'rich'
+        real_version = None
+        try:
+            import importlib.metadata as _meta
+
+            real_version = _meta.version
+        except Exception:
+            pytest.skip("importlib.metadata unavailable")
+
+        def _fake_version(name: str) -> str:
+            if name == "rich":
+                raise PackageNotFoundError("rich")
+            return real_version(name) if real_version else "0.0.0"
+
+        with patch("importlib.metadata.version", side_effect=_fake_version):
+            result = runner.invoke(app, ["doctor"])
+            assert "Traceback" not in (result.output or "")
+            assert result.exit_code == 0
+            # Doctor should have noted rich as "not installed or version unknown"
+            # (either via a WARN line or by omitting it from the OK list).
+            assert (
+                "rich" not in result.output.lower()
+                or "not installed" in result.output.lower()
+                or "unknown" in result.output.lower()
+                or "WARN" in result.output
+            )
+
+    def test_doctor_handles_knowledge_base_sqlite_error(self, tmp_path: Path) -> None:
+        """`doctor` must tolerate a KB that raises sqlite3.Error on open."""
+        import sqlite3
+
+        # Create a deliberately corrupt file at the KB path to trigger sqlite3.Error.
+        db_path = tmp_path / "corrupt.db"
+        db_path.write_bytes(b"\x00\x01not-a-real-sqlite-db\x02\x03" * 16)
+
+        import aipea.cli as cli_module
+
+        with patch.object(cli_module, "load_config") as mock_load:
+            from aipea.config import AIPEAConfig
+
+            mock_load.return_value = AIPEAConfig(db_path=str(db_path))
+
+            # Patch OfflineKnowledgeBase.__enter__ to raise a sqlite3.Error
+            # regardless of what the corrupt file would actually produce — this
+            # makes the test deterministic across SQLite versions.
+            with patch("aipea.knowledge.OfflineKnowledgeBase.__enter__") as mock_enter:
+                mock_enter.side_effect = sqlite3.DatabaseError("file is not a database")
+                result = runner.invoke(app, ["doctor"])
+
+            assert "Traceback" not in (result.output or "")
+            assert result.exit_code == 0  # doctor always exits 0 after reporting
+            # The KB check should have emitted a WARN about the error.
+            assert "Knowledge" in result.output or "WARN" in result.output
+
+    def test_doctor_handles_knowledge_base_os_error(self, tmp_path: Path) -> None:
+        """`doctor` must tolerate a KB that raises OSError (e.g. permission denied)."""
+        import aipea.cli as cli_module
+
+        with patch.object(cli_module, "load_config") as mock_load:
+            from aipea.config import AIPEAConfig
+
+            mock_load.return_value = AIPEAConfig(db_path=str(tmp_path / "locked.db"))
+
+            with patch("aipea.knowledge.OfflineKnowledgeBase.__enter__") as mock_enter:
+                mock_enter.side_effect = PermissionError("permission denied")
+                result = runner.invoke(app, ["doctor"])
+
+            assert "Traceback" not in (result.output or "")
+            assert result.exit_code == 0
+
+    def test_doctor_handles_knowledge_base_knowledge_store_error(self, tmp_path: Path) -> None:
+        """`doctor` must tolerate a KB that raises AIPEA's own KnowledgeStoreError."""
+        import aipea.cli as cli_module
+        from aipea.errors import KnowledgeStoreError
+
+        with patch.object(cli_module, "load_config") as mock_load:
+            from aipea.config import AIPEAConfig
+
+            mock_load.return_value = AIPEAConfig(db_path=str(tmp_path / "bad.db"))
+
+            with patch("aipea.knowledge.OfflineKnowledgeBase.__enter__") as mock_enter:
+                mock_enter.side_effect = KnowledgeStoreError("KB is corrupt")
+                result = runner.invoke(app, ["doctor"])
+
+            assert "Traceback" not in (result.output or "")
+            assert result.exit_code == 0

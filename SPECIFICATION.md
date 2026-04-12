@@ -1160,8 +1160,11 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full roadmap with 6 prioritized
 
 ### 11.1 Public Exports (`aipea/__init__.py`)
 
-> **Note**: The actual `__init__.py` exports 36 symbols. The listing below shows the
-> full internal API surface (including non-exported internals) for reference. Symbols
+> **Note**: The actual `__init__.py` exports 42 symbols (36 runtime classes/functions
+> plus the 6 exception types added in Wave C3 / ROADMAP §P5c:
+> `AIPEAError`, `SecurityScanError`, `EnhancementError`, `KnowledgeStoreError`,
+> `SearchProviderError`, `ConfigError`). The listing below shows the full internal
+> API surface (including non-exported internals) for reference. Symbols
 > marked with `# (not in __all__)` are accessible but not part of the public API.
 
 ```python

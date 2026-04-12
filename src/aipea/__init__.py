@@ -36,6 +36,16 @@ from aipea.enhancer import (
     reset_enhancer,
 )
 
+# Exception hierarchy
+from aipea.errors import (
+    AIPEAError,
+    ConfigError,
+    EnhancementError,
+    KnowledgeStoreError,
+    SearchProviderError,
+    SecurityScanError,
+)
+
 # Knowledge base
 from aipea.knowledge import (
     KnowledgeDomain,
@@ -76,16 +86,20 @@ from aipea.security import (
 __all__ = [
     "AIPEAConfig",
     "AIPEAEnhancer",
+    "AIPEAError",
     "ComplianceHandler",
     "ComplianceMode",
+    "ConfigError",
     "Context7Provider",
     "EnhancedRequest",
+    "EnhancementError",
     "EnhancementResult",
     "ExaSearchProvider",
     "FirecrawlProvider",
     "KnowledgeDomain",
     "KnowledgeNode",
     "KnowledgeSearchResult",
+    "KnowledgeStoreError",
     "OfflineKnowledgeBase",
     "ProcessingTier",
     "PromptEngine",
@@ -98,10 +112,12 @@ __all__ = [
     "SearchContext",
     "SearchOrchestrator",
     "SearchProvider",
+    "SearchProviderError",
     "SearchResult",
     "SearchStrategy",
     "SecurityContext",
     "SecurityLevel",
+    "SecurityScanError",
     "SecurityScanner",
     "StorageTier",
     "__version__",
