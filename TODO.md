@@ -3,11 +3,11 @@
 Canonical tracker for all pending work. Replaces scattered items from ROADMAP.md,
 NEXT_STEPS.md, KNOWN_ISSUES.md, SPECIFICATION.md, and discovery findings.
 
-Last updated: 2026-04-10 (Wave 19: 13 bugs fixed + 4 ultrathink audit extensions, 0 deferred)
+Last updated: 2026-04-12 (Waves A-C complete, PRs #14-#26; 991 tests, 92.93% coverage, 42 exports)
 
 ---
 
-## Immediate (v1.3.2 patch)
+## Immediate (v1.3.x patch)
 
 - [x] **README badge stale**: "698 passing" → "752 passing", "91.42%" → "91.79%" (fixed 2026-04-09)
 - [x] ~~**Dead import**: remove unused `import subprocess as _sp` in `cli.py:348`~~ — NOT dead; used at lines 361 and 378
@@ -30,6 +30,27 @@ Last updated: 2026-04-10 (Wave 19: 13 bugs fixed + 4 ultrathink audit extensions
 ## Declined (v2.0.0 removal scheduled)
 
 - [x] ~~**FedRAMP enforcement**~~ — **declined 2026-04-11, Path B taken**. The config-only stub is deprecated in v1.3.4 and scheduled for hard removal in v2.0.0. No design partner, no enforcement budget, no honest path to an ATO. If a customer emerges this can be reopened as Path A. See [`docs/adr/ADR-002-fedramp-removal.md`](docs/adr/ADR-002-fedramp-removal.md).
+
+## Completed (Waves A-C, 2026-04-11/12)
+
+Consolidated response to two investor reviews (positive + adversarial) of
+AIPEA v1.3.2. Full plan: `docs/ROADMAP.md` §P5. Detailed history:
+`~/.claude/plans/reactive-growing-lark.md`.
+
+- [x] **Wave A** (PRs #14, #20): v1.3.3 shipped to PyPI (13 security fixes
+  incl. HIPAA compliance leak #96, ReDoS #107) + `SECURITY.md` added
+- [x] **Wave B** (PR #21): adversarial review committed, README honesty
+  sweep, CLAUDE.md header disambiguation, CONTRIBUTING.md expanded (~8 → ~130
+  lines)
+- [x] **Wave C1** (PRs #24, #26): triple-AI second-reviewer gate
+  (gpt-5.4-pro + Codex gpt-5.3-codex + Claude Opus 4.6) +
+  `.github/CODEOWNERS`. Dry-run 1 verified (graceful failure); **dry-run 2
+  (happy path) pending** — see
+  `docs/claude/audits/ai-second-review-dry-run-2026-04-11.md` §3
+- [x] **Wave C2** (PR #22): FedRAMP deprecated via Path B +
+  `docs/adr/ADR-002-fedramp-removal.md`
+- [x] **Wave C3** (PR #23): `src/aipea/errors.py` (AIPEAError + 5
+  subclasses), `cli.py` broad catches tightened, 23 regression tests
 
 ## Deferred Bugs (from bug-hunt waves)
 

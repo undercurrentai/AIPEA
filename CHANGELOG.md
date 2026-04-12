@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/ROADMAP.md` §P5b: marked resolved via Path B.
 
 ### Added
+- `src/aipea/errors.py` — custom exception hierarchy: `AIPEAError` base
+  class plus 5 subclasses (`SecurityScanError`, `EnhancementError`,
+  `KnowledgeStoreError`, `SearchProviderError`, `ConfigError`). All 6
+  exported in `__init__.py` (36 → 42 symbols in `__all__`). Wave C3 / PR #23.
+- `tests/test_errors.py` — 14 unit tests for the exception hierarchy
+  (inheritance, `str()` messages, pickling, `isinstance` contracts).
 - `docs/adr/ADR-002-fedramp-removal.md` — decision record for the Path B
   removal of FedRAMP from AIPEA's declared compliance surface. Documents
   context, decision, alternatives considered (including why Path A was
@@ -46,6 +52,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   migration target). Existing FEDRAMP tests renamed + updated to assert the
   `DeprecationWarning` is raised and to preserve legacy stub behavior for
   back-compat.
+
+### Changed (Wave C3)
+- `src/aipea/cli.py`: 4 broad `except Exception:` blocks at lines 191,
+  220, 283, and 438 narrowed to specific exception types
+  (`httpx.HTTPStatusError`, `httpx.HTTPError`,
+  `importlib.metadata.PackageNotFoundError`, `sqlite3.Error`). One
+  outermost catch-all retained per CLI command handler at the boundary.
+- `tests/test_cli.py`: 9 regression tests verifying the tightened exception
+  handling (one per converted block + parametrized variants).
+- `tests/test_live.py`: symbol-count assertion updated (36 → 42).
 
 ## [1.3.3] - 2026-04-11
 

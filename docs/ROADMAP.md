@@ -179,15 +179,16 @@ scored the project 39/45 (87%). The five items below close the gaps that
 separated it from a 95%+ score. They are ordered by leverage, not by sequencing;
 some are engineering work, some are process/BD work.
 
-### P5a: Second-reviewer coverage on security-critical modules — **IMPLEMENTED 2026-04-11 as automated dual-AI gate (Wave C1); dry-run 2 pending**
+### P5a: Second-reviewer coverage on security-critical modules — **IMPLEMENTED 2026-04-11 as automated triple-AI gate (Wave C1); dry-run 2 pending**
 
 **Problem**: Bus-factor 1. Every commit traces to a single human; no external
 code review appears on any PR. This is the single largest investor objection.
 
 **Decision (2026-04-11)**: Rather than wait on contracting a part-time human
-reviewer, AIPEA ships an **automated dual-AI second-reviewer gate** —
-`gpt-5.4-pro` via the OpenAI Responses API (background mode + polling) plus
-Codex CLI via `openai/codex-action@v1` — as required CI status checks on
+reviewer, AIPEA ships an **automated triple-AI second-reviewer gate** —
+`gpt-5.4-pro` via the OpenAI Responses API (background mode + polling),
+Codex CLI via `openai/codex-action@v1`, and Claude Opus 4.6 via
+`anthropics/claude-code-action@v1` — as required CI status checks on
 every PR touching security-critical paths. `@joshuakirby` remains the
 accountable human reviewer via `.github/CODEOWNERS`. The gate augments
 human judgment; it does not replace it.
@@ -203,10 +204,10 @@ dry-run 2 happy-path verification).
 
 - `.github/CODEOWNERS` — `@joshuakirby` on `security.py`, `__init__.py`,
   `pyproject.toml`, `.github/workflows/**`
-- `.github/workflows/ai-second-review.yml` — two parallel jobs
-  (`gpt-review`, `codex-review`) on `pull_request` events matching the
-  gated paths filter, 30-minute timeouts, concurrency group with
-  `cancel-in-progress: true`, `$GITHUB_ENV` multiline-var pattern for
+- `.github/workflows/ai-second-review.yml` — three parallel jobs
+  (`gpt-review`, `codex-review`, `claude-review`) on `pull_request` events
+  matching the gated paths filter, 30-minute timeouts, concurrency group
+  with `cancel-in-progress: true`, `$GITHUB_ENV` multiline-var pattern for
   posting review bodies via `actions/github-script` without `require('fs')`
 - `.github/scripts/gpt_review.py` — Python script invoking gpt-5.4-pro via
   the Responses API in background mode, polling to 25 min, with structured
@@ -218,7 +219,7 @@ dry-run 2 happy-path verification).
   evidence + 8-step operator runbook + rollback procedure
 
 **Re-introduction of a human reviewer**: a part-time contracted senior
-reviewer remains a **valid upgrade path** if the dual-AI gate proves
+reviewer remains a **valid upgrade path** if the triple-AI gate proves
 insufficient. The human-reviewer option is NOT rejected; it is just not
 blocked on by Wave C1. Adding a human via CODEOWNERS is a one-line change
 once that contract exists.
@@ -248,7 +249,7 @@ available as a v2.0.0+ feature if a customer emerges.
 **Effort (actual)**: 1 afternoon. Matches Wave C2 of the consolidated response
 plan.
 
-### P5c: Custom exception hierarchy and tightened CLI error handling
+### P5c: Custom exception hierarchy and tightened CLI error handling — **IMPLEMENTED 2026-04-11 (Wave C3, PR #23)**
 
 **Problem**: Genuine broad `except Exception:` swallows at `src/aipea/cli.py:191`,
 `:220`, `:283`, and `:438`. `cli.py:391` is a residual fallback after a
@@ -272,6 +273,13 @@ only consistent code-quality complaint in the self-assessment.
 **Effort**: 1–2 days.
 **Result**: Pushes code craftsmanship from 4/5 toward 5/5 in a subsequent
 self-assessment.
+
+**Implementation (2026-04-11)**: `src/aipea/errors.py` created with
+`AIPEAError` base + 5 subclasses (`SecurityScanError`, `EnhancementError`,
+`KnowledgeStoreError`, `SearchProviderError`, `ConfigError`). 4 broad
+`except Exception:` blocks in `cli.py` narrowed to specific types. 23
+regression tests added (`tests/test_errors.py`: 14, `tests/test_cli.py`: 9).
+6 new exports in `__init__.py` (36 → 42 symbols). Shipped in PR #23.
 
 ### P5d: Promote mutation testing to gating + add performance regression suite
 

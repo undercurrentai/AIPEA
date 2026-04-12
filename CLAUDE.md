@@ -7,7 +7,7 @@
 agent_contract_version: 3.0.5  # version of THIS file; NOT the aipea library
 library_version_source: pyproject.toml  # canonical aipea library version
 status: ACTIVE
-tier: 2  # Standard (~9.8K LOC, 2 contributors, internal consumers)
+tier: 2  # Standard (~10K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
 inherits_from: ../../CLAUDE.md  # Undercurrent Holdings root
 maintainer: joshuakirby
@@ -29,8 +29,8 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~9,790 |
-| **Exports** | 42 symbols in `__all__` (36 runtime + 6 exception types added in Wave C3) |
+| **Source LOC** | ~9,950 (as of 76333e4, 2026-04-12) |
+| **Exports** | 42 symbols in `__all__` (35 runtime + 6 exception types + `__version__`) |
 | **Build backend** | hatchling — **do NOT run `poetry install` / `poetry lock` / `poetry run` in this directory**. It silently creates an orphan venv in `~/Library/Caches/pypoetry/virtualenvs/aipea-*`. Use `make install` (pip + `.venv/`). |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
@@ -209,6 +209,13 @@ __main__.py    <- imports cli.app (CLI entry point)
 | `lint` | 3.12 | ruff check + ruff format --check |
 | `typecheck` | 3.12 | mypy src/aipea/ |
 | `test` | 3.11, 3.12 (matrix) | pytest --cov-fail-under=75 |
+
+PRs touching security-critical paths (`security.py`, `__init__.py`,
+`errors.py`, `pyproject.toml`, `.github/workflows/**`, `.github/CODEOWNERS`)
+are additionally reviewed by a **triple-AI gate** (gpt-5.4-pro, Codex
+gpt-5.3-codex, Claude Opus 4.6) via
+`.github/workflows/ai-second-review.yml`. See `CONTRIBUTING.md
+§Second-Reviewer Gate` and `docs/ROADMAP.md §P5a`.
 
 ### 5.4 Environment Variables
 
