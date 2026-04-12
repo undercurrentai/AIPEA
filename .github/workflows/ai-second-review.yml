@@ -144,7 +144,9 @@ jobs:
             --output gpt_review.md
 
       - name: Load review body into env
-        if: steps.diff.outputs.diff_empty != 'true'
+        # always() so a failed review step still posts the fallback
+        # markdown that gpt_review.py writes before exiting non-zero.
+        if: always() && steps.diff.outputs.diff_empty != 'true'
         run: |
           if [ ! -s gpt_review.md ]; then
             printf '_Review produced no output. Check the workflow logs for details._\n' > gpt_review.md
@@ -157,7 +159,10 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Post review comment (gpt-5.4-pro)
-        if: steps.diff.outputs.diff_empty != 'true'
+        # always() so failures are still communicated via PR comment.
+        # The job itself still exits non-zero because the earlier
+        # review step failed — fail-closed semantics are preserved.
+        if: always() && steps.diff.outputs.diff_empty != 'true'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           script: |
@@ -255,7 +260,9 @@ jobs:
           safety-strategy: drop-sudo
 
       - name: Load review body into env
-        if: steps.diff.outputs.diff_empty != 'true'
+        # always() so a failed Codex run still surfaces its fallback
+        # markdown on the PR. See the GPT job's equivalent note.
+        if: always() && steps.diff.outputs.diff_empty != 'true'
         run: |
           if [ ! -s codex_review.md ]; then
             printf '_Codex review produced no output. Check the workflow logs for details._\n' > codex_review.md
@@ -268,7 +275,10 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Post review comment (Codex)
-        if: steps.diff.outputs.diff_empty != 'true'
+        # always() so failures are still communicated via PR comment.
+        # Job still exits non-zero because the codex-action step
+        # failed — fail-closed semantics preserved.
+        if: always() && steps.diff.outputs.diff_empty != 'true'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           script: |
