@@ -5,13 +5,16 @@ This module implements security screening and compliance mode handling for the
 AI Prompt Engineer Agent (AIPEA) integration with Agora IV. It provides:
 
 - Security level classification (UNCLASSIFIED to TOP_SECRET)
-- Compliance modes (General, HIPAA, Tactical, FedRAMP)
+- Compliance modes (General, HIPAA, Tactical)
 - PII/PHI detection and handling
 - Classified content marker detection
 - Prompt injection attack prevention
 - Mode-specific model restrictions
 
 Based on Agora V AIPEA security patterns, adapted for Agora IV production.
+
+Note: ComplianceMode.FEDRAMP is retained as a deprecated alias and will be
+removed in v2.0.0. See docs/adr/ADR-002-fedramp-removal.md for the rationale.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, ClassVar
@@ -108,12 +112,21 @@ class ComplianceMode(Enum):
     - Encryption requirements
     - Allowed AI models
     - Data handling procedures
+
+    Supported modes:
+        GENERAL, HIPAA, TACTICAL
+
+    Deprecated modes:
+        FEDRAMP — config-only stub with no behavioral enforcement. Retained
+        for API compatibility through the v1.x line; scheduled for removal
+        in v2.0.0. Use of this value at runtime emits a DeprecationWarning.
+        See docs/adr/ADR-002-fedramp-removal.md for the decision rationale.
     """
 
     GENERAL = "general"  # Standard use - minimal restrictions
     HIPAA = "hipaa"  # Medical/PHI handling - requires BAA-covered models
     TACTICAL = "tactical"  # Military/Defense - local models only, air-gapped
-    FEDRAMP = "fedramp"  # Government cloud - future implementation
+    FEDRAMP = "fedramp"  # DEPRECATED — see ADR-002; removal planned for v2.0.0
 
 
 # =============================================================================
@@ -129,7 +142,8 @@ class SecurityContext:
     including compliance mode, classification level, and operational constraints.
 
     Attributes:
-        compliance_mode: Active compliance framework (GENERAL, HIPAA, TACTICAL, FEDRAMP)
+        compliance_mode: Active compliance framework (GENERAL, HIPAA, TACTICAL;
+            FEDRAMP is deprecated — see ADR-002)
         security_level: Classification level of the content being processed
         has_connectivity: Whether external network access is available/allowed
         audit_required: Whether detailed audit logging is required
@@ -598,7 +612,10 @@ class ComplianceHandler:
     - GENERAL: Minimal restrictions, 90-day audit retention
     - HIPAA: 6-year retention, PHI redaction, BAA-covered models only
     - TACTICAL: 7-year retention, local models only, forced offline
-    - FEDRAMP: (Future) Government cloud requirements
+    - FEDRAMP: **DEPRECATED** — config-only stub with no behavioral
+      enforcement. Constructing a handler with this mode emits a
+      DeprecationWarning. Scheduled for removal in v2.0.0.
+      See docs/adr/ADR-002-fedramp-removal.md.
 
     Attributes:
         mode: Active compliance mode
@@ -653,22 +670,33 @@ class ComplianceHandler:
             logger.debug("Configured for TACTICAL: 7yr retention, offline forced")
 
         elif self.mode == ComplianceMode.FEDRAMP:
-            # FEDRAMP: UNSUPPORTED STUB — configuration only, no behavioral enforcement.
+            # FEDRAMP: DEPRECATED in v1.3.4, scheduled for removal in v2.0.0.
+            # See docs/adr/ADR-002-fedramp-removal.md for the decision rationale.
+            #
             # This mode provides basic config (retention, model allowlist) but does NOT
             # enforce FedRAMP requirements such as: data residency checks, FedRAMP-authorized
             # provider validation, FIPS 140-2 encryption verification, or continuous
-            # monitoring. Use at your own risk; full implementation is on the roadmap.
-            self.audit_retention_days = 1095  # 3 years minimum for FedRAMP
+            # monitoring. AIPEA does not implement FedRAMP controls. Migrate to
+            # ComplianceMode.GENERAL and layer your own compliance controls on top.
+            warnings.warn(
+                "ComplianceMode.FEDRAMP is deprecated and will be removed in v2.0.0. "
+                "AIPEA does not implement FedRAMP controls; the mode was a "
+                "config-only stub with no behavioral enforcement. "
+                "Migrate to ComplianceMode.GENERAL and implement FedRAMP controls "
+                "in your own application layer. "
+                "See docs/adr/ADR-002-fedramp-removal.md.",
+                DeprecationWarning,
+                stacklevel=3,  # skip _configure_for_mode + __init__ frames
+            )
+            self.audit_retention_days = 1095  # 3 years (retained for back-compat)
             self.encryption_required = True
             self.allowed_models = [
                 "claude-opus-4-6",
                 "claude-opus-4-5",
                 "gpt-5.2",
-            ]  # FedRAMP authorized model families (prefix match via substring)
+            ]  # legacy "FedRAMP authorized" list — not validated, retained for back-compat
             self.phi_redaction_enabled = False
-            logger.warning(
-                "FEDRAMP mode is an unsupported stub — config only, no behavioral enforcement"
-            )
+            logger.warning("FEDRAMP mode is deprecated and provides no enforcement — see ADR-002")
 
         else:  # GENERAL
             # GENERAL: Standard use with minimal restrictions

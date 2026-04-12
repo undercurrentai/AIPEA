@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Deprecated
+- `ComplianceMode.FEDRAMP` is formally deprecated and scheduled for removal
+  in v2.0.0. AIPEA does not implement FedRAMP controls; the mode was always
+  a config-only stub with no behavioral enforcement. Constructing a
+  `ComplianceHandler` with `ComplianceMode.FEDRAMP` now emits a
+  `DeprecationWarning` pointing at
+  [ADR-002](docs/adr/ADR-002-fedramp-removal.md). Integrators currently
+  using FEDRAMP should migrate to `ComplianceMode.GENERAL` and implement
+  FedRAMP controls in their own application layer. The enum value and its
+  legacy stub behavior are retained for API back-compat through the v1.x
+  line.
+
+### Changed
+- README.md, CLAUDE.md, SPECIFICATION.md, TODO.md, SECURITY.md, ROADMAP.md:
+  FedRAMP references rewritten to reflect the deprecation. The supported
+  compliance modes are now documented as GENERAL, HIPAA, TACTICAL.
+- `src/aipea/security.py` `ComplianceHandler._configure_for_mode`: FEDRAMP
+  branch now emits `warnings.warn(..., DeprecationWarning)` with a clear
+  migration message in addition to its existing `logger.warning`.
+- `src/aipea/enhancer.py`: FEDRAMP warning log line tightened to point at
+  ADR-002 (the canonical DeprecationWarning now fires from
+  ComplianceHandler; no duplicate warning emitted).
+- `src/aipea/config.py`: `AIPEA_DEFAULT_COMPLIANCE` env var docstring
+  reflects the deprecation. `"fedramp"` remains a valid config value for
+  back-compat through v1.x.
+- `docs/ROADMAP.md` §P5b: marked resolved via Path B.
+
+### Added
+- `docs/adr/ADR-002-fedramp-removal.md` — decision record for the Path B
+  removal of FedRAMP from AIPEA's declared compliance surface. Documents
+  context, decision, alternatives considered (including why Path A was
+  rejected for now and under what conditions it could be reopened), and
+  consequences.
+- `tests/test_security.py`: new regression test
+  `test_fedramp_mode_deprecation_warning_message` asserting the warning
+  message contains "FEDRAMP", "v2.0.0", "ADR-002", and "GENERAL" (the
+  migration target). Existing FEDRAMP tests renamed + updated to assert the
+  `DeprecationWarning` is raised and to preserve legacy stub behavior for
+  back-compat.
+
 ## [1.3.3] - 2026-04-11
 
 **Security-relevant release.** Closes two findings users should upgrade for immediately:

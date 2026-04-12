@@ -25,8 +25,11 @@ Last updated: 2026-04-10 (Wave 19: 13 bugs fixed + 4 ultrathink audit extensions
 ## Medium-term (v1.5.0+)
 
 - [ ] **Standalone Service Mode** — REST API wrapping the library (SPECIFICATION.md Section 8.4)
-- [ ] **FedRAMP enforcement** — beyond config stub; actual enforcement logic in `security.py:611-626` (README notes "planned")
 - [ ] **BDI Reasoning** (P4, conditional) — only if AIPEA evolves into an autonomous agent participating in multi-agent orchestration
+
+## Declined (v2.0.0 removal scheduled)
+
+- [x] ~~**FedRAMP enforcement**~~ — **declined 2026-04-11, Path B taken**. The config-only stub is deprecated in v1.3.4 and scheduled for hard removal in v2.0.0. No design partner, no enforcement budget, no honest path to an ATO. If a customer emerges this can be reopened as Path A. See [`docs/adr/ADR-002-fedramp-removal.md`](docs/adr/ADR-002-fedramp-removal.md).
 
 ## Deferred Bugs (from bug-hunt waves)
 

@@ -425,21 +425,49 @@ class TestComplianceHandler:
         assert handler.phi_redaction_enabled is False
         assert handler.force_offline is True
 
-    def test_fedramp_mode_configuration(self) -> None:
-        """Test FEDRAMP mode configuration."""
-        handler = ComplianceHandler(ComplianceMode.FEDRAMP)
+    def test_fedramp_mode_configuration_deprecated(self) -> None:
+        """FEDRAMP mode is deprecated (ADR-002) but still returns legacy config for back-compat.
+
+        Constructing a handler with FEDRAMP must:
+        1. Emit a DeprecationWarning pointing at ADR-002
+        2. Preserve the legacy stub behavior (retention, encryption, allowlist)
+           so integrators on v1.x are not broken mid-deprecation window.
+        """
+        with pytest.warns(DeprecationWarning, match="ADR-002"):
+            handler = ComplianceHandler(ComplianceMode.FEDRAMP)
         assert handler.mode == ComplianceMode.FEDRAMP
-        assert handler.audit_retention_days == 1095  # 3 years
+        assert handler.audit_retention_days == 1095  # 3 years — legacy stub value
         assert handler.encryption_required is True
         assert handler.phi_redaction_enabled is False
         assert handler.force_offline is False
 
-    def test_fedramp_mode_sets_audit_required(self) -> None:
-        """FedRAMP SecurityContext must have audit_required=True (NIST SP 800-53 AU)."""
-        handler = ComplianceHandler(ComplianceMode.FEDRAMP)
+    def test_fedramp_mode_deprecation_warning_message(self) -> None:
+        """FEDRAMP deprecation warning must explicitly state migration guidance."""
+        with pytest.warns(DeprecationWarning) as warning_records:
+            ComplianceHandler(ComplianceMode.FEDRAMP)
+        # Find the DeprecationWarning specifically (other warnings may fire too)
+        fedramp_warnings = [
+            w for w in warning_records if issubclass(w.category, DeprecationWarning)
+        ]
+        assert len(fedramp_warnings) >= 1, "Expected at least one DeprecationWarning"
+        msg = str(fedramp_warnings[0].message)
+        assert "FEDRAMP" in msg
+        assert "v2.0.0" in msg
+        assert "ADR-002" in msg
+        assert "GENERAL" in msg  # migration target
+
+    def test_fedramp_mode_sets_audit_required_legacy(self) -> None:
+        """Legacy: FEDRAMP SecurityContext has audit_required=True.
+
+        Retained for back-compat during the v1.x deprecation window. FEDRAMP
+        is a config-only stub — the audit_required flag does not mean AIPEA
+        enforces NIST SP 800-53 AU controls. See ADR-002.
+        """
+        with pytest.warns(DeprecationWarning, match="ADR-002"):
+            handler = ComplianceHandler(ComplianceMode.FEDRAMP)
         ctx = handler.create_security_context()
         assert ctx.audit_required is True, (
-            "FedRAMP requires audit logging; audit_required must be True"
+            "Legacy FEDRAMP behavior retains audit_required=True during deprecation"
         )
 
     def test_validate_model_blocks_globally_forbidden_in_general_mode(self) -> None:
@@ -452,8 +480,14 @@ class TestComplianceHandler:
 
     def test_global_forbidden_models_blocked_in_all_modes(self) -> None:
         """Global forbidden models are blocked regardless of compliance mode."""
+        import warnings as _warnings
+
         for mode in ComplianceMode:
-            handler = ComplianceHandler(mode)
+            # Suppress FEDRAMP DeprecationWarning for this iteration — we are
+            # testing the forbidden-model rule, not the deprecation signal.
+            with _warnings.catch_warnings():
+                _warnings.simplefilter("ignore", DeprecationWarning)
+                handler = ComplianceHandler(mode)
             assert handler.validate_model("gpt-4o") is False, (
                 f"gpt-4o should be forbidden in {mode.value}"
             )
