@@ -15,6 +15,11 @@ Based on Agora V AIPEA security patterns, adapted for Agora IV production.
 
 Note: ComplianceMode.FEDRAMP is retained as a deprecated alias and will be
 removed in v2.0.0. See docs/adr/ADR-002-fedramp-removal.md for the rationale.
+
+Wave C1 dry-run marker (2026-04-11): this comment exists solely to trigger
+the ai-second-review.yml workflow via its src/aipea/security.py paths
+filter. The dry-run PR will be closed without merging; the marker will be
+removed in a follow-up cleanup commit if it survives the close.
 """
 
 from __future__ import annotations
