@@ -155,8 +155,11 @@ class TestPackageIntegrity:
         ]:
             assert mod is not None
 
-    def test_all_has_36_symbols(self):
-        assert len(aipea.__all__) == 36
+    def test_all_has_42_symbols(self):
+        # Wave C3 (2026-04-11) added 6 exception types to the public API:
+        # AIPEAError + 5 subclasses (SecurityScanError, EnhancementError,
+        # KnowledgeStoreError, SearchProviderError, ConfigError). 36 → 42.
+        assert len(aipea.__all__) == 42
 
     def test_version_matches_pyproject(self):
         assert aipea.__version__ == "1.3.3"

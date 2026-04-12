@@ -188,7 +188,10 @@ else:
             if not silent:
                 console.print(f"  Exa: [red]HTTP {resp.status_code}[/red]")
             return False
-        except Exception as exc:
+        except httpx.HTTPError as exc:
+            # httpx.HTTPError is the base for TimeoutException, RequestError,
+            # HTTPStatusError, and other httpx-originated failures. Narrower
+            # than Exception; still catches every network-level failure mode.
             logging.debug("Exa connectivity error", exc_info=True)
             if not silent:
                 console.print(f"  Exa: [red]Error — {exc}[/red]")
@@ -217,7 +220,8 @@ else:
             if not silent:
                 console.print(f"  Firecrawl: [red]HTTP {resp.status_code}[/red]")
             return False
-        except Exception as exc:
+        except httpx.HTTPError as exc:
+            # See Exa connectivity check above — same rationale.
             logging.debug("Firecrawl connectivity error", exc_info=True)
             if not silent:
                 console.print(f"  Firecrawl: [red]Error — {exc}[/red]")
@@ -277,10 +281,11 @@ else:
         chk.ok("typer", "available (CLI mode)")
 
         try:
+            from importlib.metadata import PackageNotFoundError
             from importlib.metadata import version as _pkg_version
 
             chk.ok("rich", _pkg_version("rich"))
-        except Exception:
+        except PackageNotFoundError:
             chk.warn("rich", "not installed or version unknown")
 
     def _doctor_config_files(chk: _DoctorChecks) -> None:
@@ -424,6 +429,9 @@ else:
             return
 
         try:
+            import sqlite3
+
+            from aipea.errors import KnowledgeStoreError
             from aipea.knowledge import OfflineKnowledgeBase, StorageTier
 
             with OfflineKnowledgeBase(str(db_path), StorageTier.STANDARD) as kb:
@@ -435,7 +443,11 @@ else:
                 chk.ok("Knowledge base", f"{count} entries ({domain_str})")
             else:
                 chk.warn("Knowledge base", "exists but empty — run 'aipea seed-kb'")
-        except Exception as exc:
+        except (sqlite3.Error, OSError, KnowledgeStoreError) as exc:
+            # sqlite3.Error covers corruption, locked DB, and query failures.
+            # OSError covers missing file, permission denied, and FS errors.
+            # KnowledgeStoreError is AIPEA's own wrapper (errors.py) for any
+            # failure the knowledge module itself chooses to raise.
             logging.debug("Knowledge base doctor error", exc_info=True)
             chk.warn("Knowledge base", f"error reading: {exc}")
 
