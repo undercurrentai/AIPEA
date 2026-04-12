@@ -179,21 +179,55 @@ scored the project 39/45 (87%). The five items below close the gaps that
 separated it from a 95%+ score. They are ordered by leverage, not by sequencing;
 some are engineering work, some are process/BD work.
 
-### P5a: Second-reviewer coverage on security-critical modules — **HIGHEST LEVERAGE**
+### P5a: Second-reviewer coverage on security-critical modules — **IMPLEMENTED 2026-04-11 as automated dual-AI gate (Wave C1); dry-run 2 pending**
 
 **Problem**: Bus-factor 1. Every commit traces to a single human; no external
 code review appears on any PR. This is the single largest investor objection.
 
-**Action**:
-- Contract a part-time senior reviewer (security background) for ~4 hrs/week.
-- Add a `CODEOWNERS` file requiring their review on:
-  - `src/aipea/security.py`
-  - `src/aipea/__init__.py` (public API surface)
-  - `pyproject.toml` (dependency changes)
-- Document review SLA in `CONTRIBUTING.md`.
+**Decision (2026-04-11)**: Rather than wait on contracting a part-time human
+reviewer, AIPEA ships an **automated dual-AI second-reviewer gate** —
+`gpt-5.4-pro` via the OpenAI Responses API (background mode + polling) plus
+Codex CLI via `openai/codex-action@v1` — as required CI status checks on
+every PR touching security-critical paths. `@joshuakirby` remains the
+accountable human reviewer via `.github/CODEOWNERS`. The gate augments
+human judgment; it does not replace it.
 
-**Effort**: Process change + ongoing contractor cost.
-**Blocks**: Nothing. Do this first.
+**Implementation**: Wave C1 of the consolidated investor-review response
+plan. See [`docs/claude/audits/ai-second-review-dry-run-2026-04-11.md`](claude/audits/ai-second-review-dry-run-2026-04-11.md)
+for the dry-run-1 evidence (graceful-failure path verified, both fallback
+PR comments confirmed on PR #24) and the 8-step operator runbook for
+bringing the gate fully online (secret provisioning → branch protection →
+dry-run 2 happy-path verification).
+
+**Artifacts**:
+
+- `.github/CODEOWNERS` — `@joshuakirby` on `security.py`, `__init__.py`,
+  `pyproject.toml`, `.github/workflows/**`
+- `.github/workflows/ai-second-review.yml` — two parallel jobs
+  (`gpt-review`, `codex-review`) on `pull_request` events matching the
+  gated paths filter, 30-minute timeouts, concurrency group with
+  `cancel-in-progress: true`, `$GITHUB_ENV` multiline-var pattern for
+  posting review bodies via `actions/github-script` without `require('fs')`
+- `.github/scripts/gpt_review.py` — Python script invoking gpt-5.4-pro via
+  the Responses API in background mode, polling to 25 min, with structured
+  fallback markdown on every failure mode
+- `.github/codex/prompts/second-review.md` — Codex agent prompt file
+- `CONTRIBUTING.md §Second-Reviewer Gate` — documents the mechanism,
+  CODEOWNERS override path, and AI-assisted disclosure policy
+- `docs/claude/audits/ai-second-review-dry-run-2026-04-11.md` — dry-run
+  evidence + 8-step operator runbook + rollback procedure
+
+**Re-introduction of a human reviewer**: a part-time contracted senior
+reviewer remains a **valid upgrade path** if the dual-AI gate proves
+insufficient. The human-reviewer option is NOT rejected; it is just not
+blocked on by Wave C1. Adding a human via CODEOWNERS is a one-line change
+once that contract exists.
+
+**Status**: Workflow shipped on PR #24 (Wave C1). Dry-run 1 verified the
+graceful-failure path. Dry-run 2 (happy path) pending the operator
+following the runbook in the audit doc (secret provisioning, branch
+protection, throwaway PR). Task #7 in the response-plan tracker stays
+`in_progress` until dry-run 2 is captured in the audit doc.
 
 ### P5b: Resolve FedRAMP — ship it or stop claiming it — **RESOLVED: Path B (2026-04-11)**
 
