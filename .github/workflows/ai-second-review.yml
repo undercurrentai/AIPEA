@@ -62,6 +62,7 @@ on:
 permissions:
   contents: read
   pull-requests: write  # post PR comments
+  id-token: write       # required by anthropics/claude-code-action@v1
 
 concurrency:
   # Cancel superseded runs if the PR is updated mid-review — no point
