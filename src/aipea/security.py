@@ -2,7 +2,7 @@
 """AIPEA Security Context Module - Security and compliance handling for AI query processing.
 
 This module implements security screening and compliance mode handling for the
-AI Prompt Engineer Agent (AIPEA) integration with Agora IV. It provides:
+AI Prompt Engineer Agent (AIPEA). It provides:
 
 - Security level classification (UNCLASSIFIED to TOP_SECRET)
 - Compliance modes (General, HIPAA, Tactical)
