@@ -195,22 +195,24 @@ code review appears on any PR. This is the single largest investor objection.
 **Effort**: Process change + ongoing contractor cost.
 **Blocks**: Nothing. Do this first.
 
-### P5b: Resolve FedRAMP — ship it or stop claiming it
+### P5b: Resolve FedRAMP — ship it or stop claiming it — **RESOLVED: Path B (2026-04-11)**
 
-**Problem**: `ComplianceMode.FEDRAMP` is prominent in README but
-`src/aipea/security.py:610-626` honestly labels it as a stub. A government
-evaluator will spot this inside the first hour. The current state is the worst
-of both worlds.
+**Problem (original)**: `ComplianceMode.FEDRAMP` was prominent in README but
+`src/aipea/security.py` honestly labeled it as a stub. A government
+evaluator would spot this inside the first hour. That was the worst of both
+worlds.
 
-**Decision fork**:
-- **Path A (commercial)**: Find a design-partner org that needs FedRAMP.
-  Scope minimum-viable enforcement (model allowlist, audit-trail hook,
-  encryption-at-rest contract) built *with their input*, ship as v1.4.0.
-- **Path B (honest)**: Remove `FEDRAMP` from `ComplianceMode`, strike it from
-  the README, write an ADR in `docs/adr/` explaining why.
+**Decision (2026-04-11)**: **Path B executed.** FedRAMP claims struck from
+README, CLAUDE.md, SPECIFICATION.md, and TODO.md. `ComplianceMode.FEDRAMP`
+retained as a deprecated enum value through the v1.x line (emits
+`DeprecationWarning` on use); hard removal scheduled for v2.0.0. Full rationale
+in [`docs/adr/ADR-002-fedramp-removal.md`](adr/ADR-002-fedramp-removal.md).
 
-**Effort**: A = months (requires external customer); B = one afternoon.
-**Blocks**: A investor narrative ("regulated AI market wedge") if not resolved.
+Path A (build real FedRAMP enforcement with a design partner) remains
+available as a v2.0.0+ feature if a customer emerges.
+
+**Effort (actual)**: 1 afternoon. Matches Wave C2 of the consolidated response
+plan.
 
 ### P5c: Custom exception hierarchy and tightened CLI error handling
 

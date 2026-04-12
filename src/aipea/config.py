@@ -46,7 +46,10 @@ class AIPEAConfig:
         ollama_host: Ollama server URL for offline models.
         db_path: Path to offline knowledge SQLite database.
         storage_tier: Storage tier name (ultra_compact, compact, standard, extended).
-        default_compliance: Default compliance mode (general, hipaa, tactical, fedramp).
+        default_compliance: Default compliance mode (general, hipaa, tactical).
+            The legacy value "fedramp" is still accepted for back-compat
+            through the v1.x line but emits a DeprecationWarning at use —
+            see docs/adr/ADR-002-fedramp-removal.md.
     """
 
     exa_api_key: str = ""
@@ -386,6 +389,9 @@ def load_config(
         sources,
         dotenv_file,
         toml_file,
+        # "fedramp" retained as a valid config value for API back-compat through
+        # v1.x; emits a DeprecationWarning via ComplianceHandler on use.
+        # See docs/adr/ADR-002-fedramp-removal.md.
         valid_values={"general", "hipaa", "tactical", "fedramp"},
     )
     exa_api_url = _resolve_string(

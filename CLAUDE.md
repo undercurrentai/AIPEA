@@ -220,7 +220,7 @@ __main__.py    <- imports cli.app (CLI entry point)
 | `AIPEA_OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL for offline models |
 | `AIPEA_DB_PATH` | `aipea_knowledge.db` | Path to offline knowledge SQLite database |
 | `AIPEA_STORAGE_TIER` | `standard` | Storage tier: ultra_compact, compact, standard, extended |
-| `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode: general, hipaa, tactical, fedramp |
+| `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode: general, hipaa, tactical (`fedramp` is deprecated — see ADR-002) |
 | `AIPEA_EXA_API_URL` | `https://api.exa.ai/search` | Exa API endpoint URL |
 | `AIPEA_FIRECRAWL_API_URL` | `https://api.firecrawl.dev/v1/search` | Firecrawl API endpoint URL |
 
@@ -309,14 +309,15 @@ Inherits parent policy (see root `CLAUDE.md` Section 6.1).
 
 ### 7.2 Compliance Modes
 
-AIPEA supports 4 compliance modes. Changes to compliance behavior require ASK-first approval:
+AIPEA supports 3 compliance modes. Changes to compliance behavior require ASK-first approval:
 
 | Mode | Description | Restrictions |
 |------|-------------|-------------|
 | GENERAL | Standard use | None (except global forbidden models) |
-| HIPAA | Medical/PHI | BAA-covered models only, PHI redaction |
-| TACTICAL | Military/Defense | Local models only, force offline |
-| FEDRAMP | Government cloud | FedRAMP-authorized models only |
+| HIPAA | Medical/PHI | BAA-covered models only, PHI-flagging (no redaction) |
+| TACTICAL | Military/Defense | Local models only, force offline, classified-marker flagging |
+
+**Deprecated:** `FEDRAMP` was a config-only stub with no behavioral enforcement. Formally deprecated in v1.3.4, scheduled for removal in v2.0.0. See [`docs/adr/ADR-002-fedramp-removal.md`](docs/adr/ADR-002-fedramp-removal.md).
 
 ### 7.3 Third-Party Licensing
 

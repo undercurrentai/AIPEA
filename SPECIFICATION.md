@@ -228,11 +228,13 @@ class SecurityLevel(Enum):
     TOP_SECRET = 4     # Highest classification
 
 class ComplianceMode(Enum):
-    """Regulatory compliance modes."""
+    """Regulatory compliance modes. Supported: GENERAL, HIPAA, TACTICAL.
+    FEDRAMP is deprecated (ADR-002) and scheduled for removal in v2.0.0.
+    """
     GENERAL = "general"    # Standard use — minimal restrictions
     HIPAA = "hipaa"        # Medical/PHI handling — BAA-covered models
     TACTICAL = "tactical"  # Military/Defense — local models only, air-gapped
-    FEDRAMP = "fedramp"    # Government cloud (future)
+    FEDRAMP = "fedramp"    # DEPRECATED — config-only stub, see ADR-002
 ```
 
 #### 3.1.2 SecurityScanner
@@ -276,7 +278,8 @@ Configures operational parameters per compliance mode:
 | GENERAL | 90 days | No | All | No | No |
 | HIPAA | 6 years (2190d) | Yes | claude-opus-4-6, gpt-5.2 (BAA-covered) | Yes | No |
 | TACTICAL | 7 years (2555d) | Yes | llama-3.3-70b (local only) | No | Yes |
-| FEDRAMP | 3 years (1095d) | Yes | claude-opus-4-6, gpt-5.2 (authorized) | No | No |
+
+**Deprecated:** `FEDRAMP` previously appeared in this table. It was always a config-only stub with no behavioral enforcement and has been formally deprecated in v1.3.4 (removal scheduled for v2.0.0). See [`docs/adr/ADR-002-fedramp-removal.md`](docs/adr/ADR-002-fedramp-removal.md).
 
 Model validation uses **substring matching** (case-insensitive) against the allowed
 list, plus a global **forbidden list** (`gpt-4o`, `gpt-4o-mini`) that applies
@@ -918,7 +921,8 @@ Per-compliance-mode allowlists use **substring matching** (case-insensitive):
 | GENERAL | All (except forbidden) | No restrictions |
 | HIPAA | `claude-opus-4-6`, `claude-opus-4-5`, `gpt-5.2` | BAA-covered families |
 | TACTICAL | `llama-3.3-70b` | Local models only |
-| FEDRAMP | `claude-opus-4-6`, `claude-opus-4-5`, `gpt-5.2` | FedRAMP authorized |
+
+`FEDRAMP` previously had its own allowlist (`claude-opus-4-6`, `claude-opus-4-5`, `gpt-5.2`, billed as "FedRAMP authorized"). That list was never externally validated — the mode was a config-only stub. `FEDRAMP` is deprecated in v1.3.4 (ADR-002); the legacy allowlist is retained for back-compat through v1.x only.
 
 **Global forbidden list**: `gpt-4o`, `gpt-4o-mini` (deprecated models).
 
@@ -956,7 +960,7 @@ for ReDoS safety before execution.
 | `AIPEA_OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL for offline models |
 | `AIPEA_DB_PATH` | `aipea_knowledge.db` | Path to offline knowledge SQLite database |
 | `AIPEA_STORAGE_TIER` | `standard` | Storage tier: ultra_compact, compact, standard, extended |
-| `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode: general, hipaa, tactical, fedramp |
+| `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode: general, hipaa, tactical (`fedramp` is deprecated — see ADR-002) |
 | `AIPEA_EXA_API_URL` | `https://api.exa.ai/search` | Exa API endpoint URL |
 | `AIPEA_FIRECRAWL_API_URL` | `https://api.firecrawl.dev/v1/search` | Firecrawl API endpoint URL |
 
@@ -1100,9 +1104,10 @@ feature gating, and compliance mapping.
 
 **Why descoped**: Premature. AIPEA is an internal library, not a SaaS product.
 Market segmentation belongs in the product layer (Agora/AEGIS pricing), not the
-preprocessing layer. The compliance modes (GENERAL, HIPAA, TACTICAL, FEDRAMP)
+preprocessing layer. The supported compliance modes (GENERAL, HIPAA, TACTICAL)
 already handle the security/regulatory dimension that market configs were
-partially addressing.
+partially addressing. (`FEDRAMP` was previously listed here but was deprecated
+in v1.3.4; see ADR-002.)
 
 **What replaces it**: `ComplianceMode` enum + `ComplianceHandler` configuration.
 
@@ -1343,7 +1348,7 @@ def is_offline_model(model_id: str) -> bool: ...
 | Category | Original Design | Production (AgoraIV) | Coverage |
 |----------|----------------|---------------------|----------|
 | Security scanning | 4 categories | 4 categories + ReDoS + model allowlists | **100%+** |
-| Compliance modes | GDPR/CCPA/FedRAMP/FISMA/ITAR | GENERAL/HIPAA/TACTICAL/FEDRAMP | **100%** |
+| Compliance modes | GDPR/CCPA/FedRAMP/FISMA/ITAR | GENERAL/HIPAA/TACTICAL (FEDRAMP deprecated v1.3.4, ADR-002) | **Narrower but honest** |
 | Offline knowledge | 12 features | 8 features (CRUD, compression, search, tiers) | **67%** |
 | Search providers | 3 providers | 3 providers (Context7 stub by design) | **100%** |
 | Enhancement strategies | 6 named + QualityAssessor | Template-based classification | **~30%** |

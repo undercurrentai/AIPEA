@@ -478,13 +478,12 @@ class AIPEAEnhancer:
                 query, model_id, security_level, compliance_mode, start_time
             )
 
-        # Warn when FEDRAMP stub mode is selected (configuration only, no
-        # FedRAMP-specific security scanning or behavioural enforcement yet).
+        # FEDRAMP is deprecated as of v1.3.4; the ComplianceHandler constructor
+        # (below) emits the canonical DeprecationWarning. We log a compact
+        # pointer here for operators reading enhancer.py logs. Scheduled for
+        # removal in v2.0.0. See docs/adr/ADR-002-fedramp-removal.md.
         if compliance_mode == ComplianceMode.FEDRAMP:
-            logger.warning(
-                "FEDRAMP mode is an unsupported stub — configuration only, "
-                "no FedRAMP-specific security scanning or behavioral enforcement"
-            )
+            logger.warning("FEDRAMP mode is deprecated and provides no enforcement — see ADR-002")
 
         # Step 1: Create security context
         compliance_handler = ComplianceHandler(compliance_mode)
