@@ -1,6 +1,32 @@
-# Default: all changes require joshuakirby review
-* @ThermoclineLeviathan
+# CODEOWNERS for AIPEA
+#
+# GitHub automatically requests review from the owners listed here when a
+# pull request modifies a matching path. Combined with "Require review from
+# Code Owners" in branch protection, this makes the listed accounts a
+# mandatory reviewer for their paths.
+#
+# AIPEA currently has a single human maintainer (@joshuakirby). The
+# ThermoclineLeviathan automation account is an internal CI/scaffold agent.
+# For the security-critical paths below, @joshuakirby is the accountable
+# human reviewer — the automated dual-AI second-reviewer gate
+# (.github/workflows/ai-second-review.yml) provides programmatic GPT 5.4
+# Pro + Codex CLI reviews as required status checks for the same paths.
+# See CONTRIBUTING.md §Second-Reviewer Gate and
+# docs/ROADMAP.md §P5a for the full design.
 
-# Critical paths: require explicit admin review
-.github/ @ThermoclineLeviathan
-CLAUDE.md @ThermoclineLeviathan
+# Default: all changes require joshuakirby review
+* @joshuakirby @ThermoclineLeviathan
+
+# Security-critical code — Wave C1 (ROADMAP §P5a):
+# @joshuakirby is the accountable human.
+# The ai-second-review.yml workflow adds mandatory automated dual-AI review
+# on these paths via required status checks (configure in branch protection).
+src/aipea/security.py @joshuakirby
+src/aipea/__init__.py @joshuakirby
+pyproject.toml        @joshuakirby
+
+# CI / release pipeline and governance docs — admin review required
+.github/              @joshuakirby @ThermoclineLeviathan
+CLAUDE.md             @joshuakirby @ThermoclineLeviathan
+SECURITY.md           @joshuakirby
+docs/adr/             @joshuakirby
