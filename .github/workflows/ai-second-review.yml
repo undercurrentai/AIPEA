@@ -257,7 +257,15 @@ jobs:
           model: gpt-5.4-pro
           effort: high
           sandbox: read-only
-          safety-strategy: drop-sudo
+          # safety-strategy: read-only avoids the `drop-sudo` verification
+          # check that fails on Blacksmith runners (where sudo remains
+          # passwordless via /etc/sudoers.d entries even after
+          # `deluser runner sudo`). `read-only` executes Codex in a
+          # read-only mount without touching sudo at all. See
+          # docs/claude/audits/ai-second-review-dry-run-2026-04-11.md §5
+          # for the Blacksmith interaction and the Context7 verification
+          # pass against the openai/codex-action docs.
+          safety-strategy: read-only
 
       - name: Load review body into env
         # always() so a failed Codex run still surfaces its fallback
