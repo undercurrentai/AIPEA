@@ -5,6 +5,7 @@
 **Scope:** ~9.6K LOC source, ~13.5K LOC tests, 53 commits across the 50 days from 2026-02-19 to 2026-04-10
 **Lead programmer:** Joshua Kirby
 **Purpose:** Self-assessment written in investor voice — an evaluation of the project and its lead programmer from the perspective of a potential investor, followed by five actionable recommendations. Scored by the same agent that generated the PR, so the "Honesty" row should be read accordingly.
+**Companion review:** An adversarial counter-review ([`investor-review-adversarial-2026-04-11.md`](investor-review-adversarial-2026-04-11.md)) was commissioned the same day. It recommends *Pass or Conditional-with-Escrow* and raises several concrete findings this review missed. Both documents are preserved verbatim; the consolidated response plan sequencing findings from both lives in `docs/ROADMAP.md` §P5.
 
 ---
 

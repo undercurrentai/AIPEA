@@ -248,7 +248,22 @@ AIPEA is designed as a standalone preprocessing layer for LLM systems. It integr
 
 AIPEA is free and open-source. For organizations that need full AI governance — risk registers, model cards, compliance auditing, and policy enforcement — see [AEGIS](https://github.com/undercurrentai/aegis-governance), Undercurrent AI's governance platform.
 
-AIPEA's compliance modes (HIPAA, TACTICAL) provide runtime security controls, with FEDRAMP support planned. AEGIS adds the organizational layer: audit trails, human oversight workflows, and regulatory reporting.
+### What AIPEA's Compliance Modes Do — and Do Not Do
+
+AIPEA exposes a `ComplianceMode` enum (`GENERAL`, `HIPAA`, `TACTICAL`, `FEDRAMP`). These modes are **input-inspection and model-allowlist controls**, not enforcement of any regulatory regime. Read this before shipping AIPEA into a regulated environment:
+
+| Mode | What AIPEA does | What AIPEA does **not** do |
+|---|---|---|
+| `HIPAA` | Enables PHI regex patterns (MRN, patient identifier, diagnosis-term detection); restricts the LLM allowlist to BAA-capable models; emits `phi_detected:*` flags in the scan result; logs a runtime warning on match. | Does not redact. Does not block the prompt. Does not persist an audit trail. Does not satisfy the HIPAA Security Rule, Privacy Rule, or BAA requirement on behalf of the integrator. |
+| `TACTICAL` | Forces the processing tier to Offline; restricts the LLM allowlist to locally-runnable models; enables classified-marker regex patterns (CONFIDENTIAL / SECRET / TOP SECRET and common compartment markings). | Does not validate an air-gap. Does not enforce classification handling beyond detection. Does not substitute for an accredited tactical enclave. |
+| `FEDRAMP` | **Unenforced configuration stub.** The enum value exists; there is no behavioral enforcement. | Does not implement FedRAMP controls. Do not ship AIPEA's `FEDRAMP` mode to a FedRAMP environment expecting enforcement. |
+| `GENERAL` | Default. PII scanning, injection detection, and homoglyph normalization run for every request. | — |
+
+**Responsibility stays with the integrator.** AIPEA is an input-inspection layer: it tells you what it saw. Your application is responsible for the enforcement decision (block, redact, route to a compliant backend, log to an immutable audit store, obtain BAAs, encrypt at rest and in transit, and satisfy whatever regulatory regime applies).
+
+For the full scope statement, supported versions, and vulnerability disclosure policy, see [`SECURITY.md`](SECURITY.md).
+
+AEGIS adds the organizational layer that AIPEA deliberately does not: audit trails, human oversight workflows, policy enforcement, and regulatory reporting. If you need those, pair AIPEA with AEGIS rather than treating AIPEA's compliance modes as substitutes for them.
 
 Learn more at [undercurrentholdings.com](https://undercurrentholdings.com).
 
