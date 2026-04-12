@@ -52,7 +52,7 @@ jobs:
         run: pytest tests/ -v --cov=src/aipea --cov-report=term-missing --cov-report=xml --cov-fail-under=75
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.12'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
         with:
           files: ./coverage.xml
           flags: unittests
