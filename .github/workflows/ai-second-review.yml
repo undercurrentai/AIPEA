@@ -254,7 +254,14 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: .github/codex/prompts/second-review.md
           output-file: codex_review.md
-          model: gpt-5.4-pro
+          # gpt-5.3-codex is OpenAI's "primary choice for coding and
+          # development tasks" — specialized for agentic coding, code
+          # editing, and tool-heavy workflows. Using gpt-5.4-pro here
+          # caused 15+ minute runtimes because pro takes 2-5 min per
+          # turn in Codex's multi-turn agent loop. The GPT review job
+          # keeps gpt-5.4-pro (single API call, background mode).
+          # See Context7 /openai/codex → OpenAI Models Reference.
+          model: gpt-5.3-codex
           effort: high
           sandbox: read-only
           # safety-strategy: read-only avoids the `drop-sudo` verification
