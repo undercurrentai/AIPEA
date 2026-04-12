@@ -6,7 +6,7 @@ name: AI Second Review
 # reviews (positive §P5a and adversarial §5.1).
 #
 # Mechanism: when a pull request touches any path in the `paths:` filter
-# below, two parallel jobs run against the PR diff:
+# below, three parallel jobs run against the PR diff:
 #
 #   - gpt-review    : calls gpt-5.4-pro via the OpenAI Responses API in
 #                     background mode with reasoning effort=high, then
@@ -18,18 +18,23 @@ name: AI Second Review
 #                     proxy, and runs `codex exec` in read-only sandbox
 #                     mode against the diff. Posts a second PR comment.
 #
-# Both jobs are configured as required status checks via branch
-# protection (configure once via GH UI; see docs/claude/audits/ for the
-# dry-run checklist). @joshuakirby remains the accountable human
-# reviewer via .github/CODEOWNERS — the AI jobs augment human judgment,
-# they do not replace it.
+#   - claude-review : uses the official anthropics/claude-code-action@v1.
+#                     Reads the project's CLAUDE.md natively for full
+#                     context. Posts a third PR comment.
+#
+# All three jobs are configured as required status checks via branch
+# protection. @joshuakirby remains the accountable human reviewer via
+# .github/CODEOWNERS — the AI jobs augment human judgment, they do not
+# replace it.
 #
 # Required repo secrets (set via `gh secret set`):
 #
-#   - OPENAI_API_KEY : OpenAI API key with gpt-5.4-pro access. Used by
-#                      BOTH jobs (codex-action starts its own Responses
-#                      API proxy from the same key — no separate Codex
-#                      auth needed).
+#   - OPENAI_API_KEY    : OpenAI API key with gpt-5.4-pro access. Used
+#                         by gpt-review and codex-review (codex-action
+#                         starts its own Responses API proxy from the
+#                         same key).
+#   - ANTHROPIC_API_KEY : Anthropic API key for claude-review. Bills to
+#                         the Anthropic org that generated the key.
 #
 # Design notes:
 #   - gpt-5.4-pro is Responses-API-only (per the model card at
@@ -325,6 +330,135 @@ jobs:
               cat codex_review.md
             else
               printf '_Codex review produced no output (check logs)._\n'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: No-op for empty diff
+        if: steps.diff.outputs.diff_empty == 'true'
+        run: echo "PR diff is empty against the base ref — nothing to review."
+
+  claude-review:
+    name: Claude Opus 4.6 review
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # Claude Opus 4.6 via anthropics/claude-code-action@v1.
+    # Key advantage: reads CLAUDE.md natively — AIPEA's agent contract
+    # with ASK-first triggers, security requirements, dependency
+    # constraints, and module dependency graph is absorbed as context
+    # automatically. The GPT and Codex reviewers need this spelled out
+    # in their system prompts; Claude gets it for free.
+    timeout-minutes: 15
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Fetch base ref
+        run: git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}"
+
+      - name: Compute diff against base
+        id: diff
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.ref }}"
+          # shellcheck disable=SC2086
+          git diff "origin/${base}...HEAD" -- ${GATED_PATHS} > pr_diff.patch
+          if [ ! -s pr_diff.patch ]; then
+            echo "diff_empty=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          diff_bytes=$(wc -c < pr_diff.patch)
+          echo "PR diff: ${diff_bytes} bytes"
+
+      - name: Run Claude review
+        id: claude
+        if: steps.diff.outputs.diff_empty != 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are the Claude half of AIPEA's triple-AI second-reviewer gate.
+            Your counterparts are gpt-5.4-pro (single-turn reasoning) and
+            Codex CLI with gpt-5.3-codex (multi-turn agentic tool-use).
+            All three reviews are posted as independent PR comments and ALL
+            must pass branch protection before the PR can merge.
+
+            Read the file pr_diff.patch in the working directory — it
+            contains the unified diff of this PR against its base ref,
+            filtered to the security-gated paths only.
+
+            Your job: catch bugs, security regressions, compliance-behavior
+            changes, and public-API mistakes. Be direct, specific, and
+            concrete. Cite file:line evidence. Propose fixes rather than
+            raising vague concerns. If the diff is trivial, say so
+            explicitly rather than padding observations.
+
+            You have access to CLAUDE.md which defines this project's
+            conventions, ASK-first triggers, and security requirements.
+            Use that context to flag violations of project-specific rules
+            that the other two reviewers (which lack CLAUDE.md) might miss.
+
+            Format your reply as Markdown with these sections in order:
+            ## Verdict
+            One of: APPROVE, REQUEST_CHANGES, COMMENT.
+            ## Blocking concerns
+            Bulleted list with file:line evidence. _None._ if APPROVE/COMMENT.
+            ## Non-blocking observations
+            ## Specific line callouts
+            ## What I did NOT review
+          claude_args: "--model claude-opus-4-6 --max-turns 3"
+
+      - name: Load review body into env
+        if: always() && steps.diff.outputs.diff_empty != 'true'
+        run: |
+          output_file="claude_review.md"
+          # claude-code-action may write output via the action's outputs
+          # or leave it in the workspace. If nothing materialized, write
+          # a fallback so the comment pipeline stays alive.
+          if ! [ -f "${output_file}" ] || ! [ -s "${output_file}" ]; then
+            printf '_Claude review produced no output. Check the workflow logs for details._\n' > "${output_file}"
+          fi
+          delimiter="__AIPEA_REVIEW_BODY_EOF_${{ github.run_id }}__"
+          {
+            printf '%s<<%s\n' "REVIEW_BODY" "${delimiter}"
+            cat "${output_file}"
+            printf '\n%s\n' "${delimiter}"
+          } >> "$GITHUB_ENV"
+
+      - name: Post review comment (Claude)
+        if: always() && steps.diff.outputs.diff_empty != 'true'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const body = process.env.REVIEW_BODY || '(review produced no output)';
+            const marker = '<!-- ai-second-review:claude -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const header = '## 🤖 Claude Opus 4.6 — Second-Reviewer Gate';
+            const footer = '---\n*Automated via `.github/workflows/ai-second-review.yml` (Wave C1 — ROADMAP §P5a). '
+                         + 'Accountable human reviewer: @joshuakirby. '
+                         + 'See [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md) §Second-Reviewer Gate.*';
+            const full = `${marker}\n\n${header}\n\n${body}\n\n${footer}`;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: full });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: full });
+            }
+
+      - name: Write review to job summary
+        if: always() && steps.diff.outputs.diff_empty != 'true'
+        run: |
+          {
+            printf '## Claude Opus 4.6 — Second-Reviewer Gate\n\n'
+            if [ -f claude_review.md ] && [ -s claude_review.md ]; then
+              cat claude_review.md
+            else
+              printf '_Claude review produced no output (check logs)._\n'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
