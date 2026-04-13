@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Wave D1)
+- `src/aipea/learning.py` — Adaptive Learning Engine. SQLite-backed strategy
+  performance tracking with per-query-type running averages and learned
+  strategy suggestion. Opt-in via `AIPEAEnhancer(enable_learning=True)`.
+- `AdaptiveLearningEngine` exported in `__init__.py` (42 → 43 symbols).
+- `EnhancementResult.strategy_used` field — surfaces the effective strategy
+  name on every enhancement result.
+- `AIPEAEnhancer.record_feedback(result, score)` — async method to record
+  user satisfaction and feed the learning loop.
+- `AIPEAEnhancer.get_status()` now includes `learning_enabled` and
+  `learning_stats` keys.
+- 24 new tests: 18 in `tests/test_learning.py` + 6 in `tests/test_enhancer.py`.
+- AI second-reviewer verdict enforcement: `REQUEST_CHANGES` from any of the
+  3 AI reviewers now fails the CI job, blocking merge via branch protection.
+  Previously verdicts were advisory (comment-only).
+
 ### Deprecated
 - `ComplianceMode.FEDRAMP` is formally deprecated and scheduled for removal
   in v2.0.0. AIPEA does not implement FedRAMP controls; the mode was always

@@ -203,6 +203,34 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Enforce verdict
+        # Fail-closed: missing/empty review or REQUEST_CHANGES both block.
+        # Only explicit APPROVE or COMMENT passes the gate.
+        if: always() && steps.diff.outputs.diff_empty != 'true'
+        run: |
+          if [ ! -s gpt_review.md ]; then
+            echo "::error::gpt-5.4-pro review file missing or empty — fail closed."
+            exit 1
+          fi
+          # Extract the first non-blank line after "## Verdict", strip backticks and whitespace
+          verdict=$(sed -n '/^## *Verdict/,/^##/{/^## *Verdict/d;/^##/d;/^$/d;p;}' gpt_review.md \
+            | head -1 | tr -d '`' | xargs)
+          # Normalise to uppercase for exact match
+          verdict_upper=$(echo "${verdict}" | tr '[:lower:]' '[:upper:]')
+          case "${verdict_upper}" in
+            APPROVE|COMMENT)
+              echo "Verdict: ${verdict} — no blocking concerns."
+              ;;
+            REQUEST_CHANGES)
+              echo "::error::gpt-5.4-pro verdict: REQUEST_CHANGES — PR must address blocking concerns before merge."
+              exit 1
+              ;;
+            *)
+              echo "::error::gpt-5.4-pro verdict '${verdict:-<empty>}' not recognised — fail closed."
+              exit 1
+              ;;
+          esac
+
       - name: No-op for empty diff
         if: steps.diff.outputs.diff_empty == 'true'
         run: echo "PR diff is empty against the base ref — nothing to review."
@@ -249,13 +277,8 @@ jobs:
         # Responses-API proxy from the OPENAI_API_KEY input, and runs
         # `codex exec` under the chosen sandbox strategy. See
         # developers.openai.com/codex/github-action/ for the input
-        # reference.
-        #
-        # Pinning: this action moves fast; we pin the floating v1 tag
-        # here and will upgrade to a SHA pin after the first few stable
-        # runs. The dry-run PR described in the plan file is the point
-        # where we capture the exact SHA to pin to.
-        uses: openai/codex-action@v1
+        # reference. SHA-pinned per repo convention.
+        uses: openai/codex-action@0b91f4a2703c23df3102c3f0967d3c6db34eedef # v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: .github/codex/prompts/second-review.md
@@ -334,6 +357,30 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Enforce verdict
+        if: always() && steps.diff.outputs.diff_empty != 'true'
+        run: |
+          if [ ! -s codex_review.md ]; then
+            echo "::error::Codex review file missing or empty — fail closed."
+            exit 1
+          fi
+          verdict=$(sed -n '/^## *Verdict/,/^##/{/^## *Verdict/d;/^##/d;/^$/d;p;}' codex_review.md \
+            | head -1 | tr -d '`' | xargs)
+          verdict_upper=$(echo "${verdict}" | tr '[:lower:]' '[:upper:]')
+          case "${verdict_upper}" in
+            APPROVE|COMMENT)
+              echo "Verdict: ${verdict} — no blocking concerns."
+              ;;
+            REQUEST_CHANGES)
+              echo "::error::Codex verdict: REQUEST_CHANGES — PR must address blocking concerns before merge."
+              exit 1
+              ;;
+            *)
+              echo "::error::Codex verdict '${verdict:-<empty>}' not recognised — fail closed."
+              exit 1
+              ;;
+          esac
+
       - name: No-op for empty diff
         if: steps.diff.outputs.diff_empty == 'true'
         run: echo "PR diff is empty against the base ref — nothing to review."
@@ -375,7 +422,7 @@ jobs:
       - name: Run Claude review
         id: claude
         if: steps.diff.outputs.diff_empty != 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@c7c8889b30499b4e46f4c32b892e43cd364bc2fe # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
@@ -462,6 +509,30 @@ jobs:
               printf '_Claude review produced no output (check logs)._\n'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce verdict
+        if: always() && steps.diff.outputs.diff_empty != 'true'
+        run: |
+          if [ ! -s claude_review.md ]; then
+            echo "::error::Claude review file missing or empty — fail closed."
+            exit 1
+          fi
+          verdict=$(sed -n '/^## *Verdict/,/^##/{/^## *Verdict/d;/^##/d;/^$/d;p;}' claude_review.md \
+            | head -1 | tr -d '`' | xargs)
+          verdict_upper=$(echo "${verdict}" | tr '[:lower:]' '[:upper:]')
+          case "${verdict_upper}" in
+            APPROVE|COMMENT)
+              echo "Verdict: ${verdict} — no blocking concerns."
+              ;;
+            REQUEST_CHANGES)
+              echo "::error::Claude verdict: REQUEST_CHANGES — PR must address blocking concerns before merge."
+              exit 1
+              ;;
+            *)
+              echo "::error::Claude verdict '${verdict:-<empty>}' not recognised — fail closed."
+              exit 1
+              ;;
+          esac
 
       - name: No-op for empty diff
         if: steps.diff.outputs.diff_empty == 'true'

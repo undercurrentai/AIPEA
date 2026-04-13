@@ -29,8 +29,8 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~9,950 (as of 76333e4, 2026-04-12) |
-| **Exports** | 42 symbols in `__all__` (35 runtime + 6 exception types + `__version__`) |
+| **Source LOC** | ~10,280 (as of Wave D1, 2026-04-13) |
+| **Exports** | 43 symbols in `__all__` (36 runtime + 6 exception types + `__version__`) |
 | **Build backend** | hatchling — **do NOT run `poetry install` / `poetry lock` / `poetry run` in this directory**. It silently creates an orphan venv in `~/Library/Caches/pypoetry/virtualenvs/aipea-*`. Use `make install` (pip + `.venv/`). |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
@@ -158,12 +158,13 @@ knowledge.py   <- ZERO aipea imports (stdlib only)
 search.py      <- ZERO aipea imports (stdlib + httpx); lazy-imports config
 config.py      <- ZERO aipea imports (stdlib only, tomllib for TOML)
 quality.py     <- ZERO aipea imports (stdlib only: re, math, logging)
+learning.py    <- imports _types (QueryType only); stdlib: sqlite3, threading, hashlib
 strategies.py  <- imports _types (QueryType enum only)
 _types.py      <- Shared enums + canonical helpers (ProcessingTier, QueryType, SearchStrategy, QUERY_TYPE_PATTERNS, get_model_family)
 models.py      <- Shared data models (QueryAnalysis)
 analyzer.py    <- imports security, _types, models
 engine.py      <- imports search, _types; lazy-imports strategies
-enhancer.py    <- imports ALL (facade)
+enhancer.py    <- imports ALL (facade); lazy-imports learning (opt-in via enable_learning)
 cli.py         <- imports config (optional: typer, rich, httpx)
 __main__.py    <- imports cli.app (CLI entry point)
 ```

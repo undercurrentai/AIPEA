@@ -111,6 +111,7 @@ class EnhancementResult:
     enhancement_notes: list[str] = field(default_factory=list)
     clarifications: list[str] = field(default_factory=list)
     quality_score: QualityScore | None = None
+    strategy_used: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary for logging/storage.
@@ -139,6 +140,7 @@ class EnhancementResult:
             "enhancement_notes": self.enhancement_notes,
             "clarifications": self.clarifications,
             "quality_score": self.quality_score.to_dict() if self.quality_score else None,
+            "strategy_used": self.strategy_used,
         }
 
 
@@ -260,6 +262,7 @@ class AIPEAEnhancer:
         default_compliance: ComplianceMode = ComplianceMode.GENERAL,
         exa_api_key: str | None = None,
         firecrawl_api_key: str | None = None,
+        enable_learning: bool = False,
     ) -> None:
         """Initialize the prompt enhancement facade.
 
@@ -269,6 +272,7 @@ class AIPEAEnhancer:
             default_compliance: Default compliance mode for requests
             exa_api_key: Optional API key for Exa search provider
             firecrawl_api_key: Optional API key for Firecrawl provider
+            enable_learning: Whether to enable adaptive strategy learning
         """
         self._enable_enhancement = enable_enhancement
         self._storage_tier = storage_tier
@@ -305,6 +309,17 @@ class AIPEAEnhancer:
         # Ollama processor (lazily initialized, reused across calls)
         self._ollama_processor: OfflineTierProcessor | None = None
 
+        # Adaptive learning engine (opt-in)
+        self._learning_engine: AdaptiveLearningEngine | None = None
+        if enable_learning:
+            try:
+                from aipea.learning import AdaptiveLearningEngine
+
+                self._learning_engine = AdaptiveLearningEngine()
+            except (sqlite3.Error, OSError, RuntimeError) as e:
+                logger.warning("Failed to initialize learning engine: %s", e)
+                self._learning_engine = None
+
         # Thread-safe statistics tracking
         self._stats_lock = threading.Lock()
         self._stats: dict[str, Any] = {
@@ -324,10 +339,13 @@ class AIPEAEnhancer:
         )
 
     def close(self) -> None:
-        """Close resources held by this enhancer (e.g. SQLite connection)."""
+        """Close resources held by this enhancer (e.g. SQLite connections)."""
         if self._offline_kb is not None:
             self._offline_kb.close()
             self._offline_kb = None
+        if self._learning_engine is not None:
+            self._learning_engine.close()
+            self._learning_engine = None
 
     def __enter__(self) -> AIPEAEnhancer:
         return self
@@ -596,6 +614,10 @@ class AIPEAEnhancer:
         if ollama_analysis:
             effective_query = f"{query}\n\n[Offline LLM Analysis]\n{ollama_analysis}"
 
+        effective_strategy = self._resolve_strategy(
+            strategy, analysis.query_type, enhancement_notes
+        )
+
         # Formulate the enhanced prompt
         enhanced_prompt = await self._prompt_engine.formulate_search_aware_prompt(
             query=effective_query,
@@ -603,7 +625,7 @@ class AIPEAEnhancer:
             search_context=search_context,
             model_type=model_family,
             query_type=analysis.query_type.value,
-            strategy=strategy,
+            strategy=effective_strategy,
             embed_search_context=embed_search_context,
         )
 
@@ -637,6 +659,7 @@ class AIPEAEnhancer:
             enhancement_time_ms=enhancement_time_ms,
             was_enhanced=True,
             enhancement_notes=enhancement_notes,
+            strategy_used=effective_strategy,
             clarifications=clarifications,
             quality_score=quality_score,
         )
@@ -1240,6 +1263,36 @@ class AIPEAEnhancer:
             enhancement_notes=enhancement_notes,
         )
 
+    def _resolve_strategy(
+        self,
+        caller_strategy: str | None,
+        query_type: QueryType,
+        enhancement_notes: list[str],
+    ) -> str:
+        """Resolve the effective strategy: learned > caller override > default."""
+        from aipea.strategies import select_strategy_for_query_type
+
+        if self._learning_engine is not None and caller_strategy is None:
+            learned = self._learning_engine.get_best_strategy(query_type)
+            if learned is not None:
+                enhancement_notes.append(f"Using learned strategy: {learned}")
+                return learned
+        return caller_strategy or select_strategy_for_query_type(query_type)
+
+    async def record_feedback(self, result: EnhancementResult, score: float) -> None:
+        """Record user feedback on an enhancement result for adaptive learning.
+
+        Args:
+            result: The enhancement result to provide feedback on
+            score: Satisfaction score in [-1.0, 1.0] (positive = good)
+        """
+        if self._learning_engine is not None and result.strategy_used:
+            await self._learning_engine.arecord_feedback(
+                query_type=result.query_analysis.query_type,
+                strategy=result.strategy_used,
+                score=score,
+            )
+
     def _update_avg_time(self, new_time_ms: float) -> None:
         """Update the rolling average enhancement time.
 
@@ -1284,6 +1337,10 @@ class AIPEAEnhancer:
                 "avg_enhancement_time_ms": round(self._stats["avg_enhancement_time_ms"], 2),
                 "tier_distribution": dict(self._stats["tier_distribution"]),
                 "compliance_distribution": dict(self._stats["compliance_distribution"]),
+                "learning_enabled": self._learning_engine is not None,
+                "learning_stats": (
+                    self._learning_engine.get_stats() if self._learning_engine is not None else None
+                ),
             }
 
     def reset_stats(self) -> None:

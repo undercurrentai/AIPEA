@@ -51,6 +51,8 @@ The gate is implemented as `.github/workflows/ai-second-review.yml` and runs thr
 
 All three jobs are required status checks on the `main` branch via branch protection. Merge is blocked until all jobs report success. `@joshuakirby` remains the accountable human reviewer via `.github/CODEOWNERS`.
 
+**Verdict enforcement.** Each reviewer posts a structured comment with a `Verdict` of `APPROVE`, `REQUEST_CHANGES`, or `COMMENT`. The workflow enforces this programmatically: a `REQUEST_CHANGES` verdict fails the CI job, blocking merge via branch protection. `APPROVE` and `COMMENT` both pass. To unblock a PR after `REQUEST_CHANGES`, address the blocking concerns, push a fix, and the reviewer will re-run automatically on the new commit.
+
 **Fail-closed policy.** If any AI reviewer is unavailable (API outage, quota exhaustion, transient 5xx), its CI job will fail. The PR author may document the unavailability in a PR comment and request an override via `@joshuakirby`, who is the CODEOWNERS approver. Do **not** `--admin`-merge a security-gated PR without posting that justification in the PR first.
 
 **Why this gate exists.** The 2026-04-11 investor review sequence identified bus-factor-1 as the single largest engineering risk in AIPEA. The automated triple-AI gate is the interim answer until a contracted human second reviewer is available. See `docs/ROADMAP.md` §P5a for the full rationale.
