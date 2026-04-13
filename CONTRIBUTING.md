@@ -36,23 +36,24 @@ Class **C** changes touching `src/aipea/security.py`, `src/aipea/__init__.py`, `
 
 ## Second-Reviewer Gate (Security-Critical Paths)
 
-AIPEA currently has a single human maintainer. To mitigate bus-factor risk on security-critical code, PRs touching the following paths must pass an **automated dual-AI review gate** as a required CI status check before merge:
+AIPEA currently has a single human maintainer. To mitigate bus-factor risk on security-critical code, PRs touching the following paths must pass an **automated triple-AI review gate** as a required CI status check before merge:
 
 - `src/aipea/security.py`
 - `src/aipea/__init__.py` (public API surface)
 - `pyproject.toml` (dependency changes)
 - `.github/workflows/**` (CI / release pipeline)
 
-The gate is implemented as `.github/workflows/ai-second-review.yml` and runs two parallel jobs on every PR that touches a gated path:
+The gate is implemented as `.github/workflows/ai-second-review.yml` and runs three parallel jobs on every PR that touches a gated path:
 
 1. **`gpt-review`** — calls GPT 5.4 Pro via the OpenAI API with the PR diff and posts findings as a PR comment.
 2. **`codex-review`** — runs Codex CLI in non-interactive `exec` mode against the diff and posts a second PR comment.
+3. **`claude-review`** — runs Claude Opus 4.6 via `anthropics/claude-code-action@v1`, reading the project's `CLAUDE.md` natively for full context, and posts a third PR comment.
 
-Both jobs are required status checks on the `main` branch via branch protection. Merge is blocked until both jobs report success. `@joshuakirby` remains the accountable human reviewer via `.github/CODEOWNERS`.
+All three jobs are required status checks on the `main` branch via branch protection. Merge is blocked until all jobs report success. `@joshuakirby` remains the accountable human reviewer via `.github/CODEOWNERS`.
 
-**Fail-open policy.** If either AI reviewer is unavailable (API outage, quota exhaustion, transient 5xx), the CI job will fail. The PR author may document the unavailability in a PR comment and request an override via `@joshuakirby`, who is the CODEOWNERS approver. Do **not** `--admin`-merge a security-gated PR without posting that justification in the PR first.
+**Fail-closed policy.** If any AI reviewer is unavailable (API outage, quota exhaustion, transient 5xx), its CI job will fail. The PR author may document the unavailability in a PR comment and request an override via `@joshuakirby`, who is the CODEOWNERS approver. Do **not** `--admin`-merge a security-gated PR without posting that justification in the PR first.
 
-**Why this gate exists.** The 2026-04-11 investor review sequence identified bus-factor-1 as the single largest engineering risk in AIPEA. The automated dual-AI gate is the interim answer until a contracted human second reviewer is available. See `docs/ROADMAP.md` §P5a for the full rationale.
+**Why this gate exists.** The 2026-04-11 investor review sequence identified bus-factor-1 as the single largest engineering risk in AIPEA. The automated triple-AI gate is the interim answer until a contracted human second reviewer is available. See `docs/ROADMAP.md` §P5a for the full rationale.
 
 ## AI-Assisted Contributions
 

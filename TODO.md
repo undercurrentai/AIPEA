@@ -44,9 +44,10 @@ AIPEA v1.3.2. Full plan: `docs/ROADMAP.md` §P5. Detailed history:
   lines)
 - [x] **Wave C1** (PRs #24, #26): triple-AI second-reviewer gate
   (gpt-5.4-pro + Codex gpt-5.3-codex + Claude Opus 4.6) +
-  `.github/CODEOWNERS`. Dry-run 1 verified (graceful failure); **dry-run 2
-  (happy path) pending** — see
-  `docs/claude/audits/ai-second-review-dry-run-2026-04-11.md` §3
+  `.github/CODEOWNERS`. Dry-run 1 verified (graceful failure); dry-run 2
+  verified (GPT PASS 9m13s, Codex PASS 2m53s, Claude FAIL credit balance —
+  since topped up). Evidence in
+  `docs/claude/audits/ai-second-review-dry-run-2026-04-11.md` §5
 - [x] **Wave C2** (PR #22): FedRAMP deprecated via Path B +
   `docs/adr/ADR-002-fedramp-removal.md`
 - [x] **Wave C3** (PR #23): `src/aipea/errors.py` (AIPEAError + 5

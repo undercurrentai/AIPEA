@@ -179,7 +179,7 @@ scored the project 39/45 (87%). The five items below close the gaps that
 separated it from a 95%+ score. They are ordered by leverage, not by sequencing;
 some are engineering work, some are process/BD work.
 
-### P5a: Second-reviewer coverage on security-critical modules — **IMPLEMENTED 2026-04-11 as automated triple-AI gate (Wave C1); dry-run 2 pending**
+### P5a: Second-reviewer coverage on security-critical modules — **IMPLEMENTED 2026-04-11 as automated triple-AI gate (Wave C1); verified 2026-04-12**
 
 **Problem**: Bus-factor 1. Every commit traces to a single human; no external
 code review appears on any PR. This is the single largest investor objection.
@@ -225,10 +225,10 @@ blocked on by Wave C1. Adding a human via CODEOWNERS is a one-line change
 once that contract exists.
 
 **Status**: Workflow shipped on PR #24 (Wave C1). Dry-run 1 verified the
-graceful-failure path. Dry-run 2 (happy path) pending the operator
-following the runbook in the audit doc (secret provisioning, branch
-protection, throwaway PR). Task #7 in the response-plan tracker stays
-`in_progress` until dry-run 2 is captured in the audit doc.
+graceful-failure path (PR #24). Dry-run 2 verified the happy path (PR #28,
+2026-04-12): GPT 5.4 Pro PASS (9m13s), Codex PASS (2m53s), Claude FAIL
+(credit balance — since topped up). Evidence captured in
+`docs/claude/audits/ai-second-review-dry-run-2026-04-11.md` §5.
 
 ### P5b: Resolve FedRAMP — ship it or stop claiming it — **RESOLVED: Path B (2026-04-11)**
 
