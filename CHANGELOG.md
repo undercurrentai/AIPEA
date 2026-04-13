@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `AIPEAEnhancer.get_status()` now includes `learning_enabled` and
   `learning_stats` keys.
 - 24 new tests: 18 in `tests/test_learning.py` + 6 in `tests/test_enhancer.py`.
+- AI second-reviewer verdict enforcement: `REQUEST_CHANGES` from any of the
+  3 AI reviewers now fails the CI job, blocking merge via branch protection.
+  Previously verdicts were advisory (comment-only).
 
 ### Deprecated
 - `ComplianceMode.FEDRAMP` is formally deprecated and scheduled for removal
