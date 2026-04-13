@@ -286,9 +286,141 @@ After rollback, append **§6 — Rollback incident** to this audit doc documenti
 
 ---
 
-## 5. Dry-run 2 (happy path) — to be filled in
+## 5. Dry-run 2 (happy path) — 2026-04-12
 
-*Empty until Step 4 of the runbook is executed. The operator fills this section in post-dry-run with the evidence listed in Step 6.*
+### Setup
+
+- PR #28 opened on branch `dry-run/ai-second-review-validation` (base `main`).
+- Commit `550ed17`: single-line docstring change in `src/aipea/security.py:5` — removed stale "integration with Agora IV" wording.
+- Secrets provisioned: `OPENAI_API_KEY` (2026-04-12T02:00:13Z), `ANTHROPIC_API_KEY` (2026-04-12T02:47:07Z).
+- Branch protection ruleset `repo-ai-second-review-required` active on `main` requiring all 3 AI checks.
+
+### Run metadata
+
+| Item | Value |
+|---|---|
+| PR | [#28](https://github.com/undercurrentai/AIPEA/pull/28) |
+| Commit | `550ed17c9eea60a317e436abf967cbb7b2ba5b93` |
+| Workflow run | [24319541008](https://github.com/undercurrentai/AIPEA/actions/runs/24319541008) |
+| GPT 5.4 Pro job | [71003024797](https://github.com/undercurrentai/AIPEA/actions/runs/24319541008/job/71003024797) — **PASS** (9m13s) |
+| Codex CLI job | [71003024795](https://github.com/undercurrentai/AIPEA/actions/runs/24319541008/job/71003024795) — **PASS** (2m53s) |
+| Claude Opus 4.6 job | [71003024796](https://github.com/undercurrentai/AIPEA/actions/runs/24319541008/job/71003024796) — **FAIL** (21s, credit balance too low) |
+
+### GPT 5.4 Pro review comment (verbatim)
+
+```markdown
+<!-- ai-second-review:gpt -->
+
+## 🤖 gpt-5.4-pro — Second-Reviewer Gate
+
+## Verdict
+
+COMMENT
+
+Docstring-only change in a gated file; no runtime, compliance, regex, export, dependency, or CI behavior change is visible in this diff.
+
+## Blocking concerns
+
+_None._
+
+## Non-blocking observations
+
+_None._
+
+## Specific line callouts
+
+- `src/aipea/security.py:5` — removed the stale `integration with Agora IV` wording from the module docstring; this is a documentation-only cleanup with no security/compliance-path impact.
+
+## What I did NOT review
+
+- I did not run tests.
+- I did not verify runtime behavior from source execution; this diff appears docstring-only.
+- I did not review files outside the provided diff.
+```
+
+### Codex CLI review comment (verbatim)
+
+```markdown
+<!-- ai-second-review:codex -->
+
+## 🤖 Codex CLI — Second-Reviewer Gate
+
+## Verdict
+
+`COMMENT` — trivial docs-only change in `src/aipea/security.py:5` with no executable behavior changes.
+
+## Blocking concerns
+
+_None._
+
+## Non-blocking observations
+
+- Scope is a one-line docstring edit (`1` insertion, `1` deletion, one file); no compliance, regex, exception-handling, or public-API behavior changed.
+- `SecurityContext` call-site behavior remains consistent with caller-provided compliance mode (`src/aipea/enhancer.py:900-909`, `src/aipea/security.py:747-770`).
+
+## Specific line callouts
+
+- `src/aipea/security.py:5` — removes "integration with Agora IV" from the module docstring; runtime logic is unchanged.
+
+## Cross-references verified
+
+- `sed -n '1,220p' pr_diff.patch` — confirmed patch content.
+- `git apply --stat pr_diff.patch` and `git apply --numstat pr_diff.patch` — confirmed only one file changed (`src/aipea/security.py`).
+- `rg -n "^diff --git a/(src/aipea/security.py|src/aipea/__init__.py|src/aipea/errors.py|pyproject.toml|\.github/workflows/|\.github/CODEOWNERS)" pr_diff.patch` — confirmed gated-path scope is only `security.py`.
+- `rg -n "SecurityContext\(|compliance_mode" src tests` and `nl -ba src/aipea/enhancer.py | sed -n '880,925p'` — confirmed no new hard-coded compliance bypass introduced.
+- `rg -n "except Exception" src tests` with spot checks at `src/aipea/config.py:491` and `src/aipea/cli.py:396` — confirmed only known production carve-outs are present.
+- `rg -n "test_all_has_42_symbols|__all__" src/aipea/__init__.py tests/test_live.py` — verified API-surface guard remains unchanged.
+
+## What I did NOT review
+
+- Did not execute tests; this review is static-analysis only.
+- Did not benchmark regex performance at runtime.
+- Did not re-audit workflow SHA pinning or `pyproject.toml` dependency policy because those files are untouched in this PR.
+```
+
+### Claude Opus 4.6 fallback comment (verbatim)
+
+```markdown
+<!-- ai-second-review:claude -->
+
+## 🤖 Claude Opus 4.6 — Second-Reviewer Gate
+
+_Claude review produced no output. Check the workflow logs for details._
+```
+
+**Failure reason**: `SDK execution error: Error: Claude Code returned an error result: Credit balance is too low`. The `ANTHROPIC_API_KEY` was valid (auth succeeded) but the account had insufficient credits at the time of the run. Credits were topped up post-run (2026-04-12). A re-run of the workflow or a subsequent PR will validate the Claude happy path.
+
+### Checklist results
+
+**GPT 5.4 Pro:**
+- [x] `Verdict` is one of `APPROVE`, `REQUEST_CHANGES`, `COMMENT` — value: `COMMENT`
+- [x] `Blocking concerns` contains `_None._`
+- [x] `Specific line callouts` references `src/aipea/security.py:5` (exists in actual diff)
+- [x] `What I did NOT review` is honestly populated (3 items)
+- [x] No hallucinated references to nonexistent files, functions, or lines
+- [x] No leaked reasoning tokens, no system-prompt echoes
+
+**Codex CLI:**
+- [x] All GPT checklist items satisfied
+- [x] `Cross-references verified` lists 6 shell commands that were actually run
+- [x] Cross-references verify real claims (compliance bypass check, API surface guard, exception audit)
+
+**Claude Opus 4.6:**
+- [x] Fallback comment posted (graceful failure)
+- [x] Job exited non-zero (branch protection held)
+- [ ] Happy-path review — **deferred** (credit balance issue, not workflow bug)
+
+**Both passing jobs:**
+- [x] Exit code 0 (GPT and Codex)
+- [x] Status shown as green in PR checks
+- [x] Job durations under 30-minute timeout (9m13s, 2m53s)
+
+### Quirks and observations
+
+1. **GPT 5.4 Pro took 9m13s** for a 1-line docstring change. The background-mode polling overhead is significant even on trivial diffs. On a real 200-LOC security PR the reasoning time will be longer, but the polling overhead (~5 min baseline) should amortize.
+2. **Codex is the better reviewer** on this diff — it ran 6 independent cross-reference checks against the full repo, while GPT only reviewed the diff in isolation. Codex's shell-exploration approach adds genuine verification value.
+3. **Claude's 21s failure** is fast enough that it doesn't meaningfully delay the workflow. The fallback comment posted correctly. Once credits are restored, re-running the workflow should produce a review.
+4. **Branch protection blocked merge** as expected — the "Merging is blocked" state was visible in the PR UI with the admin bypass checkbox available.
 
 ---
 
