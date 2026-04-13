@@ -203,6 +203,18 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Enforce verdict
+        # Fail the job if the reviewer issued REQUEST_CHANGES. This makes
+        # the verdict enforceable via branch protection, not just advisory.
+        # APPROVE and COMMENT both pass; REQUEST_CHANGES blocks merge.
+        if: always() && steps.diff.outputs.diff_empty != 'true'
+        run: |
+          if [ -s gpt_review.md ] && grep -qiE '^\s*`?REQUEST_CHANGES`?' gpt_review.md; then
+            echo "::error::gpt-5.4-pro verdict: REQUEST_CHANGES — PR must address blocking concerns before merge."
+            exit 1
+          fi
+          echo "Verdict is APPROVE or COMMENT — no blocking concerns."
+
       - name: No-op for empty diff
         if: steps.diff.outputs.diff_empty == 'true'
         run: echo "PR diff is empty against the base ref — nothing to review."
@@ -334,6 +346,15 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Enforce verdict
+        if: always() && steps.diff.outputs.diff_empty != 'true'
+        run: |
+          if [ -s codex_review.md ] && grep -qiE '^\s*`?REQUEST_CHANGES`?' codex_review.md; then
+            echo "::error::Codex verdict: REQUEST_CHANGES — PR must address blocking concerns before merge."
+            exit 1
+          fi
+          echo "Verdict is APPROVE or COMMENT — no blocking concerns."
+
       - name: No-op for empty diff
         if: steps.diff.outputs.diff_empty == 'true'
         run: echo "PR diff is empty against the base ref — nothing to review."
@@ -462,6 +483,15 @@ jobs:
               printf '_Claude review produced no output (check logs)._\n'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Enforce verdict
+        if: always() && steps.diff.outputs.diff_empty != 'true'
+        run: |
+          if [ -s claude_review.md ] && grep -qiE '^\s*`?REQUEST_CHANGES`?' claude_review.md; then
+            echo "::error::Claude verdict: REQUEST_CHANGES — PR must address blocking concerns before merge."
+            exit 1
+          fi
+          echo "Verdict is APPROVE or COMMENT — no blocking concerns."
 
       - name: No-op for empty diff
         if: steps.diff.outputs.diff_empty == 'true'
