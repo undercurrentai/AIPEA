@@ -1,5 +1,5 @@
 # CLAUDE.md - AIPEA
-> **Agent Contract v3.0.5** (governs this file) | **Library:** `aipea` v1.3.3 (PyPI) | Updated: 2026-04-11 | Owner: @joshuakirby
+> **Agent Contract v3.0.5** (governs this file) | **Library:** `aipea` v1.3.3 (PyPI) | Updated: 2026-04-13 | Owner: @joshuakirby
 >
 > *Note: the `version` field below is the version of this Agent Contract document, not the AIPEA library. The library version lives in `pyproject.toml` and `src/aipea/__init__.py`.*
 
@@ -11,7 +11,7 @@ tier: 2  # Standard (~10K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
 inherits_from: ../../CLAUDE.md  # Undercurrent Holdings root
 maintainer: joshuakirby
-last_audit: 2026-04-10
+last_audit: 2026-04-13
 protocol: v4.0
 token_budget: 8000
 ```

@@ -16,7 +16,8 @@ Last updated: 2026-04-13 (Wave D1 complete, PR #31; 1030 tests, 93.02% coverage,
 
 ## Short-term (v1.4.0)
 
-- [ ] **Adaptive Learning Engine** — learn from user feedback to improve enhancement quality over time (P3b from ROADMAP.md; origin: `aipea-offline-knowledge.py` AdaptiveLearningEngine class)
+- [x] ~~**Adaptive Learning Engine**~~ — **DONE** (Wave D1, PR #31, 2026-04-13).
+  `src/aipea/learning.py` + enhancer integration + 15 live tests (PR #32)
 - [ ] **Missing `test_models.py`** — edge-case tests for `QueryAnalysis` dataclass (to_dict serialization, boundary values, None handling)
 - [ ] **AEGIS adapter implementation** — spec complete at `docs/integration/aegis-adapter.md`; implement when AEGIS has a stable API
 - [ ] **Exception chaining** — standardize `raise X from e` pattern in `engine.py` (currently bare `raise` in some exception handlers)
@@ -52,6 +53,12 @@ AIPEA v1.3.2. Full plan: `docs/ROADMAP.md` §P5. Detailed history:
   `docs/adr/ADR-002-fedramp-removal.md`
 - [x] **Wave C3** (PR #23): `src/aipea/errors.py` (AIPEAError + 5
   subclasses), `cli.py` broad catches tightened, 23 regression tests
+- [x] **Wave D1** (PR #31, 2026-04-13): Adaptive Learning Engine
+  (`src/aipea/learning.py`). SQLite-backed strategy performance tracking,
+  `EnhancementResult.strategy_used` field, `record_feedback()` API,
+  `enable_learning` opt-in. 24 tests + 15 live tests (PR #32). Verdict
+  enforcement added to AI second-reviewer gate (REQUEST_CHANGES blocks
+  merge). All actions SHA-pinned.
 
 ## Deferred Bugs (from bug-hunt waves)
 

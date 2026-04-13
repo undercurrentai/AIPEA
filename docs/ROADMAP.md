@@ -137,22 +137,19 @@ class QualityScore:
 
 ---
 
-## P3b: Adaptive Learning Engine (planned for v1.4.0)
+## P3b: Adaptive Learning Engine — **IMPLEMENTED in Wave D1 (2026-04-13, PR #31)**
 
-**Origin**: `aipea-offline-knowledge.py` AdaptiveLearningEngine class
+**Origin**: `aipea-offline-knowledge.py` AdaptiveLearningEngine class.
+Reimplemented with stdlib only (sqlite3, threading, hashlib) to preserve
+zero-external-deps-in-core principle.
 
-Learn from user feedback to improve enhancement quality over time:
-
-```python
-class AdaptiveLearningEngine:
-    async def learn_from_feedback(self, query, enhanced, feedback_score): ...
-    async def get_best_strategy(self, query_type) -> str: ...
-```
-
-Requires:
-- Learning event storage (additional SQLite table)
-- Pattern extraction from successful enhancements
-- Strategy performance tracking
+**Implementation**:
+- `src/aipea/learning.py` — SQLite-backed strategy performance tracking
+  with per-query-type running averages and learned strategy suggestions
+- `AdaptiveLearningEngine` exported in `__init__.py` (43 symbols)
+- `EnhancementResult.strategy_used` field surfaces the effective strategy
+- `AIPEAEnhancer(enable_learning=True)` opt-in + `record_feedback(result, score)`
+- 18 unit tests + 6 enhancer integration tests + 15 live tests (PR #32)
 
 ---
 
