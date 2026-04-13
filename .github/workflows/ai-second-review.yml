@@ -212,12 +212,12 @@ jobs:
             echo "::error::gpt-5.4-pro review file missing or empty — fail closed."
             exit 1
           fi
-          verdict=$(grep -oiE '^\s*`?(APPROVE|REQUEST_CHANGES|COMMENT)`?' gpt_review.md | head -1 | tr -d '`' | xargs)
-          if [ -z "${verdict}" ]; then
-            echo "::error::gpt-5.4-pro verdict not parseable — fail closed."
-            exit 1
-          fi
-          case "${verdict}" in
+          # Extract the first non-blank line after "## Verdict", strip backticks and whitespace
+          verdict=$(sed -n '/^## *Verdict/,/^##/{/^## *Verdict/d;/^##/d;/^$/d;p;}' gpt_review.md \
+            | head -1 | tr -d '`' | xargs)
+          # Normalise to uppercase for exact match
+          verdict_upper=$(echo "${verdict}" | tr '[:lower:]' '[:upper:]')
+          case "${verdict_upper}" in
             APPROVE|COMMENT)
               echo "Verdict: ${verdict} — no blocking concerns."
               ;;
@@ -226,7 +226,7 @@ jobs:
               exit 1
               ;;
             *)
-              echo "::error::gpt-5.4-pro unrecognised verdict '${verdict}' — fail closed."
+              echo "::error::gpt-5.4-pro verdict '${verdict:-<empty>}' not recognised — fail closed."
               exit 1
               ;;
           esac
@@ -364,12 +364,10 @@ jobs:
             echo "::error::Codex review file missing or empty — fail closed."
             exit 1
           fi
-          verdict=$(grep -oiE '^\s*`?(APPROVE|REQUEST_CHANGES|COMMENT)`?' codex_review.md | head -1 | tr -d '`' | xargs)
-          if [ -z "${verdict}" ]; then
-            echo "::error::Codex verdict not parseable — fail closed."
-            exit 1
-          fi
-          case "${verdict}" in
+          verdict=$(sed -n '/^## *Verdict/,/^##/{/^## *Verdict/d;/^##/d;/^$/d;p;}' codex_review.md \
+            | head -1 | tr -d '`' | xargs)
+          verdict_upper=$(echo "${verdict}" | tr '[:lower:]' '[:upper:]')
+          case "${verdict_upper}" in
             APPROVE|COMMENT)
               echo "Verdict: ${verdict} — no blocking concerns."
               ;;
@@ -378,7 +376,7 @@ jobs:
               exit 1
               ;;
             *)
-              echo "::error::Codex unrecognised verdict '${verdict}' — fail closed."
+              echo "::error::Codex verdict '${verdict:-<empty>}' not recognised — fail closed."
               exit 1
               ;;
           esac
@@ -519,12 +517,10 @@ jobs:
             echo "::error::Claude review file missing or empty — fail closed."
             exit 1
           fi
-          verdict=$(grep -oiE '^\s*`?(APPROVE|REQUEST_CHANGES|COMMENT)`?' claude_review.md | head -1 | tr -d '`' | xargs)
-          if [ -z "${verdict}" ]; then
-            echo "::error::Claude verdict not parseable — fail closed."
-            exit 1
-          fi
-          case "${verdict}" in
+          verdict=$(sed -n '/^## *Verdict/,/^##/{/^## *Verdict/d;/^##/d;/^$/d;p;}' claude_review.md \
+            | head -1 | tr -d '`' | xargs)
+          verdict_upper=$(echo "${verdict}" | tr '[:lower:]' '[:upper:]')
+          case "${verdict_upper}" in
             APPROVE|COMMENT)
               echo "Verdict: ${verdict} — no blocking concerns."
               ;;
@@ -533,7 +529,7 @@ jobs:
               exit 1
               ;;
             *)
-              echo "::error::Claude unrecognised verdict '${verdict}' — fail closed."
+              echo "::error::Claude verdict '${verdict:-<empty>}' not recognised — fail closed."
               exit 1
               ;;
           esac
