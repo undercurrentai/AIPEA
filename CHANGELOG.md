@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-04-13
+
 ### Added (Wave D1)
 - `src/aipea/learning.py` — Adaptive Learning Engine. SQLite-backed strategy
   performance tracking with per-query-type running averages and learned
