@@ -33,6 +33,7 @@ User Query → SecurityScanner → QueryAnalyzer → SearchOrchestrator → Prom
 | `search` | Multi-provider search orchestration (Exa, Firecrawl, Context7) |
 | `knowledge` | Offline knowledge base with SQLite storage and domain-aware retrieval |
 | `engine` | Model-specific prompt formatting, tier-based processing (Offline/Tactical/Strategic) |
+| `learning` | Adaptive strategy learning — records user feedback, tracks per-strategy performance, suggests better strategies over time |
 | `enhancer` | High-level facade coordinating the full pipeline |
 
 ### Processing Tiers
@@ -236,6 +237,39 @@ async def main():
 
 asyncio.run(main())
 ```
+
+### Adaptive Learning (opt-in)
+
+AIPEA can learn from user feedback to improve strategy selection over time. This is opt-in and uses a local SQLite database — no data leaves your machine.
+
+```python
+import asyncio
+from aipea import AIPEAEnhancer
+
+async def main():
+    enhancer = AIPEAEnhancer(enable_learning=True)
+
+    # Enhance a query — strategy_used is tracked on the result
+    result = await enhancer.enhance(
+        "How do transformer attention mechanisms work?",
+        model_id="claude-opus-4-6",
+    )
+    print(result.strategy_used)  # e.g. "technical"
+
+    # Record user feedback (positive = good enhancement)
+    await enhancer.record_feedback(result, score=0.9)
+
+    # After enough feedback (3+ per strategy), AIPEA uses the
+    # historically best-performing strategy for each query type.
+    # The next enhance() call may use a different strategy if
+    # the learning engine has accumulated better data.
+
+    enhancer.close()
+
+asyncio.run(main())
+```
+
+The learning engine stores data in `aipea_learning.db` (configurable via `AIPEA_LEARNING_DB_PATH`). If the database is unavailable, AIPEA falls back to default strategy selection with no error.
 
 ## Integration
 
