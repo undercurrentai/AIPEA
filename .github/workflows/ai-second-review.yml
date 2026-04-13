@@ -267,7 +267,7 @@ jobs:
         # here and will upgrade to a SHA pin after the first few stable
         # runs. The dry-run PR described in the plan file is the point
         # where we capture the exact SHA to pin to.
-        uses: openai/codex-action@v1
+        uses: openai/codex-action@0b91f4a2703c23df3102c3f0967d3c6db34eedef # v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           prompt-file: .github/codex/prompts/second-review.md
@@ -396,7 +396,7 @@ jobs:
       - name: Run Claude review
         id: claude
         if: steps.diff.outputs.diff_empty != 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@c7c8889b30499b4e46f4c32b892e43cd364bc2fe # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
