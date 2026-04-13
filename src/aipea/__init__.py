@@ -55,6 +55,9 @@ from aipea.knowledge import (
     StorageTier,
 )
 
+# Adaptive learning
+from aipea.learning import AdaptiveLearningEngine
+
 # Data models
 from aipea.models import QueryAnalysis
 
@@ -87,6 +90,7 @@ __all__ = [
     "AIPEAConfig",
     "AIPEAEnhancer",
     "AIPEAError",
+    "AdaptiveLearningEngine",
     "ComplianceHandler",
     "ComplianceMode",
     "ConfigError",

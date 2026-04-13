@@ -2552,3 +2552,91 @@ class TestUltrathinkScanSearchResultsPiiFiltering:
         # In GENERAL mode, PII is flagged but the result is not filtered —
         # research/general use cases may legitimately include SSN text.
         assert len(filtered.results) == 1
+
+
+# =============================================================================
+# ADAPTIVE LEARNING ENGINE INTEGRATION
+# =============================================================================
+
+
+class TestAdaptiveLearningIntegration:
+    """Tests for the enable_learning parameter and strategy learning flow."""
+
+    def test_enhance_without_learning_default(self) -> None:
+        """Default: enable_learning=False, no learning engine."""
+        enhancer = AIPEAEnhancer(enable_enhancement=False)
+        assert enhancer._learning_engine is None
+        status = enhancer.get_status()
+        assert status["learning_enabled"] is False
+        assert status["learning_stats"] is None
+
+    def test_enhance_with_learning_enabled(self, tmp_path: pytest.TempPathFactory) -> None:
+        """enable_learning=True initialises the learning engine."""
+        with patch.dict(os.environ, {"AIPEA_LEARNING_DB_PATH": str(tmp_path / "learn.db")}):
+            enhancer = AIPEAEnhancer(enable_enhancement=False, enable_learning=True)
+            assert enhancer._learning_engine is not None
+            status = enhancer.get_status()
+            assert status["learning_enabled"] is True
+            assert isinstance(status["learning_stats"], dict)
+            enhancer.close()
+
+    @pytest.mark.asyncio()
+    async def test_enhance_returns_strategy_used(self) -> None:
+        """Enhancement result includes the effective strategy name."""
+        enhancer = AIPEAEnhancer()
+        with (
+            patch.object(enhancer, "_search_orchestrator", None),
+            patch.object(enhancer, "_offline_kb", None),
+        ):
+            result = await enhancer.enhance("explain quantum computing", model_id="gpt-4")
+            assert result.strategy_used != ""
+            assert isinstance(result.strategy_used, str)
+            enhancer.close()
+
+    @pytest.mark.asyncio()
+    async def test_enhance_uses_learned_strategy(self, tmp_path: pytest.TempPathFactory) -> None:
+        """When learning engine suggests a strategy, enhance() uses it."""
+        with patch.dict(os.environ, {"AIPEA_LEARNING_DB_PATH": str(tmp_path / "learn.db")}):
+            enhancer = AIPEAEnhancer(enable_learning=True)
+            assert enhancer._learning_engine is not None
+            # Seed learning data for ALL query types so any classification hits
+            for qt in QueryType:
+                for _ in range(3):
+                    enhancer._learning_engine.record_feedback(qt, "analytical", 0.9)
+            with (
+                patch.object(enhancer, "_search_orchestrator", None),
+                patch.object(enhancer, "_offline_kb", None),
+            ):
+                result = await enhancer.enhance("how does TCP work", model_id="gpt-4")
+                assert result.strategy_used == "analytical"
+                assert any("learned strategy" in n.lower() for n in result.enhancement_notes)
+            enhancer.close()
+
+    @pytest.mark.asyncio()
+    async def test_record_feedback_delegates_to_engine(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        """record_feedback() stores data in the learning engine."""
+        with patch.dict(os.environ, {"AIPEA_LEARNING_DB_PATH": str(tmp_path / "learn.db")}):
+            enhancer = AIPEAEnhancer(enable_learning=True)
+            with (
+                patch.object(enhancer, "_search_orchestrator", None),
+                patch.object(enhancer, "_offline_kb", None),
+            ):
+                result = await enhancer.enhance("test query", model_id="gpt-4")
+                await enhancer.record_feedback(result, score=0.8)
+                assert enhancer._learning_engine is not None
+                stats = enhancer._learning_engine.get_stats()
+                assert stats["total_events"] == 1
+            enhancer.close()
+
+    def test_get_status_includes_learning(self, tmp_path: pytest.TempPathFactory) -> None:
+        """get_status() includes learning keys."""
+        with patch.dict(os.environ, {"AIPEA_LEARNING_DB_PATH": str(tmp_path / "learn.db")}):
+            enhancer = AIPEAEnhancer(enable_enhancement=False, enable_learning=True)
+            status = enhancer.get_status()
+            assert "learning_enabled" in status
+            assert "learning_stats" in status
+            assert status["learning_enabled"] is True
+            assert status["learning_stats"]["total_events"] == 0
+            enhancer.close()
