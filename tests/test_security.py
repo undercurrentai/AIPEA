@@ -1024,5 +1024,26 @@ class TestWave19DuplicateAlternativeReDoS:
         assert scanner._is_regex_safe(safe_three)
 
 
+class TestInjectionPatternSelfValidation:
+    """Defense-in-depth: __init__ validates hardcoded INJECTION_PATTERNS via _is_regex_safe()."""
+
+    @pytest.mark.unit
+    def test_init_validates_all_builtin_patterns(self) -> None:
+        """SecurityScanner() must construct successfully with all built-in patterns."""
+        scanner = SecurityScanner()
+        assert len(scanner._compiled_injection) == len(SecurityScanner.INJECTION_PATTERNS)
+
+    @pytest.mark.unit
+    def test_init_raises_on_unsafe_pattern(self) -> None:
+        """If a ReDoS-vulnerable pattern is added, __init__ must raise RuntimeError."""
+        original = SecurityScanner.INJECTION_PATTERNS[:]
+        try:
+            SecurityScanner.INJECTION_PATTERNS.append(r"(a+)+")
+            with pytest.raises(RuntimeError, match="ReDoS safety check"):
+                SecurityScanner()
+        finally:
+            SecurityScanner.INJECTION_PATTERNS[:] = original
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

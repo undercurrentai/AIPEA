@@ -356,9 +356,13 @@ class SecurityScanner:
                 self._compiled_phi[name] = re.compile(pattern)
             else:
                 self._compiled_phi[name] = re.compile(pattern, re.IGNORECASE)
-        self._compiled_injection: list[re.Pattern[str]] = [
-            re.compile(pattern, re.IGNORECASE) for pattern in self.INJECTION_PATTERNS
-        ]
+        self._compiled_injection: list[re.Pattern[str]] = []
+        for pattern in self.INJECTION_PATTERNS:
+            if not self._is_regex_safe(pattern):
+                raise RuntimeError(
+                    f"Hardcoded INJECTION_PATTERN failed ReDoS safety check: {pattern!r}"
+                )
+            self._compiled_injection.append(re.compile(pattern, re.IGNORECASE))
         logger.debug("SecurityScanner initialized with %d PII patterns", len(self.PII_PATTERNS))
 
     # Maximum pattern length to prevent ReDoS attacks
