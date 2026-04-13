@@ -3,7 +3,7 @@
 Canonical tracker for all pending work. Replaces scattered items from ROADMAP.md,
 NEXT_STEPS.md, KNOWN_ISSUES.md, SPECIFICATION.md, and discovery findings.
 
-Last updated: 2026-04-13 (post-Wave D1; 1034 tests, 93.05% coverage, 43 exports)
+Last updated: 2026-04-13 (post-Wave D1 + customer E2E; 1082 tests, 93.32% coverage, 43 exports)
 
 ---
 

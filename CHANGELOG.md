@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   legacy stub behavior are retained for API back-compat through the v1.x
   line.
 
-### Hardened
+### Hardened (PR #36)
 - `src/aipea/security.py`: `SecurityScanner.__init__` now validates each
   hardcoded `INJECTION_PATTERNS` entry against `_is_regex_safe()` before
   compiling. Raises `RuntimeError` if a future pattern fails the ReDoS
@@ -47,6 +47,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 4 new tests: 2 in `tests/test_security.py`
   (`TestInjectionPatternSelfValidation`), 2 in `tests/test_engine.py`
   (unexpected exception + stdout-None scenarios).
+
+### Added (Customer E2E)
+- `tests/test_customer_e2e.py` — 48 customer-journey-level live tests across
+  10 classes: quality scoring, enhance_for_models, strategy override,
+  clarifications, config round-trip, error recovery, full lifecycle with
+  learning feedback, multi-compliance comparison, temporal awareness, and
+  singleton lifecycle. Zero mocks, all `force_offline=True` for determinism.
+  Test count: 1034 → 1082, coverage: 93.05% → 93.32%.
 
 ### Changed
 - README.md, CLAUDE.md, SPECIFICATION.md, TODO.md, SECURITY.md, ROADMAP.md:

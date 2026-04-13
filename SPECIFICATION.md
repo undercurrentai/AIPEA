@@ -251,7 +251,8 @@ Scans queries for 4 categories of security-sensitive content:
 Key production learnings baked in:
 - **ReDoS protection**: Custom patterns validated against catastrophic backtracking
   before execution. Patterns exceeding 200 chars or containing nested quantifiers
-  are rejected.
+  are rejected. Hardcoded `INJECTION_PATTERNS` are also self-validated at
+  `SecurityScanner.__init__` time via the same checks (defense-in-depth).
 - **Word-boundary matching**: Classified markers use `\b` word boundaries to prevent
   false positives (e.g., "SECRET" in "SECRETARY").
 - **Immutable input**: Scanner no longer mutates the input `SecurityContext` — it
