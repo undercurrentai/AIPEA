@@ -660,6 +660,29 @@ class TestOllamaOfflineClient:
             models = await client.get_available_models()
         assert models == []
 
+    @pytest.mark.asyncio
+    async def test_get_available_models_unexpected_exception(self):
+        """Unexpected exception during parsing returns empty list (defense-in-depth)."""
+        client = OllamaOfflineClient()
+        with patch(
+            "asyncio.to_thread",
+            new_callable=AsyncMock,
+            side_effect=TypeError("unexpected None"),
+        ):
+            models = await client.get_available_models()
+        assert models == []
+        assert client._available_models == []
+
+    @pytest.mark.asyncio
+    async def test_get_available_models_stdout_none(self):
+        """If stdout is None (hypothetically), graceful degradation occurs."""
+        mock_result = SimpleNamespace(returncode=0, stdout=None, stderr="")
+        client = OllamaOfflineClient()
+        with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
+            models = await client.get_available_models()
+        assert models == []
+        assert client._available_models == []
+
     # -- is_model_available --
 
     @pytest.mark.asyncio

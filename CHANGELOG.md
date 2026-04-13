@@ -35,6 +35,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   legacy stub behavior are retained for API back-compat through the v1.x
   line.
 
+### Hardened
+- `src/aipea/security.py`: `SecurityScanner.__init__` now validates each
+  hardcoded `INJECTION_PATTERNS` entry against `_is_regex_safe()` before
+  compiling. Raises `RuntimeError` if a future pattern fails the ReDoS
+  safety check (defense-in-depth).
+- `src/aipea/engine.py`: `OllamaOfflineClient.get_available_models()` adds
+  a final `except Exception` fallback after the existing `OSError` handler,
+  logging the full traceback and returning an empty list. Prevents unexpected
+  exception types from crashing the enhancement pipeline.
+- 4 new tests: 2 in `tests/test_security.py`
+  (`TestInjectionPatternSelfValidation`), 2 in `tests/test_engine.py`
+  (unexpected exception + stdout-None scenarios).
+
 ### Changed
 - README.md, CLAUDE.md, SPECIFICATION.md, TODO.md, SECURITY.md, ROADMAP.md:
   FedRAMP references rewritten to reflect the deprecation. The supported

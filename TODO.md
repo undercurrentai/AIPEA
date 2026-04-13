@@ -3,7 +3,7 @@
 Canonical tracker for all pending work. Replaces scattered items from ROADMAP.md,
 NEXT_STEPS.md, KNOWN_ISSUES.md, SPECIFICATION.md, and discovery findings.
 
-Last updated: 2026-04-13 (Wave D1 complete, PR #31; 1030 tests, 93.02% coverage, 43 exports)
+Last updated: 2026-04-13 (post-Wave D1; 1034 tests, 93.05% coverage, 43 exports)
 
 ---
 
@@ -11,8 +11,8 @@ Last updated: 2026-04-13 (Wave D1 complete, PR #31; 1030 tests, 93.02% coverage,
 
 - [x] **README badge stale**: "698 passing" → "752 passing", "91.42%" → "91.79%" (fixed 2026-04-09)
 - [x] ~~**Dead import**: remove unused `import subprocess as _sp` in `cli.py:348`~~ — NOT dead; used at lines 361 and 378
-- [ ] **ReDoS self-validation**: self-validate `INJECTION_PATTERNS` against `_is_regex_safe()` at `SecurityScanner.__init__` time
-- [ ] **Ollama stdout robustness**: defensive try-except around `ollama list` stdout parsing in `engine.py`
+- [x] **ReDoS self-validation**: self-validate `INJECTION_PATTERNS` against `_is_regex_safe()` at `SecurityScanner.__init__` time
+- [x] **Ollama stdout robustness**: defensive try-except around `ollama list` stdout parsing in `engine.py`
 
 ## Short-term (v1.4.0)
 

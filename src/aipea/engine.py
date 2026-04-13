@@ -221,6 +221,15 @@ class OllamaOfflineClient:
             )
             self._available_models = []
             return []
+        except Exception as e:
+            logger.warning(
+                "Unexpected error listing Ollama models: %s: %s",
+                type(e).__name__,
+                e,
+                exc_info=True,
+            )
+            self._available_models = []
+            return []
 
     async def is_model_available(self, model: OfflineModel) -> bool:
         """Check if a specific model is downloaded and available.
