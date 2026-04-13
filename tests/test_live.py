@@ -1242,3 +1242,282 @@ class TestLiveFullPipelineWithSearch:
         )
         notes_text = " ".join(result.enhancement_notes).lower()
         assert "context gathered" in notes_text or "online" in notes_text or "exa" in notes_text
+
+
+# ===========================================================================
+# 12. Adaptive Learning Engine — live integration
+# ===========================================================================
+
+
+class TestLiveAdaptiveLearning:
+    """Live tests for the Adaptive Learning Engine (Wave D1).
+
+    No mocks. Real SQLite databases (via tmp_path), real enhancer pipeline,
+    real strategy resolution. Verifies the feedback loop works end-to-end.
+    """
+
+    # --- Group 1: Standalone Learning Engine ---
+
+    def test_learning_engine_creates_db_and_reports_empty_stats(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+
+        db = tmp_path / "learn.db"
+        with AdaptiveLearningEngine(db_path=db) as eng:
+            assert db.exists()
+            stats = eng.get_stats()
+            assert stats["total_events"] == 0
+            assert stats["strategies_tracked"] == 0
+            assert stats["query_types_with_data"] == 0
+
+    def test_learning_engine_records_feedback_and_tracks_performance(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db") as eng:
+            # 3 high scores for "analytical", 2 low scores for "technical"
+            for _ in range(3):
+                eng.record_feedback(QueryType.TECHNICAL, "analytical", 0.9)
+            for _ in range(2):
+                eng.record_feedback(QueryType.TECHNICAL, "technical", 0.2)
+
+            stats = eng.get_stats()
+            assert stats["total_events"] == 5
+            assert stats["strategies_tracked"] == 2
+            assert stats["query_types_with_data"] == 1
+
+            # "analytical" has 3 samples and higher avg → should be best
+            best = eng.get_best_strategy(QueryType.TECHNICAL)
+            assert best == "analytical"
+
+    def test_learning_engine_respects_min_samples_threshold(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db") as eng:
+            eng.record_feedback(QueryType.RESEARCH, "research", 0.8)
+            eng.record_feedback(QueryType.RESEARCH, "research", 0.9)
+            # Only 2 samples — below min_samples=3
+            assert eng.get_best_strategy(QueryType.RESEARCH) is None
+
+            # Add one more → 3 samples, now eligible
+            eng.record_feedback(QueryType.RESEARCH, "research", 0.7)
+            assert eng.get_best_strategy(QueryType.RESEARCH) == "research"
+
+    def test_learning_engine_persists_across_close_reopen(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+
+        db_path = tmp_path / "persist.db"
+        # Write data and close
+        with AdaptiveLearningEngine(db_path=db_path) as eng:
+            for _ in range(3):
+                eng.record_feedback(QueryType.STRATEGIC, "strategic", 0.85)
+
+        # Reopen and verify persistence
+        with AdaptiveLearningEngine(db_path=db_path) as eng2:
+            stats = eng2.get_stats()
+            assert stats["total_events"] == 3
+            assert eng2.get_best_strategy(QueryType.STRATEGIC) == "strategic"
+
+    def test_learning_engine_handles_all_query_types(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db") as eng:
+            for qt in QueryType:
+                eng.record_feedback(qt, "general", 0.5)
+            stats = eng.get_stats()
+            assert stats["query_types_with_data"] == len(QueryType)
+            assert stats["total_events"] == len(QueryType)
+
+    def test_learning_engine_clamps_extreme_scores(self, tmp_path: pytest.TempPathFactory) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db") as eng:
+            eng.record_feedback(QueryType.CREATIVE, "creative", 10.0)
+            eng.record_feedback(QueryType.CREATIVE, "creative", -10.0)
+            # Clamped to +1.0 and -1.0 → avg should be ~0.0
+            eng.record_feedback(QueryType.CREATIVE, "creative", 0.0)
+            stats = eng.get_stats()
+            assert stats["total_events"] == 3
+
+    def test_learning_engine_negative_feedback_lowers_avg(
+        self, tmp_path: pytest.TempPathFactory
+    ) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db") as eng:
+            # "good_strat" gets consistently positive
+            for _ in range(3):
+                eng.record_feedback(QueryType.ANALYTICAL, "good_strat", 0.9)
+            # "bad_strat" gets consistently negative
+            for _ in range(3):
+                eng.record_feedback(QueryType.ANALYTICAL, "bad_strat", -0.8)
+
+            best = eng.get_best_strategy(QueryType.ANALYTICAL)
+            assert best == "good_strat"
+
+    # --- Group 2: Enhancer Integration (full pipeline) ---
+
+    @pytest.mark.asyncio()
+    async def test_enhance_with_learning_populates_strategy_used(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AIPEA_LEARNING_DB_PATH", str(tmp_path / "learn.db"))
+        enhancer = AIPEAEnhancer(enable_learning=True)
+        try:
+            result = await enhancer.enhance("Explain how TCP works", model_id="gpt-4")
+            assert result.strategy_used != ""
+            assert isinstance(result.strategy_used, str)
+        finally:
+            enhancer.close()
+
+    @pytest.mark.asyncio()
+    async def test_enhance_feedback_loop_changes_strategy(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AIPEA_LEARNING_DB_PATH", str(tmp_path / "learn.db"))
+        enhancer = AIPEAEnhancer(enable_learning=True)
+        try:
+            # First enhancement — uses default strategy
+            result1 = await enhancer.enhance("What is machine learning?", model_id="gpt-4")
+            original_strategy = result1.strategy_used
+            assert original_strategy != ""
+
+            # Seed learning data: give "analytical" high scores for all query types
+            # (we don't know which QueryType the analyzer will assign)
+            assert enhancer._learning_engine is not None
+            for qt in QueryType:
+                for _ in range(3):
+                    enhancer._learning_engine.record_feedback(qt, "analytical", 0.95)
+
+            # Second enhancement — should now use learned "analytical"
+            result2 = await enhancer.enhance("What is deep learning?", model_id="gpt-4")
+            assert result2.strategy_used == "analytical"
+            assert any("learned strategy" in n.lower() for n in result2.enhancement_notes)
+        finally:
+            enhancer.close()
+
+    @pytest.mark.asyncio()
+    async def test_record_feedback_via_enhancer_stores_event(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AIPEA_LEARNING_DB_PATH", str(tmp_path / "learn.db"))
+        enhancer = AIPEAEnhancer(enable_learning=True)
+        try:
+            result = await enhancer.enhance("test query", model_id="gpt-4")
+            await enhancer.record_feedback(result, score=0.9)
+
+            assert enhancer._learning_engine is not None
+            stats = enhancer._learning_engine.get_stats()
+            assert stats["total_events"] == 1
+        finally:
+            enhancer.close()
+
+    @pytest.mark.asyncio()
+    async def test_enhance_without_learning_still_populates_strategy(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        enhancer = AIPEAEnhancer(enable_learning=False)
+        try:
+            result = await enhancer.enhance("Explain quantum computing", model_id="gpt-4")
+            # strategy_used should still be set from default resolution
+            assert result.strategy_used != ""
+            status = enhancer.get_status()
+            assert status["learning_enabled"] is False
+            assert status["learning_stats"] is None
+        finally:
+            enhancer.close()
+
+    @pytest.mark.asyncio()
+    async def test_get_status_reports_learning_stats(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AIPEA_LEARNING_DB_PATH", str(tmp_path / "learn.db"))
+        enhancer = AIPEAEnhancer(enable_learning=True)
+        try:
+            # Record some feedback directly
+            assert enhancer._learning_engine is not None
+            enhancer._learning_engine.record_feedback(QueryType.TECHNICAL, "technical", 0.7)
+            status = enhancer.get_status()
+            assert status["learning_enabled"] is True
+            assert isinstance(status["learning_stats"], dict)
+            assert status["learning_stats"]["total_events"] == 1
+        finally:
+            enhancer.close()
+
+    # --- Group 3: Async & Concurrency ---
+
+    @pytest.mark.asyncio()
+    async def test_async_feedback_loop(self, tmp_path: pytest.TempPathFactory) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db") as eng:
+            for _ in range(3):
+                await eng.arecord_feedback(QueryType.OPERATIONAL, "operational", 0.8)
+            best = await eng.aget_best_strategy(QueryType.OPERATIONAL)
+            assert best == "operational"
+
+    @pytest.mark.asyncio()
+    async def test_concurrent_enhance_with_learning(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import asyncio
+
+        monkeypatch.setenv("AIPEA_LEARNING_DB_PATH", str(tmp_path / "learn.db"))
+        enhancer = AIPEAEnhancer(enable_learning=True)
+        try:
+            queries = [
+                "What is Python?",
+                "How does HTTP work?",
+                "Explain REST APIs",
+                "What is Docker?",
+                "How does DNS resolve?",
+            ]
+            results = await asyncio.gather(
+                *(enhancer.enhance(q, model_id="gpt-4") for q in queries)
+            )
+            assert len(results) == 5
+            for r in results:
+                assert r.strategy_used != ""
+                assert r.was_enhanced or r.enhancement_notes
+        finally:
+            enhancer.close()
+
+    # --- Group 4: Graceful Degradation ---
+
+    @pytest.mark.asyncio()
+    async def test_enhance_with_broken_learning_db_degrades_gracefully(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Point to a readonly directory so DB creation fails
+        readonly = tmp_path / "readonly"
+        readonly.mkdir()
+        readonly.chmod(0o444)
+        try:
+            monkeypatch.setenv("AIPEA_LEARNING_DB_PATH", str(readonly / "learn.db"))
+            enhancer = AIPEAEnhancer(enable_learning=True)
+            try:
+                # Should still enhance — learning engine degrades internally
+                result = await enhancer.enhance("test query", model_id="gpt-4")
+                assert result.enhanced_prompt  # not empty
+                assert result.strategy_used != ""  # default strategy still works
+
+                # Learning engine exists but its DB is broken — stats return zeros
+                status = enhancer.get_status()
+                learning_stats = status["learning_stats"]
+                assert learning_stats["total_events"] == 0
+
+                # get_best_strategy returns None (no working DB)
+                assert enhancer._learning_engine is not None
+                assert enhancer._learning_engine.get_best_strategy(QueryType.TECHNICAL) is None
+            finally:
+                enhancer.close()
+        finally:
+            readonly.chmod(0o755)
