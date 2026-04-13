@@ -1160,12 +1160,12 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full roadmap with 6 prioritized
 
 ### 11.1 Public Exports (`aipea/__init__.py`)
 
-> **Note**: The actual `__init__.py` exports 42 symbols (36 runtime classes/functions
-> plus the 6 exception types added in Wave C3 / ROADMAP §P5c:
-> `AIPEAError`, `SecurityScanError`, `EnhancementError`, `KnowledgeStoreError`,
-> `SearchProviderError`, `ConfigError`). The listing below shows the full internal
-> API surface (including non-exported internals) for reference. Symbols
-> marked with `# (not in __all__)` are accessible but not part of the public API.
+> **Note**: The actual `__init__.py` exports 43 symbols (36 runtime classes/functions
+> plus the 6 exception types added in Wave C3 / ROADMAP §P5c plus
+> `AdaptiveLearningEngine` added in Wave D1).
+> The listing below shows the full internal API surface (including non-exported
+> internals) for reference. Symbols marked with `# (not in __all__)` are
+> accessible but not part of the public API.
 
 ```python
 # Main entry points
@@ -1177,6 +1177,9 @@ from aipea.enhancer import (
     get_enhancer,
     reset_enhancer,
 )
+
+# Adaptive learning (Wave D1)
+from aipea.learning import AdaptiveLearningEngine
 
 # Shared data models
 from aipea.models import QueryAnalysis
@@ -1266,7 +1269,13 @@ class AIPEAEnhancer:
         default_compliance: ComplianceMode = ComplianceMode.GENERAL,
         exa_api_key: str | None = None,
         firecrawl_api_key: str | None = None,
+        enable_learning: bool = False,                          # Wave D1
     ) -> None: ...
+    # enable_learning=True initialises AdaptiveLearningEngine backed by
+    # AIPEA_LEARNING_DB_PATH (default: aipea_learning.db). When enabled,
+    # enhance() consults the learning engine for strategy suggestions
+    # (learned > caller override > default). Gracefully degrades if DB
+    # init fails.
 
     async def enhance(
         self,
@@ -1293,14 +1302,26 @@ class AIPEAEnhancer:
     # the cached search_context so every model gets its own query-section
     # format (GPT markdown, Claude XML, Gemini numbered). (wave 18 #90)
 
+    async def record_feedback(                                  # Wave D1
+        self, result: EnhancementResult, score: float,
+    ) -> None: ...
+    # Records user feedback on an enhancement result for adaptive learning.
+    # score in [-1.0, 1.0] (positive = good). No-op if learning is disabled.
+    # Delegates to AdaptiveLearningEngine.arecord_feedback().
+
     def close(self) -> None: ...
     def __enter__(self) -> AIPEAEnhancer: ...
     def __exit__(self, *exc: object) -> None: ...
     # Supports context manager protocol for deterministic resource cleanup.
-    # close() releases the offline knowledge base SQLite connection.
-    # Idempotent — safe to call multiple times.
+    # close() releases the offline knowledge base and learning engine
+    # SQLite connections. Idempotent — safe to call multiple times.
 
     def get_status(self) -> dict[str, Any]: ...
+    # Returns dict with keys: enhancement_enabled, storage_tier,
+    # default_compliance, offline_knowledge_ready, search_orchestrator_ready,
+    # queries_enhanced, queries_blocked, queries_passthrough,
+    # avg_enhancement_time_ms, tier_distribution, compliance_distribution,
+    # learning_enabled, learning_stats.                         # Wave D1
     def reset_stats(self) -> None: ...
 ```
 
@@ -1320,6 +1341,7 @@ class EnhancementResult:
     enhancement_notes: list[str] = field(default_factory=list)
     clarifications: list[str] = field(default_factory=list)     # v1.3.0
     quality_score: QualityScore | None = None                   # v1.3.0
+    strategy_used: str = ""                                     # Wave D1
 
     def to_dict(self) -> dict[str, Any]: ...
 ```
