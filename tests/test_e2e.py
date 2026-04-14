@@ -1369,10 +1369,12 @@ class TestE2EOllamaIntegration:
 
         from aipea.engine import OllamaOfflineClient
 
-        timeout = int(os.environ.get(
-            "AIPEA_OLLAMA_TIMEOUT",
-            str(OllamaOfflineClient.DEFAULT_GENERATION_TIMEOUT),
-        ))
+        timeout = int(
+            os.environ.get(
+                "AIPEA_OLLAMA_TIMEOUT",
+                str(OllamaOfflineClient.DEFAULT_GENERATION_TIMEOUT),
+            )
+        )
         start = time.monotonic()
         await enhance_prompt(
             "Explain databases",
