@@ -773,7 +773,7 @@ class AIPEAEnhancer:
                 search_context=base_result.search_context,
                 model_type=model_family,
                 query_type=query_type_value,
-                strategy=None,
+                strategy=base_result.strategy_used or None,  # (#109)
                 embed_search_context=True,
             )
 

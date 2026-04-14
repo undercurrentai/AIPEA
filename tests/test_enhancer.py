@@ -916,6 +916,52 @@ class TestAIPEAEnhancerEnhanceForModels:
         for _model_id, req in requests.items():
             assert "What is Python?" in req.enhanced_prompt
 
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    @patch("aipea.enhancer.OfflineKnowledgeBase")
+    @patch("aipea.enhancer.SearchOrchestrator")
+    async def test_enhance_for_models_preserves_learned_strategy(
+        self, _mock_search_orch: MagicMock, _mock_kb: MagicMock
+    ) -> None:
+        """#109: Per-model rebuild must use base_result.strategy_used, not None."""
+        enhancer = AIPEAEnhancer()
+        learned = "knowledge_first"
+        base_result = EnhancementResult(
+            original_query="test query",
+            enhanced_prompt="enhanced",
+            processing_tier=ProcessingTier.TACTICAL,
+            security_context=SecurityContext(),
+            query_analysis=QueryAnalysis(
+                query="test query",
+                query_type=QueryType.TECHNICAL,
+                complexity=0.5,
+                confidence=0.8,
+                needs_current_info=False,
+            ),
+            strategy_used=learned,
+        )
+
+        captured: dict[str, object] = {}
+        original_formulate = enhancer._prompt_engine.formulate_search_aware_prompt
+
+        async def capture_strategy(**kwargs: object) -> str:
+            captured["strategy"] = kwargs.get("strategy")
+            return await original_formulate(**kwargs)
+
+        with (
+            patch.object(enhancer, "enhance", new_callable=AsyncMock, return_value=base_result),
+            patch.object(
+                enhancer._prompt_engine,
+                "formulate_search_aware_prompt",
+                side_effect=capture_strategy,
+            ),
+        ):
+            await enhancer.enhance_for_models("test query", ["gpt-4"])
+
+        assert captured.get("strategy") == learned, (
+            f"Expected strategy={learned!r}, got {captured.get('strategy')!r}"
+        )
+
 
 # =============================================================================
 # IS_OFFLINE_REQUIRED TESTS

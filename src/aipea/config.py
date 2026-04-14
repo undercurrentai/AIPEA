@@ -163,21 +163,24 @@ def _parse_dotenv(path: Path, *, strict: bool = False) -> dict[str, str]:
                 value = raw_value[1:end]
                 # Unescape double-quoted values (single-quoted are literal)
                 if quote_char == '"':
+                    # Use PUA sentinel U+E000 instead of NUL U+0000 so
+                    # values containing NUL bytes (escaped as \u0000 by
+                    # _escape_config_value) roundtrip correctly.  (#112)
                     value = (
-                        value.replace("\\\\", "\x00")
+                        value.replace("\\\\", "\ue000")
                         .replace('\\"', '"')
                         .replace("\\n", "\n")
                         .replace("\\r", "\r")
                     )
                     # Decode \uXXXX escapes emitted by _escape_config_value. (#94)
-                    # Runs BEFORE the \x00 sentinel is restored so literal
+                    # Runs BEFORE the sentinel is restored so literal
                     # backslashes (e.g., raw "\\u0041") are never decoded.
                     value = re.sub(
                         r"\\u([0-9a-fA-F]{4})",
                         lambda m: chr(int(m.group(1), 16)),
                         value,
                     )
-                    value = value.replace("\x00", "\\")
+                    value = value.replace("\ue000", "\\")
             else:
                 # No closing quote found — treat entire raw value as unquoted
                 value = raw_value

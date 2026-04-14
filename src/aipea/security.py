@@ -84,6 +84,16 @@ _CONFUSABLE_MAP: dict[str, str] = {
 }
 _CONFUSABLE_TRANS = str.maketrans(_CONFUSABLE_MAP)
 
+# Zero-width and invisible formatting characters that survive NFKC
+# normalization.  Three categories:
+# 1. Space-like: replaced with real space (injection \s patterns fire)
+# 2. Line-break-like: replaced with \n (injection [\r\n] patterns fire)
+# 3. Joiners/marks: stripped (reconstitutes split words for \b patterns)
+# (#108)
+_ZW_SPACE_RE = re.compile("[\u00a0\u00ad\u200b\u2060\ufeff]")
+_UNICODE_NEWLINE_RE = re.compile("[\u2028\u2029]")
+_INVISIBLE_RE = re.compile("[\u200c-\u200f\u202a-\u202f\u2061-\u206f\ufff9-\ufffb]")
+
 
 # =============================================================================
 # ENUMS
@@ -565,7 +575,14 @@ class SecurityScanner:
         # Normalize Unicode to defeat homoglyph bypass attacks:
         # 1. NFKC handles compatibility forms (fullwidth → ASCII, ligatures, etc.)
         # 2. Confusable mapping handles cross-script homoglyphs (Cyrillic → Latin, etc.)
-        normalized_query = unicodedata.normalize("NFKC", query).translate(_CONFUSABLE_TRANS)
+        # 3. Replace space-like invisible chars (U+200B ZWSP, U+00AD SHY, etc.)
+        #    with real spaces so \s-dependent injection patterns still fire, and
+        #    strip non-space invisible chars (ZWNJ, ZWJ, bidi marks) to
+        #    reconstitute split words for \b-dependent classified markers. (#108)
+        base = unicodedata.normalize("NFKC", query).translate(_CONFUSABLE_TRANS)
+        normalized_query = _INVISIBLE_RE.sub(
+            "", _UNICODE_NEWLINE_RE.sub("\n", _ZW_SPACE_RE.sub(" ", base))
+        )
 
         flags: list[str] = []
         is_blocked = False

@@ -226,6 +226,7 @@ gpt-5.3-codex, Claude Opus 4.6) via
 | `FIRECRAWL_API_KEY` | (none) | Firecrawl provider API key |
 | `AIPEA_HTTP_TIMEOUT` | `30.0` | HTTP timeout for search providers (seconds) |
 | `AIPEA_OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL for offline models |
+| `AIPEA_OLLAMA_TIMEOUT` | `120` | Ollama generation timeout in seconds |
 | `AIPEA_DB_PATH` | `aipea_knowledge.db` | Path to offline knowledge SQLite database |
 | `AIPEA_STORAGE_TIER` | `standard` | Storage tier: ultra_compact, compact, standard, extended |
 | `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode: general, hipaa, tactical (`fedramp` is deprecated — see ADR-002) |
