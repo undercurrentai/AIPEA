@@ -455,7 +455,7 @@ jobs:
             ## Non-blocking observations
             ## Specific line callouts
             ## What I did NOT review
-          claude_args: "--model claude-opus-4-6 --max-turns 3"
+          claude_args: "--model claude-opus-4-6 --max-turns 3 -o claude_review.md"
 
       - name: Load review body into env
         if: always() && steps.diff.outputs.diff_empty != 'true'
