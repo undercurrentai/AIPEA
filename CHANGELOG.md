@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-04-15
+
 ### Added — Taint-Aware Feedback Averaging (ADR-004)
 - `LearningPolicy.exclude_tainted_from_averaging` field (default `True`):
   feedback associated with compliance-taint scanner flags (PII/PHI/classified/

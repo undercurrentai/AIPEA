@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "aipea"
-version = "1.5.0"
+version = "1.6.0"
 description = "AI Prompt Engineer Agent — prompt preprocessing, security screening, and context enrichment for LLM systems"
 readme = "README.md"
 license = "MIT"
