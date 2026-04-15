@@ -422,43 +422,49 @@ jobs:
       - name: Run Claude review
         id: claude
         if: steps.diff.outputs.diff_empty != 'true'
-        uses: anthropics/claude-code-action@c7c8889b30499b4e46f4c32b892e43cd364bc2fe # v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Disable comment-trigger mode — this workflow is path-triggered,
-          # not comment-triggered. Empty string forces direct execution.
-          trigger_phrase: ""
-          prompt: |
-            You are the Claude half of AIPEA's triple-AI second-reviewer gate.
-            Your counterparts are gpt-5.4-pro (single-turn reasoning) and
-            Codex CLI with gpt-5.3-codex (multi-turn agentic tool-use).
-            All three reviews are posted as independent PR comments and ALL
-            must pass branch protection before the PR can merge.
+        # Direct CLI invocation instead of claude-code-action — the action's
+        # mode-detection (trigger_phrase, comment scanning) doesn't support
+        # path-triggered-only workflows. The CLI gives us file-based output
+        # matching the GPT/Codex pattern. CLAUDE.md is still read natively.
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          npx -y @anthropic-ai/claude-code@latest \
+            --model claude-opus-4-6 \
+            --max-turns 3 \
+            --output-file claude_review.md \
+            --print \
+            --allowedTools "Read,Bash(cat:*)" \
+            "You are the Claude half of AIPEA's triple-AI second-reviewer gate.
+          Your counterparts are gpt-5.4-pro (single-turn reasoning) and
+          Codex CLI with gpt-5.3-codex (multi-turn agentic tool-use).
+          All three reviews are posted as independent PR comments and ALL
+          must pass branch protection before the PR can merge.
 
-            Read the file pr_diff.patch in the working directory — it
-            contains the unified diff of this PR against its base ref,
-            filtered to the security-gated paths only.
+          Read the file pr_diff.patch in the working directory — it
+          contains the unified diff of this PR against its base ref,
+          filtered to the security-gated paths only.
 
-            Your job: catch bugs, security regressions, compliance-behavior
-            changes, and public-API mistakes. Be direct, specific, and
-            concrete. Cite file:line evidence. Propose fixes rather than
-            raising vague concerns. If the diff is trivial, say so
-            explicitly rather than padding observations.
+          Your job: catch bugs, security regressions, compliance-behavior
+          changes, and public-API mistakes. Be direct, specific, and
+          concrete. Cite file:line evidence. Propose fixes rather than
+          raising vague concerns. If the diff is trivial, say so
+          explicitly rather than padding observations.
 
-            You have access to CLAUDE.md which defines this project's
-            conventions, ASK-first triggers, and security requirements.
-            Use that context to flag violations of project-specific rules
-            that the other two reviewers (which lack CLAUDE.md) might miss.
+          You have access to CLAUDE.md which defines this project's
+          conventions, ASK-first triggers, and security requirements.
+          Use that context to flag violations of project-specific rules
+          that the other two reviewers (which lack CLAUDE.md) might miss.
 
-            Format your reply as Markdown with these sections in order:
-            ## Verdict
-            One of: APPROVE, REQUEST_CHANGES, COMMENT.
-            ## Blocking concerns
-            Bulleted list with file:line evidence. _None._ if APPROVE/COMMENT.
-            ## Non-blocking observations
-            ## Specific line callouts
-            ## What I did NOT review
-          claude_args: "--model claude-opus-4-6 --max-turns 3 -o claude_review.md"
+          Format your reply as Markdown with these sections in order:
+          ## Verdict
+          One of: APPROVE, REQUEST_CHANGES, COMMENT.
+          ## Blocking concerns
+          Bulleted list with file:line evidence. _None._ if APPROVE/COMMENT.
+          ## Non-blocking observations
+          ## Specific line callouts
+          ## What I did NOT review"
 
       - name: Load review body into env
         if: always() && steps.diff.outputs.diff_empty != 'true'
