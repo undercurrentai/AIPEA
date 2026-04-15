@@ -1,5 +1,5 @@
 # AIPEA Specification
-> **AI Prompt Engineer Agent** | Version 1.3.3 | 2026-04-11
+> **AI Prompt Engineer Agent** | Version 1.5.0 | 2026-04-15
 
 ```yaml
 status: ACCEPTED
@@ -140,11 +140,12 @@ aipea/
 ├── config.py            # ZERO imports from other aipea modules (stdlib only)
 ├── quality.py           # ZERO imports from other aipea modules (stdlib only)
 ├── strategies.py        # Imports: _types.py (QueryType enum only)
+├── learning.py          # Imports: _types.py (QueryType), security.py (ComplianceMode)
 ├── _types.py            # Shared enums (ProcessingTier, QueryType, SearchStrategy)
 ├── models.py            # Shared data models (QueryAnalysis)
 ├── analyzer.py          # Imports: security.py, _types.py
 ├── engine.py            # Imports: search.py, _types.py; lazy-imports strategies.py
-├── enhancer.py          # Imports: ALL above (facade)
+├── enhancer.py          # Imports: ALL above (facade); lazy-imports learning.py
 ├── cli.py               # Imports: config.py, aipea (requires [cli] extra)
 └── __main__.py          # Entry point: python -m aipea
 ```
@@ -1414,5 +1415,5 @@ Stored in `docs/design-reference/` for historical reference:
 
 ---
 
-*AIPEA Specification v1.3.3 — AI Prompt Engineer Agent*
-*Undercurrent Holdings | 2026-04-10 (wave 19 in [Unreleased])*
+*AIPEA Specification v1.5.0 — AI Prompt Engineer Agent*
+*Undercurrent Holdings | 2026-04-15 (v1.5.0 released)*

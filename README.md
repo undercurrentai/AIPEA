@@ -271,6 +271,31 @@ asyncio.run(main())
 
 The learning engine stores data in `aipea_learning.db` (configurable via `AIPEA_LEARNING_DB_PATH`). If the database is unavailable, AIPEA falls back to default strategy selection with no error.
 
+#### Compliance-Aware Learning (v1.5.0+)
+
+For regulated deployments, `LearningPolicy` controls which compliance modes may persist feedback:
+
+```python
+from aipea import AIPEAEnhancer, LearningPolicy
+
+# HIPAA deployment with opt-in learning + retention limits
+policy = LearningPolicy(
+    allow_hipaa_recording=True,   # HIPAA: default-deny, must opt in
+    retention_days=365,           # Auto-prune events older than 1 year
+    max_events=10000,             # Cap total stored events
+)
+enhancer = AIPEAEnhancer(
+    enable_learning=True,
+    learning_policy=policy,
+)
+
+# TACTICAL mode always blocks recording (hard invariant, no override)
+# GENERAL mode records as before (no policy needed)
+
+# Enforce retention limits explicitly
+enhancer._learning_engine.prune_events()
+```
+
 ## Integration
 
 AIPEA is designed as a standalone preprocessing layer for LLM systems. It integrates with:
