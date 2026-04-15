@@ -62,7 +62,7 @@ on:
 permissions:
   contents: read
   pull-requests: write  # post PR comments
-  id-token: write       # required by anthropics/claude-code-action@v1
+  id-token: write       # required by anthropics/claude-code-action@v1 (OIDC)
 
 concurrency:
   # Cancel superseded runs if the PR is updated mid-review — no point
@@ -388,66 +388,48 @@ jobs:
   claude-review:
     name: Claude Opus 4.6 review
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    # Claude Opus 4.6 via anthropics/claude-code-action@v1.
-    # Key advantage: reads CLAUDE.md natively — AIPEA's agent contract
-    # with ASK-first triggers, security requirements, dependency
-    # constraints, and module dependency graph is absorbed as context
-    # automatically. The GPT and Codex reviewers need this spelled out
-    # in their system prompts; Claude gets it for free.
+    # Uses the official claude-code-action following the "Review Critical
+    # Files" pattern from docs/solutions.md.  Claude reads CLAUDE.md
+    # natively — AIPEA's agent contract with ASK-first triggers, security
+    # requirements, and module dependency graph are absorbed as context
+    # automatically.  The action posts its review as a PR comment via
+    # `gh pr comment`; we then scrape that comment for verdict enforcement.
     timeout-minutes: 15
     steps:
       - name: Checkout PR head
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-
-      - name: Fetch base ref
-        run: git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}"
-
-      - name: Compute diff against base
-        id: diff
-        run: |
-          set -euo pipefail
-          base="${{ github.event.pull_request.base.ref }}"
-          # shellcheck disable=SC2086
-          git diff "origin/${base}...HEAD" -- ${GATED_PATHS} > pr_diff.patch
-          if [ ! -s pr_diff.patch ]; then
-            echo "diff_empty=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          diff_bytes=$(wc -c < pr_diff.patch)
-          echo "PR diff: ${diff_bytes} bytes"
+          fetch-depth: 1
 
       - name: Run Claude review
         id: claude
-        if: steps.diff.outputs.diff_empty != 'true'
         uses: anthropics/claude-code-action@c7c8889b30499b4e46f4c32b892e43cd364bc2fe # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
             You are the Claude half of AIPEA's triple-AI second-reviewer gate.
-            Your counterparts are gpt-5.4-pro (single-turn reasoning) and
-            Codex CLI with gpt-5.3-codex (multi-turn agentic tool-use).
-            All three reviews are posted as independent PR comments and ALL
-            must pass branch protection before the PR can merge.
+            Your counterparts are gpt-5.4-pro and Codex CLI. All three reviews
+            must pass before the PR can merge.
 
-            Read the file pr_diff.patch in the working directory — it
-            contains the unified diff of this PR against its base ref,
-            filtered to the security-gated paths only.
+            This PR touches security-gated paths. Review the changes with focus on:
+            - Bugs and security regressions in security.py
+            - Compliance-behavior changes
+            - Public-API mistakes in __init__.py
+            - CI workflow safety (.github/workflows/)
 
-            Your job: catch bugs, security regressions, compliance-behavior
-            changes, and public-API mistakes. Be direct, specific, and
-            concrete. Cite file:line evidence. Propose fixes rather than
-            raising vague concerns. If the diff is trivial, say so
-            explicitly rather than padding observations.
+            You have access to CLAUDE.md which defines project conventions,
+            ASK-first triggers, and security requirements. Flag violations that
+            GPT/Codex (which lack CLAUDE.md) might miss.
 
-            You have access to CLAUDE.md which defines this project's
-            conventions, ASK-first triggers, and security requirements.
-            Use that context to flag violations of project-specific rules
-            that the other two reviewers (which lack CLAUDE.md) might miss.
+            Post your review as a SINGLE PR comment using:
+            gh pr comment ${{ github.event.pull_request.number }} --body "YOUR REVIEW"
 
-            Format your reply as Markdown with these sections in order:
+            Your review comment MUST start with <!-- ai-second-review:claude -->
+            and include these sections in order:
             ## Verdict
             One of: APPROVE, REQUEST_CHANGES, COMMENT.
             ## Blocking concerns
@@ -455,72 +437,56 @@ jobs:
             ## Non-blocking observations
             ## Specific line callouts
             ## What I did NOT review
-          claude_args: "--model claude-opus-4-6 --max-turns 3"
+          claude_args: |
+            --model claude-opus-4-6 --allowedTools "Read,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(cat pr_diff.patch)"
 
-      - name: Load review body into env
-        if: always() && steps.diff.outputs.diff_empty != 'true'
-        run: |
-          output_file="claude_review.md"
-          # claude-code-action may write output via the action's outputs
-          # or leave it in the workspace. If nothing materialized, write
-          # a fallback so the comment pipeline stays alive.
-          if ! [ -f "${output_file}" ] || ! [ -s "${output_file}" ]; then
-            printf '_Claude review produced no output. Check the workflow logs for details._\n' > "${output_file}"
-          fi
-          delimiter="__AIPEA_REVIEW_BODY_EOF_${{ github.run_id }}__"
-          {
-            printf '%s<<%s\n' "REVIEW_BODY" "${delimiter}"
-            cat "${output_file}"
-            printf '\n%s\n' "${delimiter}"
-          } >> "$GITHUB_ENV"
-
-      - name: Post review comment (Claude)
-        if: always() && steps.diff.outputs.diff_empty != 'true'
+      - name: Scrape verdict from PR comment
+        if: always()
+        id: verdict
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           script: |
-            const body = process.env.REVIEW_BODY || '(review produced no output)';
             const marker = '<!-- ai-second-review:claude -->';
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
-            const header = '## 🤖 Claude Opus 4.6 — Second-Reviewer Gate';
-            const footer = '---\n*Automated via `.github/workflows/ai-second-review.yml` (Wave C1 — ROADMAP §P5a). '
-                         + 'Accountable human reviewer: @joshuakirby. '
-                         + 'See [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md) §Second-Reviewer Gate.*';
-            const full = `${marker}\n\n${header}\n\n${body}\n\n${footer}`;
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner, repo, issue_number, per_page: 100,
             });
-            const existing = comments.find((c) => c.body && c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: full });
-            } else {
-              await github.rest.issues.createComment({ owner, repo, issue_number, body: full });
+            const review = comments
+              .filter((c) => c.body && c.body.includes(marker))
+              .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0];
+
+            if (!review) {
+              core.setFailed('Claude review comment not found — fail closed.');
+              return;
             }
 
-      - name: Write review to job summary
-        if: always() && steps.diff.outputs.diff_empty != 'true'
-        run: |
-          {
-            printf '## Claude Opus 4.6 — Second-Reviewer Gate\n\n'
-            if [ -f claude_review.md ] && [ -s claude_review.md ]; then
-              cat claude_review.md
-            else
-              printf '_Claude review produced no output (check logs)._\n'
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+            // Extract verdict: first non-empty line after "## Verdict"
+            const lines = review.body.split('\n');
+            let inVerdict = false;
+            let verdict = '';
+            for (const line of lines) {
+              if (/^## *Verdict/.test(line)) { inVerdict = true; continue; }
+              if (inVerdict && /^##/.test(line)) break;
+              if (inVerdict && line.trim()) {
+                verdict = line.replace(/`/g, '').trim().toUpperCase();
+                break;
+              }
+            }
+
+            core.info(`Claude verdict: ${verdict}`);
+            core.setOutput('verdict', verdict);
+
+            // Write review to job summary
+            const header = '## 🤖 Claude Opus 4.6 — Second-Reviewer Gate';
+            const footer = '---\n*Automated via `.github/workflows/ai-second-review.yml` (Wave C1 — ROADMAP §P5a). Accountable human reviewer: @joshuakirby.*';
+            await core.summary.addRaw(`${header}\n\n${review.body}\n\n${footer}`).write();
 
       - name: Enforce verdict
-        if: always() && steps.diff.outputs.diff_empty != 'true'
+        if: always()
         run: |
-          if [ ! -s claude_review.md ]; then
-            echo "::error::Claude review file missing or empty — fail closed."
-            exit 1
-          fi
-          verdict=$(sed -n '/^## *Verdict/,/^##/{/^## *Verdict/d;/^##/d;/^$/d;p;}' claude_review.md \
-            | head -1 | tr -d '`' | xargs)
-          verdict_upper=$(echo "${verdict}" | tr '[:lower:]' '[:upper:]')
-          case "${verdict_upper}" in
+          verdict="${{ steps.verdict.outputs.verdict }}"
+          case "${verdict}" in
             APPROVE|COMMENT)
               echo "Verdict: ${verdict} — no blocking concerns."
               ;;
@@ -528,12 +494,12 @@ jobs:
               echo "::error::Claude verdict: REQUEST_CHANGES — PR must address blocking concerns before merge."
               exit 1
               ;;
+            "")
+              echo "::error::Claude verdict empty — fail closed."
+              exit 1
+              ;;
             *)
-              echo "::error::Claude verdict '${verdict:-<empty>}' not recognised — fail closed."
+              echo "::error::Claude verdict '${verdict}' not recognised — fail closed."
               exit 1
               ;;
           esac
-
-      - name: No-op for empty diff
-        if: steps.diff.outputs.diff_empty == 'true'
-        run: echo "PR diff is empty against the base ref — nothing to review."

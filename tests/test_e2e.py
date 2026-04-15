@@ -1363,9 +1363,18 @@ class TestE2EOllamaIntegration:
     async def test_offline_enhance_completes_under_timeout(
         self,
     ) -> None:
-        """Verify offline enhancement with Ollama completes within 60 seconds."""
+        """Verify offline enhancement with Ollama completes within the configured timeout."""
+        import os
         import time
 
+        from aipea.engine import OllamaOfflineClient
+
+        timeout = int(
+            os.environ.get(
+                "AIPEA_OLLAMA_TIMEOUT",
+                str(OllamaOfflineClient.DEFAULT_GENERATION_TIMEOUT),
+            )
+        )
         start = time.monotonic()
         await enhance_prompt(
             "Explain databases",
@@ -1373,4 +1382,4 @@ class TestE2EOllamaIntegration:
             force_offline=True,
         )
         elapsed = time.monotonic() - start
-        assert elapsed < 60.0
+        assert elapsed < timeout

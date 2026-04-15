@@ -27,6 +27,7 @@ import html
 import logging
 import math
 import os
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -37,6 +38,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # API Configuration — lazy resolvers to respect .env / TOML config chain
+_ATX_HEADER_RE = re.compile(r"^(\s{0,3})#")
 
 
 def _resolve_exa_api_url() -> str:
@@ -127,9 +129,9 @@ def _escape_markdown(text: str) -> str:
     """
     for ch in ("|", "[", "]", "`", "*", "_", "~"):
         text = text.replace(ch, f"\\{ch}")
-    # Escape leading # that would create headers (per line)
+    # Escape ATX headers (#) at line start with up to 3 leading spaces.
     lines = text.split("\n")
-    lines = [("\\#" + line[1:] if line.startswith("#") else line) for line in lines]
+    lines = [_ATX_HEADER_RE.sub(r"\1\\#", line, count=1) for line in lines]
     return "\n".join(lines)
 
 
@@ -744,7 +746,7 @@ class FirecrawlProvider(SearchProvider):
                         title=title,
                         url=item.get("url") or "",
                         snippet=snippet,
-                        score=0.7,  # Firecrawl doesn't return relevance scores
+                        score=0.5,  # Firecrawl doesn't return relevance scores (#113)
                     )
                 )
 

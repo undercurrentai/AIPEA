@@ -12,6 +12,7 @@ zero-external-deps-in-core principle.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import logging
 import os
@@ -70,6 +71,9 @@ class AdaptiveLearningEngine:
                 self._db_path,
                 exc_info=True,
             )
+            if self._conn is not None:  # (#110)
+                with contextlib.suppress(sqlite3.Error):
+                    self._conn.close()
             self._conn = None
 
     # ------------------------------------------------------------------
@@ -78,8 +82,13 @@ class AdaptiveLearningEngine:
 
     def _open_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.Error:  # (#111)
+            with contextlib.suppress(sqlite3.Error):
+                conn.close()
+            raise
         return conn
 
     def _init_schema(self) -> None:

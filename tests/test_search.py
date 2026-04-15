@@ -1493,6 +1493,15 @@ class TestEscapeMarkdownRegression:
         lines = result.split("\n")
         assert lines[1].startswith("\\#")
 
+    @pytest.mark.unit
+    def test_escapes_indented_header_escape(self) -> None:
+        """Headers with up to 3 leading spaces are still markdown headers."""
+        from aipea.search import _escape_markdown
+
+        result = _escape_markdown("normal line\n  # injected header\nmore text")
+        lines = result.split("\n")
+        assert lines[1].startswith("  \\#")
+
 
 class TestEscapePlaintextRegression:
     """Regression tests for _escape_plaintext on multi-line input."""
@@ -1860,6 +1869,73 @@ class TestWave19FirecrawlDeepResearchUrlResolution:
             await provider.deep_research("test query")
 
         assert captured_url["url"] == "https://api.firecrawl.dev/v1/deep-research"
+
+
+class TestNoScoreConsistency:
+    """Regression tests for #113: consistent no-score defaults across providers."""
+
+    @pytest.mark.unit
+    async def test_firecrawl_default_score_matches_exa(self) -> None:
+        """Firecrawl results without scores must use the same default as Exa."""
+
+        class FakeResponse:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, Any]:
+                return {
+                    "data": [
+                        {
+                            "url": "https://example.com",
+                            "markdown": "Some content",
+                            "title": "Test",
+                        }
+                    ]
+                }
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = FakeResponse()
+
+        with patch("aipea.search.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value = mock_client_instance
+            provider = FirecrawlProvider(api_key="test-key")
+            ctx = await provider.search("test query")
+
+        assert len(ctx.results) == 1
+        assert ctx.results[0].score == 0.5, (
+            f"Firecrawl no-score default should be 0.5, got {ctx.results[0].score}"
+        )
+
+    @pytest.mark.unit
+    async def test_exa_null_score_default(self) -> None:
+        """Exa results with null score must default to 0.5."""
+
+        class FakeResponse:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, Any]:
+                return {
+                    "results": [
+                        {
+                            "url": "https://example.com",
+                            "title": "Test",
+                            "text": "Some content",
+                            "score": None,
+                        }
+                    ]
+                }
+
+        mock_client_instance = AsyncMock()
+        mock_client_instance.post.return_value = FakeResponse()
+
+        with patch("aipea.search.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value = mock_client_instance
+            provider = ExaSearchProvider(api_key="test-key")
+            ctx = await provider.search("test query")
+
+        assert len(ctx.results) == 1
+        assert ctx.results[0].score == 0.5
 
 
 if __name__ == "__main__":

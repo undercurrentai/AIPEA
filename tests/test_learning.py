@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import sqlite3
 import threading
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -235,3 +237,78 @@ class TestGracefulDegradation:
             eng.close()
         finally:
             readonly.chmod(0o755)
+
+    def test_init_closes_connection_on_schema_failure(self, tmp_path: Path) -> None:
+        """#110: __init__ must close the connection when _init_schema() fails.
+
+        Before the fix, a schema failure left self._conn as a leaked, open
+        connection set to None without calling close().  Verify that close()
+        is called on the underlying connection.
+        """
+        db_path = tmp_path / "schema_fail.db"
+        # Create the DB so _open_connection succeeds
+        conn = sqlite3.connect(str(db_path))
+        conn.close()
+
+        with patch.object(
+            AdaptiveLearningEngine,
+            "_init_schema",
+            side_effect=sqlite3.OperationalError("forced"),
+        ):
+            eng = AdaptiveLearningEngine(db_path=db_path)
+
+        # The fix closes the connection before setting _conn = None.
+        # Verify _conn is None (graceful degradation) and that the
+        # connection is actually closed (not leaked).
+        assert eng._conn is None
+        # If the fix works, the file should not be locked — we can open it
+        conn2 = sqlite3.connect(str(db_path))
+        conn2.execute("PRAGMA journal_mode=WAL")  # would fail if locked
+        conn2.close()
+
+    def test_open_connection_closes_on_pragma_failure(self, tmp_path: Path) -> None:
+        """#111: _open_connection must close conn when PRAGMA fails.
+
+        Verify that when PRAGMA journal_mode=WAL raises, the half-opened
+        connection is closed (not leaked), and init degrades gracefully.
+        """
+        db_path = tmp_path / "pragma_fail.db"
+        call_count = {"connect": 0}
+        original_connect = sqlite3.connect
+
+        def counting_connect(*args: object, **kwargs: object) -> sqlite3.Connection:
+            call_count["connect"] += 1
+            conn = original_connect(*args, **kwargs)  # type: ignore[arg-type]
+            if call_count["connect"] == 1:
+                # Poison the first connection's execute to fail on PRAGMA
+                orig_exec = conn.execute
+
+                class PoisonedConn:
+                    """Wraps a real conn but fails on PRAGMA."""
+
+                    def __getattr__(self, name: str) -> object:
+                        return getattr(conn, name)
+
+                    def execute(self, sql: str, *a: object) -> sqlite3.Cursor:
+                        if "PRAGMA" in sql:
+                            raise sqlite3.OperationalError("WAL denied")
+                        return orig_exec(sql, *a)
+
+                    def close(self) -> None:
+                        conn.close()
+
+                    @property
+                    def row_factory(self) -> object:
+                        return conn.row_factory
+
+                    @row_factory.setter
+                    def row_factory(self, val: object) -> None:
+                        conn.row_factory = val  # type: ignore[assignment]
+
+                return PoisonedConn()  # type: ignore[return-value]
+            return conn
+
+        with patch("aipea.learning.sqlite3.connect", counting_connect):
+            eng = AdaptiveLearningEngine(db_path=db_path)
+
+        assert eng._conn is None

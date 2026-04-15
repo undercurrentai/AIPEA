@@ -1,4 +1,4 @@
-# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-19 + Quality Gate: 2026-04-10)
+# KNOWN_ISSUES.md — Bug Hunt Findings (Waves 1-20 + Quality Gate: 2026-04-14)
 
 Issues found during hybrid bug hunts. Status: FIXED, DEFERRED, or INTENTIONAL.
 
@@ -1053,9 +1053,81 @@ were fixed in the spec during this audit. Items marked FUTURE require code chang
 - **File**: `src/aipea/search.py:166-182`
 - **Rationale**: Clamping already handles this; log noise is minor and useful for monitoring.
 
+## Wave 20 Fixes (2026-04-14) — 8 bugs fixed, 0 deferred
+
+Hybrid hunt: Lane A (Codex gpt-5.3-codex, 183s) found 1 bug; Lane B
+(3 Claude sweep agents) found 6 bugs; ultrathink found 1 additional.
+All 8 fixed with 21 regression tests.
+
+### 108. Zero-width Unicode chars bypass injection detection — FIXED
+- **File**: `src/aipea/security.py:580-583`
+- **Severity**: CRITICAL | **Confidence**: HIGH
+- **Source**: Claude sweep agent (partition 2, wave 20)
+- **Root cause**: Zero-width characters (ZWSP U+200B, ZWNJ U+200C, etc.)
+  survive NFKC normalization and are not matched by `\s` or `\b` in Python
+  regex. Attackers insert them between words to evade injection patterns.
+- **Fix**: Three-phase normalization: space-like invisible chars → real space,
+  Unicode line separators → `\n`, joiner/mark chars → stripped.
+
+### 109. `enhance_for_models` drops learned strategy — FIXED
+- **File**: `src/aipea/enhancer.py:776`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (partition 2, wave 20)
+- **Root cause**: Per-model prompt rebuild passed `strategy=None` instead of
+  `base_result.strategy_used`. Adaptive learning never applied to multi-model.
+- **Fix**: Pass `base_result.strategy_used or None`.
+
+### 110. `learning.py` `__init__` leaks SQLite connection on schema failure — FIXED
+- **File**: `src/aipea/learning.py:63-77`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Claude sweep agent (partition 3, wave 20)
+- **Root cause**: Same pattern as knowledge.py #106 but not applied to learning.py.
+  Schema failure set `self._conn = None` without calling `close()`.
+- **Fix**: Close connection before setting to None, matching knowledge.py pattern.
+
+### 111. `learning.py` `_open_connection` leaks on PRAGMA failure — FIXED
+- **File**: `src/aipea/learning.py:83-90`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Claude sweep agent (partition 3, wave 20)
+- **Root cause**: PRAGMA journal_mode=WAL failure left connection open.
+- **Fix**: Wrap PRAGMA in try/except, close on failure, re-raise.
+
+### 112. NUL byte sentinel collision in dotenv roundtrip — FIXED
+- **File**: `src/aipea/config.py:166-183`
+- **Severity**: LOW | **Confidence**: HIGH
+- **Source**: Claude sweep agent (partition 1, wave 20)
+- **Root cause**: `\x00` sentinel in unescape collided with `\u0000` produced
+  by `_escape_config_value`. NUL bytes corrupted to backslash on roundtrip.
+- **Fix**: Use PUA sentinel U+E000 instead of NUL.
+
+### 113. Inconsistent no-score defaults across providers — FIXED
+- **File**: `src/aipea/search.py:747`
+- **Severity**: LOW | **Confidence**: MEDIUM
+- **Source**: Claude sweep agent (partition 2, wave 20)
+- **Root cause**: Firecrawl default score 0.7 vs Exa 0.5 for "no score available".
+  Caused systematic ranking bias in multi_source merge.
+- **Fix**: Both default to 0.5.
+
+### 114. Indented ATX headers bypass markdown escaping — FIXED
+- **File**: `src/aipea/search.py:41,129-135`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Codex gpt-5.3-codex (Lane A, wave 20)
+- **Root cause**: `_escape_markdown` only escaped `#` at column 0, but Markdown
+  ATX headers are valid with up to 3 leading spaces (`   # Injected`).
+- **Fix**: Regex `^(\s{0,3})#` replaces `line.startswith("#")`.
+
+### 108b. U+2028/U+2029 line separator injection bypass — FIXED
+- **File**: `src/aipea/security.py:94,583`
+- **Severity**: MEDIUM | **Confidence**: HIGH
+- **Source**: Ultrathink adversarial analysis (wave 20)
+- **Root cause**: Unicode LINE SEPARATOR (U+2028) and PARAGRAPH SEPARATOR
+  (U+2029) were stripped instead of converted to `\n`, allowing conversation
+  separator injection (`text\u2028Human:`) to evade `[\r\n]` detection.
+- **Fix**: Added `_UNICODE_NEWLINE_RE` to convert U+2028/U+2029 to `\n`.
+
 ## Deferred Findings (3 LOW severity remaining)
 
 Wave 16 deferred: #79 (Exa score clamping), #80 (stats atomicity), #81 (timeout eagerness). All LOW severity with no functional impact.
 
 ---
-*Last updated: 2026-04-10 (Wave 19 — 13 bugs fixed + 4 ultrathink audit extensions, 0 deferred, 968 passing tests, 92.37% coverage)*
+*Last updated: 2026-04-14 (Wave 20 — 8 bugs fixed, 0 deferred, 876+ passing tests, 93% coverage)*

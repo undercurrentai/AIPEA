@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (Wave 20 — Bug Hunt)
+- **CRITICAL** `security.py`: Zero-width Unicode characters (ZWSP, ZWNJ, BOM,
+  etc.) bypass injection detection, classified marker detection, and
+  conversation separator detection. Added three-phase normalization: space-like
+  invisible chars → space, Unicode line separators → `\n`, joiners → stripped.
+  (#108, #108b)
+- `enhancer.py`: `enhance_for_models()` dropped learned strategy when
+  rebuilding per-model prompts (`strategy=None` instead of
+  `base_result.strategy_used`). (#109)
+- `learning.py`: `__init__` leaked SQLite connection when `_init_schema()`
+  failed — same pattern fixed in knowledge.py #106 but not applied to
+  learning.py. (#110)
+- `learning.py`: `_open_connection` leaked connection when PRAGMA
+  journal_mode=WAL failed. (#111)
+- `config.py`: NUL byte sentinel (`\x00`) in dotenv unescape collided with
+  `\u0000` from `_escape_config_value`; NUL bytes corrupted to backslash on
+  roundtrip. Fixed with PUA sentinel U+E000. (#112)
+- `search.py`: Firecrawl no-score default (0.7) inconsistent with Exa (0.5);
+  caused systematic ranking bias in multi-source search. (#113)
+- `search.py`: Indented ATX headers (`   # injected`) bypassed markdown
+  escaping in search context formatting. (#114)
+
+### Changed
+- `engine.py`: Ollama generation timeout is now configurable via
+  `AIPEA_OLLAMA_TIMEOUT` env var (default: 120s, was hardcoded 60s).
+
 ## [1.4.0] - 2026-04-13
 
 ### Added (Wave D1)

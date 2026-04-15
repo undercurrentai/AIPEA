@@ -1317,3 +1317,23 @@ class TestUltrathinkTomlConfigBom:
         # Should return {} via the except clause, not raise.
         result = _parse_toml_config(cfg)
         assert result == {}
+
+
+class TestNulByteSentinelRoundtrip:
+    """Regression tests for #112: NUL byte sentinel collision in dotenv."""
+
+    def test_nul_byte_roundtrips(self, tmp_path: Path) -> None:
+        """A value containing a NUL byte must survive save->load without corruption."""
+        target = tmp_path / ".env"
+        key_with_nul = "before\x00after"
+        save_dotenv(target, AIPEAConfig(exa_api_key=key_with_nul))
+        loaded = _parse_dotenv(target)
+        assert loaded.get("EXA_API_KEY") == key_with_nul
+
+    def test_backslash_still_roundtrips(self, tmp_path: Path) -> None:
+        """A value with literal backslashes must still roundtrip correctly."""
+        target = tmp_path / ".env"
+        key_with_backslash = "C:\\Users\\test"
+        save_dotenv(target, AIPEAConfig(exa_api_key=key_with_backslash))
+        loaded = _parse_dotenv(target)
+        assert loaded.get("EXA_API_KEY") == key_with_backslash

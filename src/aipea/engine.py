@@ -126,6 +126,7 @@ class OllamaOfflineClient:
     """
 
     DEFAULT_HOST = "http://localhost:11434"
+    DEFAULT_GENERATION_TIMEOUT = 120  # seconds; override via AIPEA_OLLAMA_TIMEOUT
 
     def __init__(self, host: str | None = None) -> None:
         """Initialize Ollama client.
@@ -136,6 +137,12 @@ class OllamaOfflineClient:
         import os
 
         self.host = host or os.environ.get("AIPEA_OLLAMA_HOST", self.DEFAULT_HOST)
+        try:
+            self.generation_timeout = int(
+                os.environ.get("AIPEA_OLLAMA_TIMEOUT", str(self.DEFAULT_GENERATION_TIMEOUT))
+            )
+        except (ValueError, TypeError):
+            self.generation_timeout = self.DEFAULT_GENERATION_TIMEOUT
         self._available_models: list[OllamaModelInfo] | None = None
         logger.debug("OllamaOfflineClient initialized with host: %s", self.host)
 
@@ -345,7 +352,7 @@ class OllamaOfflineClient:
                 input=prompt,
                 capture_output=True,
                 text=True,
-                timeout=60,  # 60 second timeout for generation
+                timeout=self.generation_timeout,
             )
 
             if result.returncode != 0:
