@@ -113,6 +113,7 @@ class EnhancementResult:
     clarifications: list[str] = field(default_factory=list)
     quality_score: QualityScore | None = None
     strategy_used: str = ""
+    scan_result: ScanResult | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary for logging/storage.
@@ -142,6 +143,7 @@ class EnhancementResult:
             "clarifications": self.clarifications,
             "quality_score": self.quality_score.to_dict() if self.quality_score else None,
             "strategy_used": self.strategy_used,
+            "scan_result": self.scan_result.to_dict() if self.scan_result else None,
         }
 
 
@@ -668,6 +670,7 @@ class AIPEAEnhancer:
             strategy_used=effective_strategy,
             clarifications=clarifications,
             quality_score=quality_score,
+            scan_result=scan_result,
         )
 
     async def enhance_for_models(
@@ -1267,6 +1270,7 @@ class AIPEAEnhancer:
             enhancement_time_ms=enhancement_time_ms,
             was_enhanced=False,
             enhancement_notes=enhancement_notes,
+            scan_result=scan_result,
         )
 
     def _resolve_strategy(
@@ -1292,16 +1296,31 @@ class AIPEAEnhancer:
         :class:`~aipea.learning.AdaptiveLearningEngine` — TACTICAL mode always
         blocks, HIPAA blocks unless opted in via ``LearningPolicy``.
 
+        Taint-awareness (ADR-004): scan flags from ``result.scan_result`` are
+        threaded to the engine.  Feedback associated with compliance-taint
+        flags (PII/PHI/classified/injection) is recorded for audit but
+        excluded from strategy-performance averaging by default.
+
         Args:
             result: The enhancement result to provide feedback on
             score: Satisfaction score in [-1.0, 1.0] (positive = good)
         """
-        if self._learning_engine is not None and result.strategy_used:
-            await self._learning_engine.arecord_feedback(
-                query_type=result.query_analysis.query_type,
-                strategy=result.strategy_used,
-                score=score,
-                compliance_mode=result.security_context.compliance_mode,
+        if self._learning_engine is None or not result.strategy_used:
+            return
+        scan_flags: tuple[str, ...] = tuple(result.scan_result.flags) if result.scan_result else ()
+        outcome = await self._learning_engine.arecord_feedback(
+            query_type=result.query_analysis.query_type,
+            strategy=result.strategy_used,
+            score=score,
+            compliance_mode=result.security_context.compliance_mode,
+            scan_flags=scan_flags,
+        )
+        if not outcome.recorded:
+            logger.debug("Learning feedback skipped: %s", outcome.reason)
+        elif outcome.excluded_from_averaging:
+            logger.info(
+                "Learning feedback recorded for audit only (taint: %s)",
+                outcome.taint_flags,
             )
 
     def _update_avg_time(self, new_time_ms: float) -> None:

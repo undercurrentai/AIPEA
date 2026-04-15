@@ -1146,5 +1146,85 @@ class TestZeroWidthBypass:
         assert not result.is_blocked
 
 
+# =============================================================================
+# FLAG CONSTANTS & has_compliance_taint (ADR-004)
+# =============================================================================
+
+
+class TestFlagConstants:
+    """Tests for canonical flag-prefix constants and has_compliance_taint()."""
+
+    @pytest.mark.unit
+    def test_flag_pii_detected_value(self) -> None:
+        from aipea.security import FLAG_PII_DETECTED
+
+        assert FLAG_PII_DETECTED == "pii_detected:"
+
+    @pytest.mark.unit
+    def test_flag_phi_detected_value(self) -> None:
+        from aipea.security import FLAG_PHI_DETECTED
+
+        assert FLAG_PHI_DETECTED == "phi_detected:"
+
+    @pytest.mark.unit
+    def test_flag_classified_marker_value(self) -> None:
+        from aipea.security import FLAG_CLASSIFIED_MARKER
+
+        assert FLAG_CLASSIFIED_MARKER == "classified_marker:"
+
+    @pytest.mark.unit
+    def test_flag_injection_attempt_value(self) -> None:
+        from aipea.security import FLAG_INJECTION_ATTEMPT
+
+        assert FLAG_INJECTION_ATTEMPT == "injection_attempt"
+
+    @pytest.mark.unit
+    def test_flag_custom_blocked_value(self) -> None:
+        from aipea.security import FLAG_CUSTOM_BLOCKED
+
+        assert FLAG_CUSTOM_BLOCKED == "custom_blocked:"
+
+    @pytest.mark.unit
+    def test_has_compliance_taint_pii(self) -> None:
+        result = ScanResult(flags=["pii_detected:ssn"])
+        assert result.has_compliance_taint()
+
+    @pytest.mark.unit
+    def test_has_compliance_taint_phi(self) -> None:
+        result = ScanResult(flags=["phi_detected:patient_name"])
+        assert result.has_compliance_taint()
+
+    @pytest.mark.unit
+    def test_has_compliance_taint_classified(self) -> None:
+        result = ScanResult(flags=["classified_marker:SECRET"])
+        assert result.has_compliance_taint()
+
+    @pytest.mark.unit
+    def test_has_compliance_taint_injection(self) -> None:
+        result = ScanResult(flags=["injection_attempt"])
+        assert result.has_compliance_taint()
+
+    @pytest.mark.unit
+    def test_custom_blocked_not_taint(self) -> None:
+        """custom_blocked: is NOT a compliance-taint prefix."""
+        result = ScanResult(flags=["custom_blocked:foo"])
+        assert not result.has_compliance_taint()
+
+    @pytest.mark.unit
+    def test_no_flags_not_tainted(self) -> None:
+        result = ScanResult(flags=[])
+        assert not result.has_compliance_taint()
+
+    @pytest.mark.unit
+    def test_mixed_taint_and_non_taint(self) -> None:
+        result = ScanResult(flags=["custom_blocked:bar", "pii_detected:email"])
+        assert result.has_compliance_taint()
+
+    @pytest.mark.unit
+    def test_multiple_taint_flags(self) -> None:
+        result = ScanResult(flags=["phi_detected:mrn", "injection_attempt"])
+        assert result.has_compliance_taint()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

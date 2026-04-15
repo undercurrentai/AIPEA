@@ -296,6 +296,15 @@ enhancer = AIPEAEnhancer(
 enhancer._learning_engine.prune_events()
 ```
 
+| Compliance Feature | Behavior |
+|---|---|
+| TACTICAL mode | Never records (hard invariant) |
+| HIPAA mode | Blocks by default; opt in via `allow_hipaa_recording=True` |
+| GENERAL mode | Records normally |
+| Tainted feedback handling | Recorded for audit, excluded from averaging by default |
+
+**Taint-aware averaging (v1.6.0+):** Feedback on queries that fired compliance-relevant scanner flags (PII/PHI/classified/injection) is recorded to the audit log but excluded from strategy-performance averaging by default. This prevents feedback poisoning attacks (OWASP LLM Top 10 2026 LLM03). Opt into inclusion via `LearningPolicy(exclude_tainted_from_averaging=False)`.
+
 ## Integration
 
 AIPEA is designed as a standalone preprocessing layer for LLM systems. It integrates with:

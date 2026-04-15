@@ -1162,9 +1162,10 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full roadmap with 6 prioritized
 
 ### 11.1 Public Exports (`aipea/__init__.py`)
 
-> **Note**: The actual `__init__.py` exports 44 symbols (37 runtime classes/functions
-> plus the 6 exception types added in Wave C3 / ROADMAP §P5c plus
-> `AdaptiveLearningEngine` and `LearningPolicy` added in Wave D1 and compliance work).
+> **Note**: The actual `__init__.py` exports 50 symbols (as of ADR-004: 37 runtime
+> classes/functions + 6 exception types (Wave C3) + `AdaptiveLearningEngine`,
+> `LearningPolicy`, `LearningRecordResult` (Wave D1 + ADR-004) + 5 `FLAG_*`
+> constants (ADR-004)).
 > The listing below shows the full internal API surface (including non-exported
 > internals) for reference. Symbols marked with `# (not in __all__)` are
 > accessible but not part of the public API.
@@ -1180,8 +1181,8 @@ from aipea.enhancer import (
     reset_enhancer,
 )
 
-# Adaptive learning (Wave D1) + compliance policy
-from aipea.learning import AdaptiveLearningEngine, LearningPolicy
+# Adaptive learning (Wave D1) + compliance policy + ADR-004
+from aipea.learning import AdaptiveLearningEngine, LearningPolicy, LearningRecordResult
 
 # Shared data models
 from aipea.models import QueryAnalysis
@@ -1194,8 +1195,13 @@ from aipea._types import (
     get_model_family,          # canonical model family detector
 )
 
-# Security
+# Security + ADR-004 flag constants
 from aipea.security import (
+    FLAG_PII_DETECTED,                # ADR-004
+    FLAG_PHI_DETECTED,                # ADR-004
+    FLAG_CLASSIFIED_MARKER,           # ADR-004
+    FLAG_INJECTION_ATTEMPT,           # ADR-004
+    FLAG_CUSTOM_BLOCKED,              # ADR-004
     SecurityLevel,
     ComplianceMode,
     SecurityContext,
@@ -1272,6 +1278,7 @@ class AIPEAEnhancer:
         exa_api_key: str | None = None,
         firecrawl_api_key: str | None = None,
         enable_learning: bool = False,                          # Wave D1
+        learning_policy: LearningPolicy | None = None,          # v1.5.0
     ) -> None: ...
     # enable_learning=True initialises AdaptiveLearningEngine backed by
     # AIPEA_LEARNING_DB_PATH (default: aipea_learning.db). When enabled,
@@ -1304,12 +1311,15 @@ class AIPEAEnhancer:
     # the cached search_context so every model gets its own query-section
     # format (GPT markdown, Claude XML, Gemini numbered). (wave 18 #90)
 
-    async def record_feedback(                                  # Wave D1
+    async def record_feedback(                                  # Wave D1 + ADR-004
         self, result: EnhancementResult, score: float,
     ) -> None: ...
     # Records user feedback on an enhancement result for adaptive learning.
     # score in [-1.0, 1.0] (positive = good). No-op if learning is disabled.
     # Delegates to AdaptiveLearningEngine.arecord_feedback().
+    # ADR-004: threads result.scan_result.flags as scan_flags to the engine.
+    # Tainted feedback (PII/PHI/classified/injection) is recorded for audit
+    # but excluded from strategy_performance averaging by default.
 
     def close(self) -> None: ...
     def __enter__(self) -> AIPEAEnhancer: ...
@@ -1344,6 +1354,7 @@ class EnhancementResult:
     clarifications: list[str] = field(default_factory=list)     # v1.3.0
     quality_score: QualityScore | None = None                   # v1.3.0
     strategy_used: str = ""                                     # Wave D1
+    scan_result: ScanResult | None = None                       # ADR-004
 
     def to_dict(self) -> dict[str, Any]: ...
 ```

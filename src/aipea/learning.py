@@ -14,11 +14,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import json
 import logging
 import os
 import sqlite3
 import threading
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -26,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from aipea._types import QueryType
-from aipea.security import ComplianceMode
+from aipea.security import _COMPLIANCE_TAINT_PREFIXES, ComplianceMode
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +44,16 @@ class LearningPolicy:
             Default False (deny). TACTICAL mode always blocks regardless.
         retention_days: Max age of learning events in days. None = no limit.
         max_events: Max total events in learning_events table. None = no limit.
+        exclude_tainted_from_averaging: If True (the default), feedback
+            associated with a query that fired a compliance-taint scanner flag
+            is recorded to learning_events for audit but does NOT update
+            strategy_performance. See ADR-004.
     """
 
     allow_hipaa_recording: bool = False
     retention_days: int | None = None
     max_events: int | None = None
+    exclude_tainted_from_averaging: bool = True
 
     def __post_init__(self) -> None:
         if self.retention_days is not None and self.retention_days < 1:
@@ -67,6 +73,25 @@ class LearningEvent:
     feedback_score: float
     query_hash: str
     timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+
+@dataclass(frozen=True)
+class LearningRecordResult:
+    """Outcome of a record_feedback call.
+
+    Attributes:
+        recorded: True if the event was persisted to learning_events.
+        excluded_from_averaging: True if the event was persisted but NOT
+            aggregated into strategy_performance (taint-gated).
+        reason: Human-readable reason when recorded is False or when the
+            event was excluded from averaging.
+        taint_flags: The compliance-taint flags that fired (empty tuple = clean).
+    """
+
+    recorded: bool
+    excluded_from_averaging: bool
+    reason: str | None
+    taint_flags: tuple[str, ...] = ()
 
 
 class AdaptiveLearningEngine:
@@ -134,7 +159,9 @@ class AdaptiveLearningEngine:
                     feedback_score REAL NOT NULL,
                     query_hash TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                    compliance_mode TEXT NOT NULL DEFAULT 'general'
+                    compliance_mode TEXT NOT NULL DEFAULT 'general',
+                    taint_flags TEXT,
+                    excluded_from_averaging INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE TABLE IF NOT EXISTS strategy_performance (
                     query_type TEXT NOT NULL,
@@ -147,23 +174,29 @@ class AdaptiveLearningEngine:
                 );
                 """
             )
-            # Additive migration: add compliance_mode column to existing DBs
+            # Additive migration: add columns introduced in ADR-003 and ADR-004.
+            # Each column is added independently so a failure in one does not
+            # block the others; the engine degrades gracefully.
             columns = {
                 row[1]
                 for row in self._conn.execute("PRAGMA table_info(learning_events)").fetchall()
             }
-            if "compliance_mode" not in columns:
-                try:
-                    self._conn.execute(
-                        "ALTER TABLE learning_events "
-                        "ADD COLUMN compliance_mode TEXT NOT NULL DEFAULT 'general'"
-                    )
-                except sqlite3.Error:
-                    logger.warning(
-                        "Failed to add compliance_mode column to learning_events; "
-                        "compliance auditing unavailable",
-                        exc_info=True,
-                    )
+            additive: list[tuple[str, str]] = [
+                ("compliance_mode", "TEXT NOT NULL DEFAULT 'general'"),
+                ("taint_flags", "TEXT"),
+                ("excluded_from_averaging", "INTEGER NOT NULL DEFAULT 0"),
+            ]
+            for col, ddl in additive:
+                if col not in columns:
+                    try:
+                        self._conn.execute(f"ALTER TABLE learning_events ADD COLUMN {col} {ddl}")
+                    except sqlite3.Error:
+                        logger.warning(
+                            "Failed to add %s column to learning_events; "
+                            "compliance auditing reduced",
+                            col,
+                            exc_info=True,
+                        )
 
     @contextmanager
     def _with_db_lock(self) -> Iterator[sqlite3.Connection]:
@@ -201,7 +234,9 @@ class AdaptiveLearningEngine:
         strategy: str,
         score: float,
         compliance_mode: ComplianceMode | None = None,
-    ) -> None:
+        *,
+        scan_flags: Sequence[str] = (),
+    ) -> LearningRecordResult:
         """Record a feedback observation and update the running average.
 
         Parameters
@@ -216,53 +251,86 @@ class AdaptiveLearningEngine:
             Active compliance mode.  Defaults to GENERAL.  TACTICAL always
             blocks recording; HIPAA blocks unless the engine's
             ``LearningPolicy.allow_hipaa_recording`` is True.
+        scan_flags:
+            Security scanner flags from the originating query's ScanResult.
+            Compliance-taint flags (PII/PHI/classified/injection) gate
+            strategy_performance averaging per ADR-004.
         """
         mode = compliance_mode or ComplianceMode.GENERAL
         if not self._should_record(mode):
-            return
+            return LearningRecordResult(
+                recorded=False,
+                excluded_from_averaging=False,
+                reason=f"{mode.value}_blocked",
+            )
+
+        # Compute taint from scan flags
+        taint = tuple(
+            f for f in scan_flags if any(f.startswith(p) for p in _COMPLIANCE_TAINT_PREFIXES)
+        )
+        exclude = bool(taint) and self._policy.exclude_tainted_from_averaging
 
         clamped = max(-1.0, min(1.0, score))
         qtype = query_type.value
         qhash = hashlib.sha256(qtype.encode()).hexdigest()[:16]
         ts = datetime.now(UTC).isoformat()
+        taint_json = json.dumps(list(taint)) if taint else None
 
         try:
             with self._with_db_lock() as conn:
                 conn.execute(
                     "INSERT INTO learning_events "
                     "(timestamp, query_type, strategy_used, feedback_score, query_hash, "
-                    "compliance_mode) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
-                    (ts, qtype, strategy, clamped, qhash, mode.value),
+                    "compliance_mode, taint_flags, excluded_from_averaging) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (ts, qtype, strategy, clamped, qhash, mode.value, taint_json, int(exclude)),
                 )
-                # Upsert running average in strategy_performance
-                conn.execute(
-                    """\
-                    INSERT INTO strategy_performance
-                        (query_type, strategy, total_count, success_count,
-                         avg_score, last_updated)
-                    VALUES (?, ?, 1, ?, ?, ?)
-                    ON CONFLICT(query_type, strategy) DO UPDATE SET
-                        total_count = total_count + 1,
-                        success_count = success_count + CASE WHEN ? > 0.0 THEN 1 ELSE 0 END,
-                        avg_score = (avg_score * total_count + ?) / (total_count + 1),
-                        last_updated = ?
-                    """,
-                    (
-                        qtype,
-                        strategy,
-                        1 if clamped > 0.0 else 0,
-                        clamped,
-                        ts,
-                        # ON CONFLICT params:
-                        clamped,  # success_count CASE
-                        clamped,  # avg_score numerator
-                        ts,  # last_updated
-                    ),
-                )
+                if not exclude:
+                    # Upsert running average in strategy_performance
+                    conn.execute(
+                        """\
+                        INSERT INTO strategy_performance
+                            (query_type, strategy, total_count, success_count,
+                             avg_score, last_updated)
+                        VALUES (?, ?, 1, ?, ?, ?)
+                        ON CONFLICT(query_type, strategy) DO UPDATE SET
+                            total_count = total_count + 1,
+                            success_count = success_count + CASE WHEN ? > 0.0 THEN 1 ELSE 0 END,
+                            avg_score = (avg_score * total_count + ?) / (total_count + 1),
+                            last_updated = ?
+                        """,
+                        (
+                            qtype,
+                            strategy,
+                            1 if clamped > 0.0 else 0,
+                            clamped,
+                            ts,
+                            # ON CONFLICT params:
+                            clamped,  # success_count CASE
+                            clamped,  # avg_score numerator
+                            ts,  # last_updated
+                        ),
+                    )
                 conn.commit()
         except sqlite3.Error:
             logger.warning("Failed to record learning feedback", exc_info=True)
+            return LearningRecordResult(
+                recorded=False, excluded_from_averaging=False, reason="db_error"
+            )
+
+        if taint:
+            logger.info(
+                "Learning feedback recorded with compliance taint: flags=%s excluded=%s",
+                taint,
+                exclude,
+            )
+
+        return LearningRecordResult(
+            recorded=True,
+            excluded_from_averaging=exclude,
+            reason="tainted" if taint else None,
+            taint_flags=taint,
+        )
 
     def get_best_strategy(
         self,
@@ -317,9 +385,18 @@ class AdaptiveLearningEngine:
         strategy: str,
         score: float,
         compliance_mode: ComplianceMode | None = None,
-    ) -> None:
+        *,
+        scan_flags: Sequence[str] = (),
+    ) -> LearningRecordResult:
         """Async wrapper around :meth:`record_feedback`."""
-        await asyncio.to_thread(self.record_feedback, query_type, strategy, score, compliance_mode)
+        return await asyncio.to_thread(
+            self.record_feedback,
+            query_type,
+            strategy,
+            score,
+            compliance_mode,
+            scan_flags=scan_flags,
+        )
 
     async def aget_best_strategy(
         self,

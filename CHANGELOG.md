@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Taint-Aware Feedback Averaging (ADR-004)
+- `LearningPolicy.exclude_tainted_from_averaging` field (default `True`):
+  feedback associated with compliance-taint scanner flags (PII/PHI/classified/
+  injection) is recorded to `learning_events` for audit but excluded from
+  `strategy_performance` averaging by default.
+- `LearningRecordResult` frozen dataclass: typed return for
+  `AdaptiveLearningEngine.record_feedback` / `arecord_feedback` (replaces
+  `None`).
+- `FLAG_PII_DETECTED`, `FLAG_PHI_DETECTED`, `FLAG_CLASSIFIED_MARKER`,
+  `FLAG_INJECTION_ATTEMPT`, `FLAG_CUSTOM_BLOCKED` — canonical flag-prefix
+  constants in `security.py`.
+- `_COMPLIANCE_TAINT_PREFIXES` — internal tuple grouping the four
+  compliance-taint prefixes.
+- `ScanResult.has_compliance_taint()` method.
+- `EnhancementResult.scan_result` field (populated by `AIPEAEnhancer.enhance()`).
+- `taint_flags` (TEXT) and `excluded_from_averaging` (INTEGER) columns on
+  `learning_events` table; additive schema migration via loop-based pattern.
+- `LearningRecordResult` exported in `__init__.py` (44 → 50 public symbols).
+- ADR-004: Taint-Aware Feedback Averaging.
+- 38 new taint-awareness tests in `tests/test_learning_compliance.py`.
+
+### Changed
+- `AdaptiveLearningEngine.record_feedback` / `arecord_feedback` now return
+  `LearningRecordResult` instead of `None` and accept keyword-only
+  `scan_flags: Sequence[str] = ()`. Callers that ignored the previous `None`
+  return are unaffected.
+- `AIPEAEnhancer.record_feedback` threads `result.scan_result.flags` to the
+  engine and logs taint-exclusion decisions.
+- Schema migration in `_init_schema` refactored to loop-based pattern
+  (per-column graceful degradation).
+
+### Security
+- Closes feedback-poisoning vector per ADR-004: tainted feedback cannot shift
+  `strategy_performance.avg_score` when `exclude_tainted_from_averaging=True`
+  (the default). References OWASP LLM Top 10 2026 (LLM03) and NISTIR 8596.
+
 ## [1.5.0] - 2026-04-15
 
 ### Added — Compliance-Aware Adaptive Learning (2026-04-14)

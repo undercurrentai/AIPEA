@@ -56,7 +56,7 @@ from aipea.knowledge import (
 )
 
 # Adaptive learning
-from aipea.learning import AdaptiveLearningEngine, LearningPolicy
+from aipea.learning import AdaptiveLearningEngine, LearningPolicy, LearningRecordResult
 
 # Data models
 from aipea.models import QueryAnalysis
@@ -77,6 +77,11 @@ from aipea.search import (
 
 # Security
 from aipea.security import (
+    FLAG_CLASSIFIED_MARKER,
+    FLAG_CUSTOM_BLOCKED,
+    FLAG_INJECTION_ATTEMPT,
+    FLAG_PHI_DETECTED,
+    FLAG_PII_DETECTED,
     ComplianceHandler,
     ComplianceMode,
     ScanResult,
@@ -87,6 +92,11 @@ from aipea.security import (
 )
 
 __all__ = [
+    "FLAG_CLASSIFIED_MARKER",
+    "FLAG_CUSTOM_BLOCKED",
+    "FLAG_INJECTION_ATTEMPT",
+    "FLAG_PHI_DETECTED",
+    "FLAG_PII_DETECTED",
     "AIPEAConfig",
     "AIPEAEnhancer",
     "AIPEAError",
@@ -105,6 +115,7 @@ __all__ = [
     "KnowledgeSearchResult",
     "KnowledgeStoreError",
     "LearningPolicy",
+    "LearningRecordResult",
     "OfflineKnowledgeBase",
     "ProcessingTier",
     "PromptEngine",
