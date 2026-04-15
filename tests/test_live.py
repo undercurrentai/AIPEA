@@ -155,9 +155,9 @@ class TestPackageIntegrity:
         ]:
             assert mod is not None
 
-    def test_all_has_43_symbols(self):
-        # Wave D1 (2026-04-12) added AdaptiveLearningEngine. 42 → 43.
-        assert len(aipea.__all__) == 43
+    def test_all_has_44_symbols(self):
+        # Compliance-aware learning (2026-04-14) added LearningPolicy. 43 → 44.
+        assert len(aipea.__all__) == 44
 
     def test_version_matches_pyproject(self):
         assert aipea.__version__ == "1.4.0"

@@ -56,7 +56,7 @@ from aipea.knowledge import (
 )
 
 # Adaptive learning
-from aipea.learning import AdaptiveLearningEngine
+from aipea.learning import AdaptiveLearningEngine, LearningPolicy
 
 # Data models
 from aipea.models import QueryAnalysis
@@ -104,6 +104,7 @@ __all__ = [
     "KnowledgeNode",
     "KnowledgeSearchResult",
     "KnowledgeStoreError",
+    "LearningPolicy",
     "OfflineKnowledgeBase",
     "ProcessingTier",
     "PromptEngine",

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Compliance-Aware Adaptive Learning (2026-04-14)
+- `LearningPolicy` frozen dataclass: controls compliance-aware behavior of
+  `AdaptiveLearningEngine` (TACTICAL hard-locked never-record, HIPAA
+  default-deny with opt-in, GENERAL unchanged).
+- `compliance_mode` column on `learning_events` table for audit trail.
+  Additive schema migration via `PRAGMA table_info` + `ALTER TABLE ADD COLUMN`.
+- `prune_events()` / `aprune_events()` retention methods with configurable
+  `max_age_days` and `max_count` (mirrors `knowledge.py:prune_low_relevance`).
+- `AIPEAEnhancer.__init__` accepts `learning_policy` parameter; `record_feedback`
+  threads `security_context.compliance_mode` to the engine.
+- `LearningPolicy` exported in `__init__.py` (43 → 44 symbols).
+- Input validation on `LearningPolicy` and `prune_events` parameters.
+- ADR-003: Compliance-Aware Adaptive Learning Engine.
+- 34 new compliance tests in `tests/test_learning_compliance.py`.
+
 ### Fixed (Wave 20 — Bug Hunt)
 - **CRITICAL** `security.py`: Zero-width Unicode characters (ZWSP, ZWNJ, BOM,
   etc.) bypass injection detection, classified marker detection, and
