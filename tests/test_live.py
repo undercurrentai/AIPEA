@@ -1526,3 +1526,313 @@ class TestLiveAdaptiveLearning:
                 enhancer.close()
         finally:
             readonly.chmod(0o755)
+
+    # --- Group 5: Compliance Gates (standalone engine, no mocks) ---
+
+    def test_tactical_mode_blocks_all_recording(self, tmp_path: pytest.TempPathFactory) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+        from aipea.security import ComplianceMode
+
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db") as eng:
+            for _ in range(5):
+                eng.record_feedback(
+                    QueryType.TECHNICAL, "deep_research", 0.9, ComplianceMode.TACTICAL
+                )
+            stats = eng.get_stats()
+            assert stats["total_events"] == 0
+            assert stats["strategies_tracked"] == 0
+
+    def test_hipaa_mode_blocks_by_default(self, tmp_path: pytest.TempPathFactory) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+        from aipea.security import ComplianceMode
+
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db") as eng:
+            eng.record_feedback(QueryType.TECHNICAL, "deep_research", 0.9, ComplianceMode.HIPAA)
+            assert eng.get_stats()["total_events"] == 0
+
+    def test_hipaa_mode_records_with_opt_in(self, tmp_path: pytest.TempPathFactory) -> None:
+        from aipea.learning import AdaptiveLearningEngine, LearningPolicy
+        from aipea.security import ComplianceMode
+
+        policy = LearningPolicy(allow_hipaa_recording=True)
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db", policy=policy) as eng:
+            eng.record_feedback(QueryType.TECHNICAL, "deep_research", 0.9, ComplianceMode.HIPAA)
+            assert eng.get_stats()["total_events"] == 1
+
+    def test_general_mode_records_as_before(self, tmp_path: pytest.TempPathFactory) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+        from aipea.security import ComplianceMode
+
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db") as eng:
+            eng.record_feedback(QueryType.TECHNICAL, "deep_research", 0.9, ComplianceMode.GENERAL)
+            assert eng.get_stats()["total_events"] == 1
+
+    def test_fedramp_mode_follows_general(self, tmp_path: pytest.TempPathFactory) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+        from aipea.security import ComplianceMode
+
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db") as eng:
+            eng.record_feedback(QueryType.TECHNICAL, "deep_research", 0.9, ComplianceMode.FEDRAMP)
+            assert eng.get_stats()["total_events"] == 1
+
+    def test_tactical_blocks_even_with_hipaa_opt_in(self, tmp_path: pytest.TempPathFactory) -> None:
+        from aipea.learning import AdaptiveLearningEngine, LearningPolicy
+        from aipea.security import ComplianceMode
+
+        policy = LearningPolicy(allow_hipaa_recording=True)
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db", policy=policy) as eng:
+            eng.record_feedback(QueryType.TECHNICAL, "deep_research", 0.9, ComplianceMode.TACTICAL)
+            assert eng.get_stats()["total_events"] == 0
+
+    def test_compliance_mode_column_persisted(self, tmp_path: pytest.TempPathFactory) -> None:
+        from aipea.learning import AdaptiveLearningEngine, LearningPolicy
+        from aipea.security import ComplianceMode
+
+        policy = LearningPolicy(allow_hipaa_recording=True)
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db", policy=policy) as eng:
+            eng.record_feedback(QueryType.TECHNICAL, "deep_research", 0.8, ComplianceMode.GENERAL)
+            eng.record_feedback(QueryType.RESEARCH, "quick_facts", 0.7, ComplianceMode.HIPAA)
+            # Read raw SQL
+            rows = eng._conn.execute(
+                "SELECT compliance_mode FROM learning_events ORDER BY id"
+            ).fetchall()
+            assert [r[0] for r in rows] == ["general", "hipaa"]
+
+    def test_mixed_mode_recording(self, tmp_path: pytest.TempPathFactory) -> None:
+        from aipea.learning import AdaptiveLearningEngine, LearningPolicy
+        from aipea.security import ComplianceMode
+
+        policy = LearningPolicy(allow_hipaa_recording=True)
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db", policy=policy) as eng:
+            eng.record_feedback(QueryType.TECHNICAL, "a", 0.5, ComplianceMode.GENERAL)
+            eng.record_feedback(QueryType.TECHNICAL, "b", 0.6, ComplianceMode.HIPAA)
+            eng.record_feedback(QueryType.TECHNICAL, "c", 0.7, ComplianceMode.TACTICAL)
+            # TACTICAL blocked, other two recorded
+            assert eng.get_stats()["total_events"] == 2
+            modes = [
+                r[0]
+                for r in eng._conn.execute(
+                    "SELECT compliance_mode FROM learning_events ORDER BY id"
+                ).fetchall()
+            ]
+            assert modes == ["general", "hipaa"]
+
+    def test_learning_policy_validation_rejects_negatives(self) -> None:
+        from aipea.learning import LearningPolicy
+
+        with pytest.raises(ValueError, match="retention_days must be >= 1"):
+            LearningPolicy(retention_days=-1)
+        with pytest.raises(ValueError, match="max_events must be >= 0"):
+            LearningPolicy(max_events=-1)
+
+    # --- Group 6: Retention & Schema Migration ---
+
+    def test_prune_by_count_removes_oldest_first(self, tmp_path: pytest.TempPathFactory) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db") as eng:
+            for i in range(10):
+                eng.record_feedback(QueryType.TECHNICAL, f"strat_{i}", 0.5)
+            deleted = eng.prune_events(max_count=3)
+            assert deleted == 7
+            assert eng.get_stats()["total_events"] == 3
+            # Remaining should be the last 3 (highest IDs)
+            rows = eng._conn.execute(
+                "SELECT strategy_used FROM learning_events ORDER BY id"
+            ).fetchall()
+            assert [r[0] for r in rows] == ["strat_7", "strat_8", "strat_9"]
+
+    def test_prune_by_age_removes_old_events(self, tmp_path: pytest.TempPathFactory) -> None:
+        from datetime import UTC, datetime, timedelta
+
+        from aipea.learning import AdaptiveLearningEngine
+
+        db_path = tmp_path / "age.db"
+        with AdaptiveLearningEngine(db_path=db_path) as eng:
+            # Insert an old event via raw SQL
+            old_ts = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+            eng._conn.execute(
+                "INSERT INTO learning_events "
+                "(timestamp, query_type, strategy_used, feedback_score, "
+                "query_hash, created_at, compliance_mode) "
+                "VALUES (?, 'technical', 'old_strat', 0.5, 'abc', ?, 'general')",
+                (old_ts, old_ts),
+            )
+            eng._conn.commit()
+            # Insert a fresh event normally
+            eng.record_feedback(QueryType.TECHNICAL, "fresh_strat", 0.8)
+            assert eng.get_stats()["total_events"] == 2
+
+            deleted = eng.prune_events(max_age_days=7)
+            assert deleted == 1
+            assert eng.get_stats()["total_events"] == 1
+            row = eng._conn.execute("SELECT strategy_used FROM learning_events").fetchone()
+            assert row[0] == "fresh_strat"
+
+    def test_prune_uses_policy_defaults(self, tmp_path: pytest.TempPathFactory) -> None:
+        from aipea.learning import AdaptiveLearningEngine, LearningPolicy
+
+        policy = LearningPolicy(max_events=5)
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db", policy=policy) as eng:
+            for _ in range(12):
+                eng.record_feedback(QueryType.TECHNICAL, "strat", 0.5)
+            assert eng.get_stats()["total_events"] == 12
+            deleted = eng.prune_events()  # uses policy.max_events=5
+            assert deleted == 7
+            assert eng.get_stats()["total_events"] == 5
+
+    def test_prune_noop_when_no_policy_limits(self, tmp_path: pytest.TempPathFactory) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+
+        with AdaptiveLearningEngine(db_path=tmp_path / "learn.db") as eng:
+            for _ in range(5):
+                eng.record_feedback(QueryType.TECHNICAL, "strat", 0.5)
+            deleted = eng.prune_events()  # default policy: both None
+            assert deleted == 0
+            assert eng.get_stats()["total_events"] == 5
+
+    def test_schema_migration_adds_column_to_old_db(self, tmp_path: pytest.TempPathFactory) -> None:
+        import sqlite3
+
+        from aipea.learning import AdaptiveLearningEngine
+
+        db_path = tmp_path / "old_schema.db"
+        # Create DB with old schema (no compliance_mode column)
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript(
+            """\
+            CREATE TABLE learning_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                query_type TEXT NOT NULL,
+                strategy_used TEXT NOT NULL,
+                feedback_score REAL NOT NULL,
+                query_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE strategy_performance (
+                query_type TEXT NOT NULL,
+                strategy TEXT NOT NULL,
+                total_count INTEGER NOT NULL DEFAULT 0,
+                success_count INTEGER NOT NULL DEFAULT 0,
+                avg_score REAL NOT NULL DEFAULT 0.0,
+                last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (query_type, strategy)
+            );
+            """
+        )
+        conn.close()
+
+        # Open with new engine — should auto-migrate
+        with AdaptiveLearningEngine(db_path=db_path) as eng:
+            columns = {
+                row[1] for row in eng._conn.execute("PRAGMA table_info(learning_events)").fetchall()
+            }
+            assert "compliance_mode" in columns
+
+    def test_data_survives_migration(self, tmp_path: pytest.TempPathFactory) -> None:
+        import sqlite3
+
+        from aipea.learning import AdaptiveLearningEngine
+
+        db_path = tmp_path / "migrate_data.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript(
+            """\
+            CREATE TABLE learning_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                query_type TEXT NOT NULL,
+                strategy_used TEXT NOT NULL,
+                feedback_score REAL NOT NULL,
+                query_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE strategy_performance (
+                query_type TEXT NOT NULL,
+                strategy TEXT NOT NULL,
+                total_count INTEGER NOT NULL DEFAULT 0,
+                success_count INTEGER NOT NULL DEFAULT 0,
+                avg_score REAL NOT NULL DEFAULT 0.0,
+                last_updated TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (query_type, strategy)
+            );
+            """
+        )
+        # Insert 3 rows under old schema
+        for _i in range(3):
+            conn.execute(
+                "INSERT INTO learning_events "
+                "(timestamp, query_type, strategy_used, feedback_score, query_hash) "
+                "VALUES ('2026-01-01', 'technical', 'strat', 0.5, 'hash')"
+            )
+        conn.commit()
+        conn.close()
+
+        with AdaptiveLearningEngine(db_path=db_path) as eng:
+            assert eng.get_stats()["total_events"] == 3
+            # Migrated rows should default to 'general'
+            rows = eng._conn.execute("SELECT compliance_mode FROM learning_events").fetchall()
+            assert all(r[0] == "general" for r in rows)
+
+    # --- Group 7: Enhancer Integration with Compliance ---
+
+    @pytest.mark.asyncio()
+    async def test_enhancer_threads_compliance_mode_to_learning(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from aipea.security import ComplianceMode
+
+        monkeypatch.setenv("AIPEA_LEARNING_DB_PATH", str(tmp_path / "learn.db"))
+        # Default policy: HIPAA blocked
+        enhancer = AIPEAEnhancer(enable_learning=True, default_compliance=ComplianceMode.HIPAA)
+        try:
+            result = await enhancer.enhance("test query", model_id="gpt-4")
+            await enhancer.record_feedback(result, score=0.9)
+            # HIPAA default-deny → no event
+            assert enhancer._learning_engine is not None
+            assert enhancer._learning_engine.get_stats()["total_events"] == 0
+        finally:
+            enhancer.close()
+
+        # Now with GENERAL — should record
+        monkeypatch.setenv("AIPEA_LEARNING_DB_PATH", str(tmp_path / "learn2.db"))
+        enhancer2 = AIPEAEnhancer(enable_learning=True, default_compliance=ComplianceMode.GENERAL)
+        try:
+            result2 = await enhancer2.enhance("test query 2", model_id="gpt-4")
+            await enhancer2.record_feedback(result2, score=0.9)
+            assert enhancer2._learning_engine is not None
+            assert enhancer2._learning_engine.get_stats()["total_events"] == 1
+        finally:
+            enhancer2.close()
+
+    @pytest.mark.asyncio()
+    async def test_enhancer_with_learning_policy(
+        self, tmp_path: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from aipea.learning import LearningPolicy
+        from aipea.security import ComplianceMode
+
+        monkeypatch.setenv("AIPEA_LEARNING_DB_PATH", str(tmp_path / "learn.db"))
+        policy = LearningPolicy(allow_hipaa_recording=True)
+        enhancer = AIPEAEnhancer(
+            enable_learning=True,
+            default_compliance=ComplianceMode.HIPAA,
+            learning_policy=policy,
+        )
+        try:
+            # Use a HIPAA-allowed model (gpt-4 is not in the allowed list)
+            result = await enhancer.enhance("medical query", model_id="claude-opus-4-6")
+            await enhancer.record_feedback(result, score=0.8)
+            assert enhancer._learning_engine is not None
+            assert enhancer._learning_engine.get_stats()["total_events"] == 1
+        finally:
+            enhancer.close()
+
+    def test_enhancer_learning_policy_import_from_top_level(self) -> None:
+        from aipea import LearningPolicy
+
+        policy = LearningPolicy(allow_hipaa_recording=True, retention_days=30, max_events=500)
+        assert policy.allow_hipaa_recording is True
+        assert policy.retention_days == 30
+        assert policy.max_events == 500
