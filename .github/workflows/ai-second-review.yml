@@ -439,7 +439,6 @@ jobs:
           npx -y @anthropic-ai/claude-code@2.1.108 \
             --model claude-opus-4-6 \
             --max-turns 3 \
-            --output-last-message claude_review.md \
             --print \
             --allowedTools "Read" \
             "You are the Claude half of AIPEA's triple-AI second-reviewer gate.
@@ -470,7 +469,8 @@ jobs:
           Bulleted list with file:line evidence. _None._ if APPROVE/COMMENT.
           ## Non-blocking observations
           ## Specific line callouts
-          ## What I did NOT review"
+          ## What I did NOT review" \
+            > claude_review.md
 
       - name: Load review body into env
         if: always() && steps.diff.outputs.diff_empty != 'true'
