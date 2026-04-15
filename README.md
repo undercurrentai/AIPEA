@@ -33,7 +33,7 @@ User Query → SecurityScanner → QueryAnalyzer → SearchOrchestrator → Prom
 | `search` | Multi-provider search orchestration (Exa, Firecrawl, Context7) |
 | `knowledge` | Offline knowledge base with SQLite storage and domain-aware retrieval |
 | `engine` | Model-specific prompt formatting, tier-based processing (Offline/Tactical/Strategic) |
-| `learning` | Adaptive strategy learning — records user feedback, tracks per-strategy performance, suggests better strategies over time |
+| `learning` | Adaptive strategy learning with taint-aware feedback averaging — records user feedback, excludes compliance-tainted input from strategy scoring (ADR-004) |
 | `enhancer` | High-level facade coordinating the full pipeline |
 
 ### Processing Tiers

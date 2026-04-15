@@ -1,5 +1,5 @@
 # CLAUDE.md - AIPEA
-> **Agent Contract v3.0.5** (governs this file) | **Library:** `aipea` v1.5.0 (PyPI) | Updated: 2026-04-15 | Owner: @joshuakirby
+> **Agent Contract v3.0.5** (governs this file) | **Library:** `aipea` v1.6.0 (PyPI) | Updated: 2026-04-15 | Owner: @joshuakirby
 >
 > *Note: the `version` field below is the version of this Agent Contract document, not the AIPEA library. The library version lives in `pyproject.toml` and `src/aipea/__init__.py`.*
 
@@ -29,7 +29,7 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~10,495 (as of v1.5.0, 2026-04-15) |
+| **Source LOC** | ~10,695 (as of v1.6.0, 2026-04-15) |
 | **Exports** | 50 symbols in `__all__` (as of ADR-004; was 44 in v1.5.0) |
 | **Build backend** | hatchling — **do NOT run `poetry install` / `poetry lock` / `poetry run` in this directory**. It silently creates an orphan venv in `~/Library/Caches/pypoetry/virtualenvs/aipea-*`. Use `make install` (pip + `.venv/`). |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
