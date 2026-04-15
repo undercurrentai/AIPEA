@@ -171,8 +171,8 @@ enhancement call for the same caller.
   risk, handled by the graceful-degradation precedent from ADR-003.
 - `EnhancementResult` gains one new field; public API surface grows by one
   attribute.
-- `LearningRecordResult` adds one export (44 → 45 public symbols); a
-  minor version bump per SemVer is appropriate.
+- `LearningRecordResult` + 5 `FLAG_*` constants add 6 exports
+  (44 → 50 public symbols); a minor version bump per SemVer is appropriate.
 
 ### Neutral
 
