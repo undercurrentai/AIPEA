@@ -212,21 +212,23 @@ jobs:
             echo "::error::gpt-5.4-pro review file missing or empty — fail closed."
             exit 1
           fi
-          # Extract the first non-blank line after "## Verdict", strip backticks and whitespace
-          verdict=$(sed -n '/^## *Verdict/,/^##/{/^## *Verdict/d;/^##/d;/^$/d;p;}' gpt_review.md \
-            | head -1 | tr -d '`' | xargs)
-          # Normalise to uppercase for exact match
-          verdict_upper=$(echo "${verdict}" | tr '[:lower:]' '[:upper:]')
+          # Extract the first non-blank line after "## Verdict", strip
+          # markdown formatting (backticks, bold **), take FIRST WORD only
+          # (models sometimes append explanations like "COMMENT — trivial..."),
+          # then normalise to uppercase for exact match.
+          raw_verdict=$(sed -n '/^## *Verdict/,/^##/{/^## *Verdict/d;/^##/d;/^$/d;p;}' gpt_review.md \
+            | head -1 | tr -d '`*' | xargs)
+          verdict_upper=$(echo "${raw_verdict}" | awk '{print toupper($1)}'  )
           case "${verdict_upper}" in
             APPROVE|COMMENT)
-              echo "Verdict: ${verdict} — no blocking concerns."
+              echo "Verdict: ${verdict_upper} (raw: ${raw_verdict}) — no blocking concerns."
               ;;
             REQUEST_CHANGES)
               echo "::error::gpt-5.4-pro verdict: REQUEST_CHANGES — PR must address blocking concerns before merge."
               exit 1
               ;;
             *)
-              echo "::error::gpt-5.4-pro verdict '${verdict:-<empty>}' not recognised — fail closed."
+              echo "::error::gpt-5.4-pro verdict '${verdict_upper}' (raw: '${raw_verdict:-<empty>}') not recognised — fail closed."
               exit 1
               ;;
           esac
@@ -364,19 +366,19 @@ jobs:
             echo "::error::Codex review file missing or empty — fail closed."
             exit 1
           fi
-          verdict=$(sed -n '/^## *Verdict/,/^##/{/^## *Verdict/d;/^##/d;/^$/d;p;}' codex_review.md \
-            | head -1 | tr -d '`' | xargs)
-          verdict_upper=$(echo "${verdict}" | tr '[:lower:]' '[:upper:]')
+          raw_verdict=$(sed -n '/^## *Verdict/,/^##/{/^## *Verdict/d;/^##/d;/^$/d;p;}' codex_review.md \
+            | head -1 | tr -d '`*' | xargs)
+          verdict_upper=$(echo "${raw_verdict}" | awk '{print toupper($1)}')
           case "${verdict_upper}" in
             APPROVE|COMMENT)
-              echo "Verdict: ${verdict} — no blocking concerns."
+              echo "Verdict: ${verdict_upper} (raw: ${raw_verdict}) — no blocking concerns."
               ;;
             REQUEST_CHANGES)
               echo "::error::Codex verdict: REQUEST_CHANGES — PR must address blocking concerns before merge."
               exit 1
               ;;
             *)
-              echo "::error::Codex verdict '${verdict:-<empty>}' not recognised — fail closed."
+              echo "::error::Codex verdict '${verdict_upper}' (raw: '${raw_verdict:-<empty>}') not recognised — fail closed."
               exit 1
               ;;
           esac
@@ -469,7 +471,7 @@ jobs:
               if (/^## *Verdict/.test(line)) { inVerdict = true; continue; }
               if (inVerdict && /^##/.test(line)) break;
               if (inVerdict && line.trim()) {
-                verdict = line.replace(/`/g, '').trim().toUpperCase();
+                verdict = line.replace(/[`*]/g, '').trim().split(/\s/)[0].toUpperCase();
                 break;
               }
             }
