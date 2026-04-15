@@ -86,10 +86,12 @@ Security fixes are backported to the current minor release line only.
 
 | Version | Supported          |
 |---------|--------------------|
-| 1.3.x   | Yes                |
-| < 1.3   | No — upgrade to 1.3.x |
+| 1.6.x   | Yes                |
+| 1.5.x   | Security fixes only |
+| 1.4.x   | Security fixes only |
+| < 1.4   | No — upgrade to 1.6.x |
 
-Users of any pre-`1.3.3` version should upgrade immediately — `1.3.3` closes a documented HIPAA-mode compliance leak (#96), a ReDoS (#107), and 11 other bugs from Wave 19. See `CHANGELOG.md` `[1.3.3]` for details.
+Users of any pre-`1.4.0` version should upgrade — `1.6.0` closes a feedback-poisoning vector (ADR-004), and `1.3.3` closed a HIPAA-mode compliance leak (#96) and ReDoS (#107). See `CHANGELOG.md` for details.
 
 ## Credits
 
@@ -97,4 +99,4 @@ We credit reporters (with permission) in the release notes of the fix. If you pr
 
 ---
 
-*AIPEA Security Policy | Owner: @joshuakirby | Effective: v1.3.3 (2026-04-11)*
+*AIPEA Security Policy | Owner: @joshuakirby | Effective: v1.6.0 (2026-04-15)*
