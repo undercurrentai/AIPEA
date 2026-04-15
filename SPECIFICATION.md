@@ -1161,9 +1161,9 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full roadmap with 6 prioritized
 
 ### 11.1 Public Exports (`aipea/__init__.py`)
 
-> **Note**: The actual `__init__.py` exports 43 symbols (36 runtime classes/functions
+> **Note**: The actual `__init__.py` exports 44 symbols (37 runtime classes/functions
 > plus the 6 exception types added in Wave C3 / ROADMAP §P5c plus
-> `AdaptiveLearningEngine` added in Wave D1).
+> `AdaptiveLearningEngine` and `LearningPolicy` added in Wave D1 and compliance work).
 > The listing below shows the full internal API surface (including non-exported
 > internals) for reference. Symbols marked with `# (not in __all__)` are
 > accessible but not part of the public API.
@@ -1179,8 +1179,8 @@ from aipea.enhancer import (
     reset_enhancer,
 )
 
-# Adaptive learning (Wave D1)
-from aipea.learning import AdaptiveLearningEngine
+# Adaptive learning (Wave D1) + compliance policy
+from aipea.learning import AdaptiveLearningEngine, LearningPolicy
 
 # Shared data models
 from aipea.models import QueryAnalysis

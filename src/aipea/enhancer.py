@@ -70,6 +70,7 @@ from aipea.security import (
 
 if TYPE_CHECKING:
     from aipea.engine import OfflineTierProcessor  # used as type hint for _ollama_processor
+    from aipea.learning import LearningPolicy  # used as type hint for __init__ param
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +264,7 @@ class AIPEAEnhancer:
         exa_api_key: str | None = None,
         firecrawl_api_key: str | None = None,
         enable_learning: bool = False,
+        learning_policy: LearningPolicy | None = None,
     ) -> None:
         """Initialize the prompt enhancement facade.
 
@@ -273,6 +275,9 @@ class AIPEAEnhancer:
             exa_api_key: Optional API key for Exa search provider
             firecrawl_api_key: Optional API key for Firecrawl provider
             enable_learning: Whether to enable adaptive strategy learning
+            learning_policy: Compliance-aware policy for the learning engine.
+                Controls which compliance modes may persist feedback and
+                configures retention limits.  See :class:`LearningPolicy`.
         """
         self._enable_enhancement = enable_enhancement
         self._storage_tier = storage_tier
@@ -313,9 +318,10 @@ class AIPEAEnhancer:
         self._learning_engine: AdaptiveLearningEngine | None = None
         if enable_learning:
             try:
-                from aipea.learning import AdaptiveLearningEngine
+                from aipea.learning import AdaptiveLearningEngine, LearningPolicy
 
-                self._learning_engine = AdaptiveLearningEngine()
+                policy = learning_policy or LearningPolicy()
+                self._learning_engine = AdaptiveLearningEngine(policy=policy)
             except (sqlite3.Error, OSError, RuntimeError) as e:
                 logger.warning("Failed to initialize learning engine: %s", e)
                 self._learning_engine = None
@@ -1282,6 +1288,10 @@ class AIPEAEnhancer:
     async def record_feedback(self, result: EnhancementResult, score: float) -> None:
         """Record user feedback on an enhancement result for adaptive learning.
 
+        Compliance gating is handled by the underlying
+        :class:`~aipea.learning.AdaptiveLearningEngine` — TACTICAL mode always
+        blocks, HIPAA blocks unless opted in via ``LearningPolicy``.
+
         Args:
             result: The enhancement result to provide feedback on
             score: Satisfaction score in [-1.0, 1.0] (positive = good)
@@ -1291,6 +1301,7 @@ class AIPEAEnhancer:
                 query_type=result.query_analysis.query_type,
                 strategy=result.strategy_used,
                 score=score,
+                compliance_mode=result.security_context.compliance_mode,
             )
 
     def _update_avg_time(self, new_time_ms: float) -> None:

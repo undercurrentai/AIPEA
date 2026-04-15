@@ -146,10 +146,12 @@ zero-external-deps-in-core principle.
 **Implementation**:
 - `src/aipea/learning.py` — SQLite-backed strategy performance tracking
   with per-query-type running averages and learned strategy suggestions
-- `AdaptiveLearningEngine` exported in `__init__.py` (43 symbols)
+- `AdaptiveLearningEngine` + `LearningPolicy` exported in `__init__.py` (44 symbols, as of 2026-04-14)
 - `EnhancementResult.strategy_used` field surfaces the effective strategy
 - `AIPEAEnhancer(enable_learning=True)` opt-in + `record_feedback(result, score)`
-- 18 unit tests + 6 enhancer integration tests + 15 live tests (PR #32)
+- Compliance-aware gating: TACTICAL hard-locked, HIPAA default-deny, GENERAL unchanged (ADR-003)
+- Configurable retention via `LearningPolicy(retention_days=N, max_events=N)` + `prune_events()`
+- 18 unit tests + 6 enhancer integration tests + 15 live tests (PR #32) + 34 compliance tests
 
 ---
 

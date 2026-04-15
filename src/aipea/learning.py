@@ -21,16 +21,41 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from aipea._types import QueryType
+from aipea.security import ComplianceMode
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_DB_PATH = "aipea_learning.db"
 _MIN_SAMPLES = 3
+
+
+@dataclass(frozen=True)
+class LearningPolicy:
+    """Controls compliance-aware behavior of the AdaptiveLearningEngine.
+
+    Attributes:
+        allow_hipaa_recording: If True, permit recording in HIPAA mode.
+            Default False (deny). TACTICAL mode always blocks regardless.
+        retention_days: Max age of learning events in days. None = no limit.
+        max_events: Max total events in learning_events table. None = no limit.
+    """
+
+    allow_hipaa_recording: bool = False
+    retention_days: int | None = None
+    max_events: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.retention_days is not None and self.retention_days < 1:
+            msg = f"retention_days must be >= 1 (got {self.retention_days})"
+            raise ValueError(msg)
+        if self.max_events is not None and self.max_events < 0:
+            msg = f"max_events must be >= 0 (got {self.max_events})"
+            raise ValueError(msg)
 
 
 @dataclass(frozen=True)
@@ -57,7 +82,12 @@ class AdaptiveLearningEngine:
         ``AIPEA_LEARNING_DB_PATH`` env var, or ``aipea_learning.db``.
     """
 
-    def __init__(self, db_path: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        db_path: str | Path | None = None,
+        policy: LearningPolicy | None = None,
+    ) -> None:
+        self._policy = policy or LearningPolicy()
         resolved = db_path or os.environ.get("AIPEA_LEARNING_DB_PATH", _DEFAULT_DB_PATH)
         self._db_path = Path(resolved)
         self._db_lock = threading.RLock()
@@ -103,7 +133,8 @@ class AdaptiveLearningEngine:
                     strategy_used TEXT NOT NULL,
                     feedback_score REAL NOT NULL,
                     query_hash TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    compliance_mode TEXT NOT NULL DEFAULT 'general'
                 );
                 CREATE TABLE IF NOT EXISTS strategy_performance (
                     query_type TEXT NOT NULL,
@@ -116,6 +147,23 @@ class AdaptiveLearningEngine:
                 );
                 """
             )
+            # Additive migration: add compliance_mode column to existing DBs
+            columns = {
+                row[1]
+                for row in self._conn.execute("PRAGMA table_info(learning_events)").fetchall()
+            }
+            if "compliance_mode" not in columns:
+                try:
+                    self._conn.execute(
+                        "ALTER TABLE learning_events "
+                        "ADD COLUMN compliance_mode TEXT NOT NULL DEFAULT 'general'"
+                    )
+                except sqlite3.Error:
+                    logger.warning(
+                        "Failed to add compliance_mode column to learning_events; "
+                        "compliance auditing unavailable",
+                        exc_info=True,
+                    )
 
     @contextmanager
     def _with_db_lock(self) -> Iterator[sqlite3.Connection]:
@@ -127,6 +175,23 @@ class AdaptiveLearningEngine:
             yield self._conn
 
     # ------------------------------------------------------------------
+    # Compliance gating
+    # ------------------------------------------------------------------
+
+    def _should_record(self, mode: ComplianceMode) -> bool:
+        """Check if recording is permitted for the given compliance mode."""
+        if mode == ComplianceMode.TACTICAL:
+            logger.debug("Learning record blocked: TACTICAL mode forbids persistence")
+            return False
+        if mode == ComplianceMode.HIPAA and not self._policy.allow_hipaa_recording:
+            logger.info(
+                "Learning record skipped: HIPAA mode requires explicit opt-in "
+                "via LearningPolicy(allow_hipaa_recording=True)"
+            )
+            return False
+        return True
+
+    # ------------------------------------------------------------------
     # Public API — sync
     # ------------------------------------------------------------------
 
@@ -135,6 +200,7 @@ class AdaptiveLearningEngine:
         query_type: QueryType,
         strategy: str,
         score: float,
+        compliance_mode: ComplianceMode | None = None,
     ) -> None:
         """Record a feedback observation and update the running average.
 
@@ -146,7 +212,15 @@ class AdaptiveLearningEngine:
             The strategy name that was used for enhancement.
         score:
             User satisfaction score in ``[-1.0, 1.0]``.  Clamped if outside.
+        compliance_mode:
+            Active compliance mode.  Defaults to GENERAL.  TACTICAL always
+            blocks recording; HIPAA blocks unless the engine's
+            ``LearningPolicy.allow_hipaa_recording`` is True.
         """
+        mode = compliance_mode or ComplianceMode.GENERAL
+        if not self._should_record(mode):
+            return
+
         clamped = max(-1.0, min(1.0, score))
         qtype = query_type.value
         qhash = hashlib.sha256(qtype.encode()).hexdigest()[:16]
@@ -156,9 +230,10 @@ class AdaptiveLearningEngine:
             with self._with_db_lock() as conn:
                 conn.execute(
                     "INSERT INTO learning_events "
-                    "(timestamp, query_type, strategy_used, feedback_score, query_hash) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (ts, qtype, strategy, clamped, qhash),
+                    "(timestamp, query_type, strategy_used, feedback_score, query_hash, "
+                    "compliance_mode) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (ts, qtype, strategy, clamped, qhash, mode.value),
                 )
                 # Upsert running average in strategy_performance
                 conn.execute(
@@ -241,9 +316,10 @@ class AdaptiveLearningEngine:
         query_type: QueryType,
         strategy: str,
         score: float,
+        compliance_mode: ComplianceMode | None = None,
     ) -> None:
         """Async wrapper around :meth:`record_feedback`."""
-        await asyncio.to_thread(self.record_feedback, query_type, strategy, score)
+        await asyncio.to_thread(self.record_feedback, query_type, strategy, score, compliance_mode)
 
     async def aget_best_strategy(
         self,
@@ -252,6 +328,79 @@ class AdaptiveLearningEngine:
     ) -> str | None:
         """Async wrapper around :meth:`get_best_strategy`."""
         return await asyncio.to_thread(self.get_best_strategy, query_type, min_samples)
+
+    # ------------------------------------------------------------------
+    # Retention
+    # ------------------------------------------------------------------
+
+    def prune_events(
+        self,
+        max_age_days: int | None = None,
+        max_count: int | None = None,
+    ) -> int:
+        """Remove old or excess learning events.
+
+        Falls back to ``LearningPolicy`` defaults when parameters are ``None``.
+
+        Parameters
+        ----------
+        max_age_days:
+            Delete events older than this many days.
+        max_count:
+            Keep at most this many events (FIFO by ``created_at``).
+
+        Returns
+        -------
+        int
+            Number of events deleted.
+        """
+        age = max_age_days if max_age_days is not None else self._policy.retention_days
+        count = max_count if max_count is not None else self._policy.max_events
+
+        if age is not None and age < 1:
+            msg = f"max_age_days must be >= 1 (got {age})"
+            raise ValueError(msg)
+        if count is not None and count < 0:
+            msg = f"max_count must be >= 0 (got {count})"
+            raise ValueError(msg)
+
+        if age is None and count is None:
+            return 0
+
+        deleted = 0
+        try:
+            with self._with_db_lock() as conn:
+                if age is not None:
+                    cutoff = (datetime.now(UTC) - timedelta(days=age)).isoformat()
+                    cursor = conn.execute(
+                        "DELETE FROM learning_events WHERE created_at < ?",
+                        (cutoff,),
+                    )
+                    deleted += cursor.rowcount
+                if count is not None:
+                    total = conn.execute("SELECT COUNT(*) FROM learning_events").fetchone()[0]
+                    excess = total - count
+                    if excess > 0:
+                        cursor = conn.execute(
+                            "DELETE FROM learning_events WHERE id IN "
+                            "(SELECT id FROM learning_events "
+                            "ORDER BY created_at ASC LIMIT ?)",
+                            (excess,),
+                        )
+                        deleted += cursor.rowcount
+                if deleted > 0:
+                    conn.commit()
+        except sqlite3.Error:
+            logger.warning("Failed to prune learning events", exc_info=True)
+        return deleted
+
+    async def aprune_events(
+        self,
+        max_age_days: int | None = None,
+        max_count: int | None = None,
+    ) -> int:
+        """Async wrapper around :meth:`prune_events`."""
+        return await asyncio.to_thread(self.prune_events, max_age_days, max_count)
 
     # ------------------------------------------------------------------
     # Lifecycle
