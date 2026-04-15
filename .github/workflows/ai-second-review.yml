@@ -425,6 +425,9 @@ jobs:
         uses: anthropics/claude-code-action@c7c8889b30499b4e46f4c32b892e43cd364bc2fe # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Disable comment-trigger mode — this workflow is path-triggered,
+          # not comment-triggered. Empty string forces direct execution.
+          trigger_phrase: ""
           prompt: |
             You are the Claude half of AIPEA's triple-AI second-reviewer gate.
             Your counterparts are gpt-5.4-pro (single-turn reasoning) and
