@@ -30,7 +30,7 @@ token_budget: 8000
 | **Coverage floor** | 75% |
 | **License** | MIT |
 | **Source LOC** | ~10,495 (as of v1.5.0, 2026-04-15) |
-| **Exports** | 44 symbols in `__all__` (37 runtime + 6 exception types + `__version__`) |
+| **Exports** | 50 symbols in `__all__` (as of ADR-004; was 44 in v1.5.0) |
 | **Build backend** | hatchling — **do NOT run `poetry install` / `poetry lock` / `poetry run` in this directory**. It silently creates an orphan venv in `~/Library/Caches/pypoetry/virtualenvs/aipea-*`. Use `make install` (pip + `.venv/`). |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 

@@ -51,6 +51,10 @@ AIPEA is a **prompt-preprocessing library**. Its security layer is designed for 
 - **HIPAA / TACTICAL modes are detection + allowlist only**. They are not a substitute for a compliant data pipeline, access controls, encryption, or audit logging. See `src/aipea/security.py` and the README "Compliance Modes" section for the exact behavior of each mode.
 - **`ComplianceMode.FEDRAMP` is deprecated (v1.3.4) and scheduled for removal in v2.0.0.** AIPEA does not implement FedRAMP controls. The enum value was a config-only stub with no behavioral enforcement and is retained only as a deprecated alias for API back-compat through the v1.x line. Constructing a `ComplianceHandler` with `FEDRAMP` now emits a `DeprecationWarning`. Do not ship AIPEA's FedRAMP mode to a FedRAMP environment; migrate to `ComplianceMode.GENERAL` and implement FedRAMP controls in your own application layer. Decision rationale: [`docs/adr/ADR-002-fedramp-removal.md`](docs/adr/ADR-002-fedramp-removal.md).
 
+### Taint-aware feedback averaging (ADR-004)
+
+Feedback recorded by `AdaptiveLearningEngine` is taint-aware. Feedback associated with queries that fired compliance-relevant scanner flags (PHI/PII/classified/injection) is retained in the audit log (`learning_events` table with `taint_flags` and `excluded_from_averaging` columns) but excluded from strategy-performance averaging by default. This closes the stateful feedback-poisoning vector identified by OWASP LLM Top 10 2026 (LLM03) and satisfies audit trail completeness requirements from NISTIR 8596. Integrators may opt into inclusion via `LearningPolicy(exclude_tainted_from_averaging=False)`.
+
 ## Security Measures in Development
 
 AIPEA applies defense-in-depth to its own codebase:

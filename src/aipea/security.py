@@ -25,9 +25,25 @@ import unicodedata
 import warnings
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Final
 
 logger = logging.getLogger(__name__)
+
+# Canonical compliance-taint flag prefixes (ScanResult.flags prefix strings).
+# Bare-string call sites inside this module and enhancer.py are left intact
+# to minimize diff size; new code should prefer these constants.
+FLAG_PII_DETECTED: Final[str] = "pii_detected:"
+FLAG_PHI_DETECTED: Final[str] = "phi_detected:"
+FLAG_CLASSIFIED_MARKER: Final[str] = "classified_marker:"
+FLAG_INJECTION_ATTEMPT: Final[str] = "injection_attempt"
+FLAG_CUSTOM_BLOCKED: Final[str] = "custom_blocked:"
+
+_COMPLIANCE_TAINT_PREFIXES: Final[tuple[str, ...]] = (
+    FLAG_PII_DETECTED,
+    FLAG_PHI_DETECTED,
+    FLAG_CLASSIFIED_MARKER,
+    FLAG_INJECTION_ATTEMPT,
+)
 
 # Common cross-script confusable characters mapped to ASCII equivalents.
 # Used to defeat homoglyph bypass attacks where adversaries substitute
@@ -260,6 +276,17 @@ class ScanResult:
             True if injection attempts were found
         """
         return "injection_attempt" in self.flags
+
+    def has_compliance_taint(self) -> bool:
+        """Check if any flag matches a compliance-taint prefix.
+
+        Compliance-taint flags are PII, PHI, classified markers, and injection
+        attempts — the subset that should gate feedback averaging per ADR-004.
+
+        Returns:
+            True if any flag is a compliance-taint flag
+        """
+        return any(f.startswith(p) for f in self.flags for p in _COMPLIANCE_TAINT_PREFIXES)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation.
@@ -866,6 +893,11 @@ def quick_scan(query: str, mode: ComplianceMode = ComplianceMode.GENERAL) -> Sca
 
 
 __all__ = [
+    "FLAG_CLASSIFIED_MARKER",
+    "FLAG_CUSTOM_BLOCKED",
+    "FLAG_INJECTION_ATTEMPT",
+    "FLAG_PHI_DETECTED",
+    "FLAG_PII_DETECTED",
     "ComplianceHandler",
     "ComplianceMode",
     "ScanResult",
