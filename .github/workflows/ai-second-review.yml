@@ -62,7 +62,8 @@ on:
 permissions:
   contents: read
   pull-requests: write  # post PR comments
-  id-token: write       # required by anthropics/claude-code-action@v1
+  # id-token: write was needed by claude-code-action (OIDC); no longer
+  # required after switching to direct CLI invocation.
 
 concurrency:
   # Cancel superseded runs if the PR is updated mid-review — no point
@@ -430,12 +431,17 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -euo pipefail
-          npx -y @anthropic-ai/claude-code@latest \
+          # Scrub secrets from env before giving Claude shell access.
+          # ANTHROPIC_API_KEY is consumed by npx at startup, then removed.
+          _AIPEA_KEY="${ANTHROPIC_API_KEY}"
+          unset ANTHROPIC_API_KEY
+          ANTHROPIC_API_KEY="${_AIPEA_KEY}" \
+          npx -y @anthropic-ai/claude-code@2.1.108 \
             --model claude-opus-4-6 \
             --max-turns 3 \
             --output-file claude_review.md \
             --print \
-            --allowedTools "Read,Bash(cat:*)" \
+            --allowedTools "Read" \
             "You are the Claude half of AIPEA's triple-AI second-reviewer gate.
           Your counterparts are gpt-5.4-pro (single-turn reasoning) and
           Codex CLI with gpt-5.3-codex (multi-turn agentic tool-use).

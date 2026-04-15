@@ -85,14 +85,12 @@ _CONFUSABLE_MAP: dict[str, str] = {
 _CONFUSABLE_TRANS = str.maketrans(_CONFUSABLE_MAP)
 
 # Zero-width and invisible formatting characters that survive NFKC
-# normalization.  Three categories:
-# 1. Space-like: replaced with real space (injection \s patterns fire)
-# 2. Line-break-like: replaced with \n (injection [\r\n] patterns fire)
-# 3. Joiners/marks: stripped (reconstitutes split words for \b patterns)
-# (#108)
-_ZW_SPACE_RE = re.compile("[\u00a0\u00ad\u200b\u2060\ufeff]")
+# normalization.  Stripped to reconstitute split words (both intra-word
+# and inter-word attacks).  Security scanning runs on BOTH the stripped
+# form AND a space-substituted form so \s-dependent injection patterns
+# also fire when invisible chars replace real spaces.  (#108, #108b)
 _UNICODE_NEWLINE_RE = re.compile("[\u2028\u2029]")
-_INVISIBLE_RE = re.compile("[\u200c-\u200f\u202a-\u202f\u2061-\u206f\ufff9-\ufffb]")
+_ALL_INVISIBLE_RE = re.compile("[\u00ad\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff9-\ufffb]")
 
 
 # =============================================================================
@@ -575,20 +573,25 @@ class SecurityScanner:
         # Normalize Unicode to defeat homoglyph bypass attacks:
         # 1. NFKC handles compatibility forms (fullwidth → ASCII, ligatures, etc.)
         # 2. Confusable mapping handles cross-script homoglyphs (Cyrillic → Latin, etc.)
-        # 3. Replace space-like invisible chars (U+200B ZWSP, U+00AD SHY, etc.)
-        #    with real spaces so \s-dependent injection patterns still fire, and
-        #    strip non-space invisible chars (ZWNJ, ZWJ, bidi marks) to
-        #    reconstitute split words for \b-dependent classified markers. (#108)
+        # 3. Strip ALL invisible chars to reconstitute split words for both
+        #    intra-word attacks (i\u200bgnore → ignore) and inter-word
+        #    attacks (ignore\u200bprevious → ignoreprevious).  (#108)
+        # 4. U+2028/U+2029 → \n so [\r\n] conversation separators fire.
         base = unicodedata.normalize("NFKC", query).translate(_CONFUSABLE_TRANS)
-        normalized_query = _INVISIBLE_RE.sub(
-            "", _UNICODE_NEWLINE_RE.sub("\n", _ZW_SPACE_RE.sub(" ", base))
-        )
+        newline_normalized = _UNICODE_NEWLINE_RE.sub("\n", base)
+        # Primary form: strip all invisible chars (reconstitutes split words
+        # for PII/PHI/classified \b patterns AND intra-word injection bypass).
+        normalized_query = _ALL_INVISIBLE_RE.sub("", newline_normalized)
+        # Secondary form: replace invisible chars with spaces (catches
+        # inter-word injection where invisibles REPLACE real spaces, e.g.
+        # "ignore\u200bprevious" → "ignore previous" for \s+ patterns).
+        spaced_query = _ALL_INVISIBLE_RE.sub(" ", newline_normalized)
 
         flags: list[str] = []
         is_blocked = False
         force_offline = False
 
-        # Always check PII patterns
+        # Always check PII patterns (stripped form — reconstitutes words)
         flags.extend(self._check_pii(normalized_query))
 
         # Check PHI patterns only in HIPAA mode
@@ -600,8 +603,12 @@ class SecurityScanner:
             classified_flags, force_offline = self._check_classified_markers(normalized_query)
             flags.extend(classified_flags)
 
-        # Always check injection patterns - these are always blocked
+        # Check injection against BOTH forms — stripped catches intra-word
+        # bypass (i\u200bgnore → ignore), spaced catches inter-word bypass
+        # (ignore\u200bprevious → ignore previous for \s+ patterns).
         injection_flags, injection_blocked = self._check_injection(normalized_query)
+        if not injection_blocked:
+            injection_flags, injection_blocked = self._check_injection(spaced_query)
         flags.extend(injection_flags)
         is_blocked = is_blocked or injection_blocked
 
