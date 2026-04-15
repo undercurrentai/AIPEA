@@ -439,7 +439,7 @@ jobs:
           npx -y @anthropic-ai/claude-code@2.1.108 \
             --model claude-opus-4-6 \
             --max-turns 3 \
-            --output-file claude_review.md \
+            --output-last-message claude_review.md \
             --print \
             --allowedTools "Read" \
             "You are the Claude half of AIPEA's triple-AI second-reviewer gate.
