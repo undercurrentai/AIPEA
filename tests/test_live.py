@@ -124,7 +124,7 @@ def synthetic_search_context() -> SearchContext:
 
 class TestPackageIntegrity:
     def test_version(self):
-        assert aipea.__version__ == "1.6.0"
+        assert aipea.__version__ == "1.6.1"
 
     def test_all_exports_importable(self):
         for name in aipea.__all__:
@@ -160,7 +160,7 @@ class TestPackageIntegrity:
         assert len(aipea.__all__) == 50
 
     def test_version_matches_pyproject(self):
-        assert aipea.__version__ == "1.6.0"
+        assert aipea.__version__ == "1.6.1"
 
 
 # ===========================================================================
@@ -776,7 +776,7 @@ class TestLiveCLI:
         runner = CliRunner()
         result = runner.invoke(app, ["info"])
         assert result.exit_code == 0
-        assert "1.6.0" in result.stdout
+        assert "1.6.1" in result.stdout
 
     def test_check_runs_without_crash(self):
         from typer.testing import CliRunner
@@ -808,7 +808,7 @@ class TestLiveCLI:
             timeout=30,
         )
         assert result.returncode == 0
-        assert "1.6.0" in result.stdout
+        assert "1.6.1" in result.stdout
 
     def test_no_args_shows_help(self):
         from typer.testing import CliRunner

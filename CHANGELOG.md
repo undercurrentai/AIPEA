@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-04-22
+
+### Fixed
+- **[security]** Injection detector now blocks the canonical jailbreak
+  phrase `Ignore all previous instructions` and the wider instruction-
+  override family (`disregard`, `forget`, `override`, multi-word
+  connectors such as `all your`, `the above`, `everything above`).
+  The pre-fix regex `ignore\s+(previous|all)\s+instructions` only
+  accepted a single intervening word, so real-world prompt-injection
+  attempts slipped through with `is_blocked=False`. `INJECTION_PATTERNS`
+  now contains 9 entries (was 8); `SPECIFICATION.md §7.4` updated to
+  match. Filed by PR #49 review (`docs/claude/audits/review-2026-04-22.md`
+  §1 HIGH). 13 new regression tests in
+  `TestInstructionOverrideInjectionFamily`.
+- **[tests]** `tests/test_learning.py::test_readonly_directory` now
+  skips when the runner is uid 0 (root bypasses POSIX DAC, so
+  `chmod 0o444` cannot force the graceful-degradation path the test
+  asserts on). Library behavior for non-root callers is unchanged.
+  Filed by PR #49 review §2 MEDIUM.
+
 ## [1.6.0] - 2026-04-15
 
 ### Added — Taint-Aware Feedback Averaging (ADR-004)

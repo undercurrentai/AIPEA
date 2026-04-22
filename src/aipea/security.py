@@ -365,7 +365,15 @@ class SecurityScanner:
 
     # Injection patterns - always checked and always blocked
     INJECTION_PATTERNS: ClassVar[list[str]] = [
-        r"ignore\s+(previous|all)\s+instructions",
+        # Instruction-override family. Matches verb + up to 50 intervening
+        # characters (word chars or whitespace) + "instructions" so phrases
+        # such as "ignore all previous instructions" or "disregard the above
+        # instructions" are caught. Lazy bounded quantifier and a single
+        # character class keep ReDoS risk bounded and _is_regex_safe happy.
+        r"(?:ignore|disregard|forget|override)\s+[\w\s]{1,50}?instructions\b",
+        # Sibling phrasing with no "instructions" keyword
+        # (e.g. "ignore everything above").
+        r"(?:ignore|disregard|forget)\s+(?:everything|all)\s+(?:above|below|before|prior)",
         r"</?(system|user|assistant)>",
         r"\[/?(system|user|assistant|human)\]",  # Bracket-style role tags
         r"(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:",  # Conversation separator injection

@@ -930,16 +930,17 @@ Per-compliance-mode allowlists use **substring matching** (case-insensitive):
 
 ### 7.4 Injection Prevention
 
-8 injection patterns are **always blocked** regardless of compliance mode:
+9 injection patterns are **always blocked** regardless of compliance mode:
 
-1. `ignore (previous|all) instructions` — Prompt injection
-2. `</(system|user|assistant)>` — XML role tag injection
-3. `[/(system|user|assistant|human)]` — Bracket-style role tags
-4. `\n\s*(Human|Assistant|System):` — Conversation separator injection (with whitespace tolerance)
-5. `DROP TABLE` — SQL injection
-6. `UNION SELECT` — SQL injection
-7. `{{.*}}` — Template injection (Jinja2/Handlebars)
-8. `<script>` — XSS attempt
+1. `(ignore|disregard|forget|override) <1-50 chars> instructions` — Prompt injection (instruction-override family; matches multi-word phrasings like "ignore all previous instructions")
+2. `(ignore|disregard|forget) (everything|all) (above|below|before|prior)` — Prompt injection sibling ("ignore everything above" etc.)
+3. `</(system|user|assistant)>` — XML role tag injection
+4. `[/(system|user|assistant|human)]` — Bracket-style role tags
+5. `\n\s*(Human|Assistant|System):` — Conversation separator injection (with whitespace tolerance)
+6. `DROP TABLE` — SQL injection
+7. `UNION SELECT` — SQL injection
+8. `{{.*}}` — Template injection (Jinja2/Handlebars)
+9. `<script>` — XSS attempt
 
 All queries are normalized before pattern matching to prevent homoglyph bypass attacks:
 1. **NFKC normalization** — converts fullwidth characters and compatibility forms to ASCII equivalents
