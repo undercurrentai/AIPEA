@@ -366,22 +366,24 @@ class SecurityScanner:
     # Injection patterns - always checked and always blocked
     INJECTION_PATTERNS: ClassVar[list[str]] = [
         # Instruction-override family — strong-cue form.
-        # Only a single optional determiner is allowed between verb and
-        # cue, so benign prose like "forget to print your instructions"
-        # or "don't forget to send all instructions" stays unblocked.
-        # Strong cue tokens (previous|prior|above|...) carry the
-        # override signal.
+        # Allows zero or more determiners/qualifiers followed by 1-3
+        # stacked cue tokens before "instructions". Supports variants
+        # like "ignore previous system instructions" and "ignore the
+        # above developer instructions" while keeping benign prose
+        # ("forget to print your instructions", "don't forget to send
+        # all instructions") unblocked because non-allow-list words
+        # ("to", "send", "print") break the filler loop.
         r"(?:ignore|disregard|forget|override)\s+"
-        r"(?:(?:the|your|my|any|these|those)\s+)?"
-        r"(?:previous|prior|above|earlier|preceding|system|developer|assistant)"
-        r"\s+instructions\b",
-        # Instruction-override family — direct "all" form
-        # ("ignore all instructions", "disregard all of the previous
-        # instructions"). Filler is restricted to determiners/cues so
-        # "don't forget to send all instructions" does not match (the
-        # filler "to send" is not in the allow-list).
+        r"(?:(?:the|all|your|my|any|these|those|of)\s+)*"
+        r"(?:(?:previous|prior|above|earlier|preceding|system|developer|assistant)\s+){1,3}"
+        r"instructions\b",
+        # Instruction-override family — direct "all" form.
+        # Covers "ignore all instructions" (no cue required) with an
+        # allow-list filler that includes role cues so "ignore all
+        # system instructions" and "disregard all developer
+        # instructions" block.
         r"(?:ignore|disregard|forget|override)\s+all\s+"
-        r"(?:(?:of|the|your|my|these|those|previous|prior|above|earlier|preceding)\s+)*"
+        r"(?:(?:of|the|your|my|these|those|previous|prior|above|earlier|preceding|system|developer|assistant)\s+)*"
         r"instructions\b",
         # Directional sibling without "instructions"
         # ("ignore everything above"). Lookahead for end-of-input,

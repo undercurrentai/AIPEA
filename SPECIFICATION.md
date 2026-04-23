@@ -932,8 +932,8 @@ Per-compliance-mode allowlists use **substring matching** (case-insensitive):
 
 10 injection patterns are **always blocked** regardless of compliance mode:
 
-1. `(ignore|disregard|forget|override) [the|your|my|any|these|those]? (previous|prior|above|earlier|preceding|system|developer|assistant) instructions` — Prompt injection (strong-cue form; only determiner fillers between verb and cue so "forget the setup instructions" is not matched)
-2. `(ignore|disregard|forget|override) all (of|the|your|my|these|those|previous|prior|above|earlier|preceding)* instructions` — Prompt injection (direct "all" form; filler restricted to determiners/cues so "don't forget to send all instructions" is not matched)
+1. `(ignore|disregard|forget|override) (the|all|your|my|any|these|those|of)* (previous|prior|above|earlier|preceding|system|developer|assistant){1,3} instructions` — Prompt injection (strong-cue form; supports stacked cues like "ignore previous system instructions" and "ignore the above developer instructions"; filler restricted to determiners/qualifiers so "forget to print your instructions" is not matched)
+2. `(ignore|disregard|forget|override) all (of|the|your|my|these|those|previous|prior|above|earlier|preceding|system|developer|assistant)* instructions` — Prompt injection (direct "all" form; filler allow-list includes role cues so "ignore all system instructions" blocks while "don't forget to send all instructions" does not)
 3. `(ignore|disregard|forget|override) (everything|all) (above|below|before|earlier|preceding)(?=\s*[.!?,;:\n]|$)` — Prompt injection sibling ("ignore everything above"; phrase-end lookahead so "ignore all prior art" is not matched)
 4. `</(system|user|assistant)>` — XML role tag injection
 5. `[/(system|user|assistant|human)]` — Bracket-style role tags
