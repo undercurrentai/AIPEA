@@ -16,11 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   connectors such as `all your`, `the above`, `everything above`).
   The pre-fix regex `ignore\s+(previous|all)\s+instructions` only
   accepted a single intervening word, so real-world prompt-injection
-  attempts slipped through with `is_blocked=False`. `INJECTION_PATTERNS`
-  now contains 9 entries (was 8); `SPECIFICATION.md §7.4` updated to
-  match. Filed by PR #49 review (`docs/claude/audits/review-2026-04-22.md`
-  §1 HIGH). 13 new regression tests in
-  `TestInstructionOverrideInjectionFamily`.
+  attempts slipped through with `is_blocked=False`. Pattern #1 requires
+  a cue token (`previous|prior|above|earlier|all|these|your|system|
+  developer|assistant`) before `instructions` so benign prose like
+  `forget the setup instructions` stays unblocked; pattern #2 is
+  `\b`-anchored to avoid matching inside `beforehand` / `priorities`.
+  `INJECTION_PATTERNS` now contains 9 entries (was 8);
+  `SPECIFICATION.md §7.4` updated to match. Filed by PR #49 review
+  (`docs/claude/audits/review-2026-04-22.md` §1 HIGH); tightening
+  motivated by PR #50 AI second-review gate. 13 new regression tests
+  in `TestInstructionOverrideInjectionFamily` (9 attack phrasings,
+  3 overmatch guards, ZWSP normalizer composition).
 - **[tests]** `tests/test_learning.py::test_readonly_directory` now
   skips when the runner is uid 0 (root bypasses POSIX DAC, so
   `chmod 0o444` cannot force the graceful-degradation path the test

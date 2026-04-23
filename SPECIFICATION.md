@@ -932,8 +932,8 @@ Per-compliance-mode allowlists use **substring matching** (case-insensitive):
 
 9 injection patterns are **always blocked** regardless of compliance mode:
 
-1. `(ignore|disregard|forget|override) <1-50 chars> instructions` — Prompt injection (instruction-override family; matches multi-word phrasings like "ignore all previous instructions")
-2. `(ignore|disregard|forget) (everything|all) (above|below|before|prior)` — Prompt injection sibling ("ignore everything above" etc.)
+1. `(ignore|disregard|forget|override) <0-40 chars> (previous|prior|above|earlier|all|these|your|system|developer|assistant) instructions` — Prompt injection (instruction-override family; requires a cue token before "instructions" so benign prose like "forget the setup instructions" is not matched)
+2. `(ignore|disregard|forget) (everything|all) (above|below|before|prior)\b` — Prompt injection sibling ("ignore everything above" etc.; word-boundary anchored so "beforehand" / "priorities" are not matched)
 3. `</(system|user|assistant)>` — XML role tag injection
 4. `[/(system|user|assistant|human)]` — Bracket-style role tags
 5. `\n\s*(Human|Assistant|System):` — Conversation separator injection (with whitespace tolerance)

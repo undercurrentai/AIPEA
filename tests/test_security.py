@@ -1268,9 +1268,20 @@ class TestInstructionOverrideInjectionFamily:
     @pytest.mark.parametrize(
         "phrase",
         [
+            # Baseline neutral uses of "instructions"
             "here are instructions for the task",
             "please follow the instructions carefully",
             "completed all instructions successfully",
+            # Overmatch regressions flagged by the AI second-review gate on PR #50:
+            # the verb + "instructions" alone is insufficient — a cue token
+            # (previous|prior|above|earlier|all|these|your|system|...) must
+            # also be present, so these benign phrasings stay unblocked.
+            "please ignore formatting in the instructions below",
+            "forget the setup instructions",
+            # Pattern #2 must not match inside words: the trailing \b guards
+            # "beforehand" and "priorities" (also flagged by the review gate).
+            "ignore all beforehand caveats",
+            "forget all priorities for now",
         ],
     )
     def test_benign_instruction_mentions_not_blocked(self, phrase: str) -> None:

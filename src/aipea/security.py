@@ -365,15 +365,20 @@ class SecurityScanner:
 
     # Injection patterns - always checked and always blocked
     INJECTION_PATTERNS: ClassVar[list[str]] = [
-        # Instruction-override family. Matches verb + up to 50 intervening
-        # characters (word chars or whitespace) + "instructions" so phrases
-        # such as "ignore all previous instructions" or "disregard the above
-        # instructions" are caught. Lazy bounded quantifier and a single
-        # character class keep ReDoS risk bounded and _is_regex_safe happy.
-        r"(?:ignore|disregard|forget|override)\s+[\w\s]{1,50}?instructions\b",
+        # Instruction-override family. Requires a cue token
+        # (previous|prior|above|earlier|all|these|your|system|developer|
+        # assistant) before "instructions" so benign prose like
+        # "forget the setup instructions" does not match, while
+        # "ignore all previous instructions" and "disregard the above
+        # instructions" do. Lazy bounded char class keeps ReDoS bounded
+        # and _is_regex_safe happy.
+        r"(?:ignore|disregard|forget|override)\s+[\w\s]{0,40}?"
+        r"\b(?:previous|prior|above|earlier|all|these|your|system|developer|assistant)\s+"
+        r"instructions\b",
         # Sibling phrasing with no "instructions" keyword
-        # (e.g. "ignore everything above").
-        r"(?:ignore|disregard|forget)\s+(?:everything|all)\s+(?:above|below|before|prior)",
+        # (e.g. "ignore everything above"). Trailing \b prevents
+        # matches inside words like "beforehand" or "priorities".
+        r"(?:ignore|disregard|forget)\s+(?:everything|all)\s+(?:above|below|before|prior)\b",
         r"</?(system|user|assistant)>",
         r"\[/?(system|user|assistant|human)\]",  # Bracket-style role tags
         r"(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:",  # Conversation separator injection
