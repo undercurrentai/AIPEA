@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-04-22
+
+### Fixed
+- **[security]** Injection detector now blocks the canonical jailbreak
+  phrase `Ignore all previous instructions` and the wider instruction-
+  override family (`disregard`, `forget`, `override`, multi-word
+  connectors such as `all your`, `the above`, `everything above`).
+  The pre-fix regex `ignore\s+(previous|all)\s+instructions` only
+  accepted a single intervening word, so real-world prompt-injection
+  attempts slipped through with `is_blocked=False`. The single pattern
+  is replaced with three narrower ones to avoid overmatching benign
+  prose:
+  1. Strong-cue form: only a single optional determiner
+     (`the|your|my|any|these|those`) is allowed between verb and a
+     strong cue (`previous|prior|above|earlier|preceding|system|
+     developer|assistant`), so phrases like `forget the setup
+     instructions` or `forget to print your instructions` are not
+     matched.
+  2. Direct `all` form: `(ignore|disregard|forget|override) all (of|
+     the|your|my|these|those|previous|prior|above|earlier|preceding)*
+     instructions` — filler restricted to an allow-list, so
+     `don't forget to send all instructions` is not matched.
+  3. Directional sibling with phrase-end lookahead:
+     `(?=\s*[.!?,;:\n]|$)` keeps `ignore all prior art` and
+     `disregard everything below deck` unblocked.
+
+  `INJECTION_PATTERNS` now contains 10 entries (was 8);
+  `SPECIFICATION.md §7.4` updated to match. Filed by PR #49 review
+  (`docs/claude/audits/review-2026-04-22.md` §1 HIGH); tightening
+  motivated by PR #50 AI second-review gate (gpt-5.4-pro). New
+  regression tests in `TestInstructionOverrideInjectionFamily`:
+  13 attack phrasings, 9 overmatch guards, ZWSP normalizer
+  composition.
+- **[tests]** `tests/test_learning.py::test_readonly_directory` now
+  skips when the runner is uid 0 (root bypasses POSIX DAC, so
+  `chmod 0o444` cannot force the graceful-degradation path the test
+  asserts on). Library behavior for non-root callers is unchanged.
+  Filed by PR #49 review §2 MEDIUM.
+
 ## [1.6.0] - 2026-04-15
 
 ### Added — Taint-Aware Feedback Averaging (ADR-004)

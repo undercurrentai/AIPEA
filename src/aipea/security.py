@@ -365,7 +365,35 @@ class SecurityScanner:
 
     # Injection patterns - always checked and always blocked
     INJECTION_PATTERNS: ClassVar[list[str]] = [
-        r"ignore\s+(previous|all)\s+instructions",
+        # Instruction-override family — strong-cue form.
+        # Allows zero or more determiners/qualifiers followed by 1-3
+        # stacked cue tokens before "instructions". Supports variants
+        # like "ignore previous system instructions" and "ignore the
+        # above developer instructions" while keeping benign prose
+        # ("forget to print your instructions", "don't forget to send
+        # all instructions") unblocked because non-allow-list words
+        # ("to", "send", "print") break the filler loop.
+        r"(?:ignore|disregard|forget|override)\s+"
+        r"(?:(?:the|all|your|my|any|these|those|of)\s+)*"
+        r"(?:(?:previous|prior|above|earlier|preceding|system|developer|assistant)\s+){1,3}"
+        r"instructions\b",
+        # Instruction-override family — direct "all" form.
+        # Covers "ignore all instructions" (no cue required) with an
+        # allow-list filler that includes role cues so "ignore all
+        # system instructions" and "disregard all developer
+        # instructions" block.
+        r"(?:ignore|disregard|forget|override)\s+all\s+"
+        r"(?:(?:of|the|your|my|these|those|previous|prior|above|earlier|preceding|system|developer|assistant)\s+)*"
+        r"instructions\b",
+        # Directional sibling without "instructions"
+        # ("ignore everything above"). Lookahead for end-of-input,
+        # whitespace-plus-punctuation, or end-of-line keeps benign
+        # phrases like "ignore all prior art" or "disregard
+        # everything below deck" unblocked.
+        r"(?:ignore|disregard|forget|override)\s+"
+        r"(?:everything|all)\s+"
+        r"(?:above|below|before|earlier|preceding)"
+        r"(?=\s*(?:[.!?,;:\n\r]|$))",
         r"</?(system|user|assistant)>",
         r"\[/?(system|user|assistant|human)\]",  # Bracket-style role tags
         r"(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:",  # Conversation separator injection

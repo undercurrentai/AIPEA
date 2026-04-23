@@ -930,16 +930,18 @@ Per-compliance-mode allowlists use **substring matching** (case-insensitive):
 
 ### 7.4 Injection Prevention
 
-8 injection patterns are **always blocked** regardless of compliance mode:
+10 injection patterns are **always blocked** regardless of compliance mode:
 
-1. `ignore (previous|all) instructions` — Prompt injection
-2. `</(system|user|assistant)>` — XML role tag injection
-3. `[/(system|user|assistant|human)]` — Bracket-style role tags
-4. `\n\s*(Human|Assistant|System):` — Conversation separator injection (with whitespace tolerance)
-5. `DROP TABLE` — SQL injection
-6. `UNION SELECT` — SQL injection
-7. `{{.*}}` — Template injection (Jinja2/Handlebars)
-8. `<script>` — XSS attempt
+1. `(ignore|disregard|forget|override) (the|all|your|my|any|these|those|of)* (previous|prior|above|earlier|preceding|system|developer|assistant){1,3} instructions` — Prompt injection (strong-cue form; supports stacked cues like "ignore previous system instructions" and "ignore the above developer instructions"; filler restricted to determiners/qualifiers so "forget to print your instructions" is not matched)
+2. `(ignore|disregard|forget|override) all (of|the|your|my|these|those|previous|prior|above|earlier|preceding|system|developer|assistant)* instructions` — Prompt injection (direct "all" form; filler allow-list includes role cues so "ignore all system instructions" blocks while "don't forget to send all instructions" does not)
+3. `(ignore|disregard|forget|override) (everything|all) (above|below|before|earlier|preceding)(?=\s*[.!?,;:\n]|$)` — Prompt injection sibling ("ignore everything above"; phrase-end lookahead so "ignore all prior art" is not matched)
+4. `</(system|user|assistant)>` — XML role tag injection
+5. `[/(system|user|assistant|human)]` — Bracket-style role tags
+6. `\n\s*(Human|Assistant|System):` — Conversation separator injection (with whitespace tolerance)
+7. `DROP TABLE` — SQL injection
+8. `UNION SELECT` — SQL injection
+9. `{{.*}}` — Template injection (Jinja2/Handlebars)
+10. `<script>` — XSS attempt
 
 All queries are normalized before pattern matching to prevent homoglyph bypass attacks:
 1. **NFKC normalization** — converts fullwidth characters and compatibility forms to ASCII equivalents

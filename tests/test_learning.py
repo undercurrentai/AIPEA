@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import threading
 from pathlib import Path
@@ -225,6 +226,10 @@ class TestGracefulDegradation:
         }
         eng.close()
 
+    @pytest.mark.skipif(
+        hasattr(os, "geteuid") and os.geteuid() == 0,
+        reason="root bypasses chmod 0o444; readonly-dir scenario unreachable",
+    )
     def test_readonly_directory(self, tmp_path: Path) -> None:
         # Create a directory where we can't write
         readonly = tmp_path / "readonly"
