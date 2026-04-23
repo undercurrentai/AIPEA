@@ -930,17 +930,18 @@ Per-compliance-mode allowlists use **substring matching** (case-insensitive):
 
 ### 7.4 Injection Prevention
 
-9 injection patterns are **always blocked** regardless of compliance mode:
+10 injection patterns are **always blocked** regardless of compliance mode:
 
-1. `(ignore|disregard|forget|override) <0-40 chars> (previous|prior|above|earlier|all|these|your|system|developer|assistant) instructions` — Prompt injection (instruction-override family; requires a cue token before "instructions" so benign prose like "forget the setup instructions" is not matched)
-2. `(ignore|disregard|forget) (everything|all) (above|below|before|prior)\b` — Prompt injection sibling ("ignore everything above" etc.; word-boundary anchored so "beforehand" / "priorities" are not matched)
-3. `</(system|user|assistant)>` — XML role tag injection
-4. `[/(system|user|assistant|human)]` — Bracket-style role tags
-5. `\n\s*(Human|Assistant|System):` — Conversation separator injection (with whitespace tolerance)
-6. `DROP TABLE` — SQL injection
-7. `UNION SELECT` — SQL injection
-8. `{{.*}}` — Template injection (Jinja2/Handlebars)
-9. `<script>` — XSS attempt
+1. `(ignore|disregard|forget|override) [the|your|my|any|these|those]? (previous|prior|above|earlier|preceding|system|developer|assistant) instructions` — Prompt injection (strong-cue form; only determiner fillers between verb and cue so "forget the setup instructions" is not matched)
+2. `(ignore|disregard|forget|override) all (of|the|your|my|these|those|previous|prior|above|earlier|preceding)* instructions` — Prompt injection (direct "all" form; filler restricted to determiners/cues so "don't forget to send all instructions" is not matched)
+3. `(ignore|disregard|forget|override) (everything|all) (above|below|before|earlier|preceding)(?=\s*[.!?,;:\n]|$)` — Prompt injection sibling ("ignore everything above"; phrase-end lookahead so "ignore all prior art" is not matched)
+4. `</(system|user|assistant)>` — XML role tag injection
+5. `[/(system|user|assistant|human)]` — Bracket-style role tags
+6. `\n\s*(Human|Assistant|System):` — Conversation separator injection (with whitespace tolerance)
+7. `DROP TABLE` — SQL injection
+8. `UNION SELECT` — SQL injection
+9. `{{.*}}` — Template injection (Jinja2/Handlebars)
+10. `<script>` — XSS attempt
 
 All queries are normalized before pattern matching to prevent homoglyph bypass attacks:
 1. **NFKC normalization** — converts fullwidth characters and compatibility forms to ASCII equivalents

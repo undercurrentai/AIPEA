@@ -365,20 +365,33 @@ class SecurityScanner:
 
     # Injection patterns - always checked and always blocked
     INJECTION_PATTERNS: ClassVar[list[str]] = [
-        # Instruction-override family. Requires a cue token
-        # (previous|prior|above|earlier|all|these|your|system|developer|
-        # assistant) before "instructions" so benign prose like
-        # "forget the setup instructions" does not match, while
-        # "ignore all previous instructions" and "disregard the above
-        # instructions" do. Lazy bounded char class keeps ReDoS bounded
-        # and _is_regex_safe happy.
-        r"(?:ignore|disregard|forget|override)\s+[\w\s]{0,40}?"
-        r"\b(?:previous|prior|above|earlier|all|these|your|system|developer|assistant)\s+"
+        # Instruction-override family — strong-cue form.
+        # Only a single optional determiner is allowed between verb and
+        # cue, so benign prose like "forget to print your instructions"
+        # or "don't forget to send all instructions" stays unblocked.
+        # Strong cue tokens (previous|prior|above|...) carry the
+        # override signal.
+        r"(?:ignore|disregard|forget|override)\s+"
+        r"(?:(?:the|your|my|any|these|those)\s+)?"
+        r"(?:previous|prior|above|earlier|preceding|system|developer|assistant)"
+        r"\s+instructions\b",
+        # Instruction-override family — direct "all" form
+        # ("ignore all instructions", "disregard all of the previous
+        # instructions"). Filler is restricted to determiners/cues so
+        # "don't forget to send all instructions" does not match (the
+        # filler "to send" is not in the allow-list).
+        r"(?:ignore|disregard|forget|override)\s+all\s+"
+        r"(?:(?:of|the|your|my|these|those|previous|prior|above|earlier|preceding)\s+)*"
         r"instructions\b",
-        # Sibling phrasing with no "instructions" keyword
-        # (e.g. "ignore everything above"). Trailing \b prevents
-        # matches inside words like "beforehand" or "priorities".
-        r"(?:ignore|disregard|forget)\s+(?:everything|all)\s+(?:above|below|before|prior)\b",
+        # Directional sibling without "instructions"
+        # ("ignore everything above"). Lookahead for end-of-input,
+        # whitespace-plus-punctuation, or end-of-line keeps benign
+        # phrases like "ignore all prior art" or "disregard
+        # everything below deck" unblocked.
+        r"(?:ignore|disregard|forget|override)\s+"
+        r"(?:everything|all)\s+"
+        r"(?:above|below|before|earlier|preceding)"
+        r"(?=\s*(?:[.!?,;:\n\r]|$))",
         r"</?(system|user|assistant)>",
         r"\[/?(system|user|assistant|human)\]",  # Bracket-style role tags
         r"(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:",  # Conversation separator injection
