@@ -3,7 +3,7 @@
 > **Prepared for:** Prospective Venture Capital Investor
 > **Subject:** AIPEA (AI Prompt Engineer Agent), `aipea` v1.6.x on PyPI
 > **Repository:** `undercurrentai/AIPEA`
-> **Review date:** 2026-04-24
+> **Review date:** 2026-04-24 (amended to reflect open-core gateway positioning)
 > **Posture:** Adversarial. Defending the capital-allocator's interests, not the seller's narrative.
 > **Reviewer role:** Outside technical diligence (no engagement bias)
 
@@ -11,22 +11,32 @@
 
 ## 1. Executive Summary
 
-**Investment recommendation: PASS as a standalone venture.**
+**Investment recommendation: DO NOT EVALUATE IN ISOLATION.**
 
-AIPEA is a **competently engineered internal tool** that has been polished, packaged, and published to PyPI. It is not, on the evidence in this repository, a venture-scale product. The code is clean, the tests are real, and the maintainer is disciplined — but the intellectual-property surface is thin, the "security" and "compliance" claims are materially softer than the marketing suggests, and there is **no evidence of paying customers outside the owning company**.
+AIPEA is an **intentionally open-source Python library** positioned as a top-of-funnel / developer-adoption gateway into the company's commercial products (Agora IV, AEGIS). That positioning changes the relevant questions. When seen that way:
 
-If the VC is being pitched "AIPEA as the company," the answer is no. If the VC is evaluating Undercurrent Holdings more broadly and AIPEA is being shown as a quality proxy, then AIPEA demonstrates that the team can ship — but the differentiated value must live in the adjacent closed-source products (Agora IV, AEGIS), which were not available for this review.
+- "No moat in AIPEA" stops being a criticism — frictionless adoption is the *point* of the open-core layer.
+- "No direct paying customers for AIPEA" stops being fatal — the relevant KPIs are adoption, community signal, and conversion into the paid products.
+- "Compliance modes are detection, not enforcement" becomes defensible *if* clearly marketed that way: AIPEA as the detection substrate, Agora IV / AEGIS as the enforcement layer built on top.
+
+But the reframe cuts both ways:
+
+- The check is being written on **Agora IV and AEGIS**, not on AIPEA. Neither product was available for this review. The diligence is therefore incomplete regardless of how good or bad AIPEA looks.
+- The gateway thesis is **currently unproven**. There is no visible evidence in this repository of external adoption, external contributors, or funnel conversion into the paid products. If the funnel isn't running, AIPEA is still an internal tool wearing an open-source license.
+- Overclaims in the OSS layer (see §5 on FedRAMP retraction and HIPAA-as-a-flag) become **more** damaging in a gateway model, not less — the OSS project is the brand's public face for the paid products.
+
+AIPEA itself is a competently engineered library. The investment thesis rests almost entirely on artifacts not in this repository.
 
 | Dimension                 | Grade | One-line rationale                                                                 |
 | ------------------------- | :---: | ---------------------------------------------------------------------------------- |
 | Engineering quality       | **A–** | Tight scope, strict typing, real tests, active maintenance.                         |
 | Test rigor                | **B+** | 75% coverage floor, ~810 tests, but author-written payloads only.                   |
 | Security substance        | **B–** | One genuinely clever subsystem (homoglyphs, ReDoS); rest is static regex.           |
-| Compliance claims         | **D**  | HIPAA/TACTICAL are configuration flags, not enforcement. FedRAMP was theater.       |
-| Product differentiation   | **D**  | Rebuildable by a competent engineer in 3–4 days.                                    |
-| Market traction           | **F**  | Zero evidence of external paying users. Consumers are internal sister products.     |
+| Compliance claims         | **C–** | HIPAA/TACTICAL are detection flags; defensible as OSS substrate, not as product.   |
+| Product differentiation   |  **–** | Not applicable under open-core thesis (see §3).                                     |
+| OSS adoption signal       | **?**  | No external data in repo. Must come from outside the code: downloads, stars, deps. |
 | Honesty of documentation  | **A–** | SECURITY.md and ADRs are refreshingly frank; marketing elsewhere is looser.         |
-| **Overall**               | **C**  | Good library, bad standalone investment.                                            |
+| **Overall**               | **Incomplete** | Depends on Agora IV / AEGIS diligence and on external funnel metrics.       |
 
 ---
 
@@ -60,7 +70,54 @@ That is the complete product. There is **no ML model**, no learned classifier, n
 
 ---
 
-## 3. Moat Analysis — The Rebuild Test
+## 3. Re-Framing: AIPEA as an Open-Core Gateway
+
+The seller has represented AIPEA as **open-source by design** and as a **gateway** into the company's commercial products (Agora IV for multi-model orchestration, AEGIS for governance). That reframes most of what follows.
+
+### 3.1 What the open-core / gateway playbook requires
+
+The companies that have made this model work at venture scale — HashiCorp, Confluent, MongoDB, Elastic, GitLab, dbt Labs — share a specific pattern:
+
+1. **A freely adoptable OSS project** that developers pick up without a sales conversation.
+2. **Genuine utility in the free layer** so the project is used in production, not just evaluated.
+3. **A clear value step-up** to the paid product — features the OSS layer deliberately does not include (scale, collaboration, compliance certification, managed hosting, governance).
+4. **Measurable funnel conversion** from OSS users to paid seats.
+5. **A community flywheel** — external contributors, issues, blog posts, third-party integrations.
+
+AIPEA satisfies (1) and (2) in its engineering. (3) is architecturally plausible — the product is structured such that AIPEA performs *detection* and the closed-source products can perform *enforcement and orchestration* on top. (4) and (5) are **not visible in the repository** and must be verified out-of-band.
+
+### 3.2 What flips under this framing
+
+| Original criticism                              | Open-core reframe                                                                                  |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| "Rebuildable in 4 days; no moat."               | Intentional. The OSS surface is meant to be easy to adopt, not easy to monetize.                   |
+| "No paying customers for AIPEA."                | Wrong KPI. The relevant KPIs are downloads, dependents, stars, external PRs, and funnel conversion. |
+| "Compliance modes are flags, not enforcement."  | Defensible *as a detection substrate* — provided the marketing reflects this.                      |
+| "Bus factor of one."                            | Softened but not solved. OSS can recruit maintainers; it has not yet done so here.                  |
+| "Consumers are internal."                       | Expected in year one of an open-core strategy. Becomes a red flag only if it persists.              |
+
+### 3.3 What does NOT flip — and arguably gets worse
+
+- **The FedRAMP retraction.** In a gateway model the OSS project *is* the brand's public storefront. Overclaims in the OSS layer poison the funnel into the paid products. ADR-002 did the right thing; the question is what the next retraction will be.
+- **HIPAA / TACTICAL overclaim risk.** Same logic. A healthcare or defense prospect who adopts AIPEA expecting enforcement, discovers it is detection-only, and churns — they churn out of the *paid* funnel too.
+- **Absence of external audit.** If the OSS project is positioned as adjacent to regulated industries, eventual third-party attestation is table stakes. Not urgent, but on the roadmap.
+- **The investment target.** The paid products must still be diligenced directly. AIPEA's quality is a positive *signal* about engineering culture; it is not a substitute for revenue, retention, and margin data on Agora IV / AEGIS.
+
+### 3.4 The diligence pivots
+
+Under the gateway framing, the questions a VC must answer stop being about AIPEA itself and become:
+
+1. **Is the funnel running?** Download trajectory, dependent count, external contributors, inbound leads attributed to AIPEA exposure.
+2. **Is it converting?** Share of Agora IV / AEGIS pipeline — and closed revenue — that touched AIPEA upstream.
+3. **Is the step-up clear?** Can the seller articulate, crisply, what Agora IV / AEGIS do that AIPEA deliberately does not?
+4. **Is the OSS brand trustworthy?** Marketing claims in the OSS layer must be calibrated to the code. Overclaims here cost paid pipeline downstream.
+5. **What are Agora IV and AEGIS, actually?** The review below cannot answer this. Neither can any AIPEA-only diligence.
+
+---
+
+## 4. Moat Analysis — The Rebuild Test
+
+*In a non-open-core framing this section would be damning. Under the open-core framing (§3) rebuildability is intentional. It is retained for reference and because it informs how defensible the free layer is against forks or competing OSS libraries.*
 
 The central VC question: **how long would it take a competent engineer to rebuild this?**
 
@@ -77,29 +134,29 @@ The central VC question: **how long would it take a competent engineer to rebuil
 
 The only genuinely non-obvious engineering is in `security.py`: Unicode NFKC + confusables map (35 entries, lines 48–100), invisible-character stripping with spaced-form rescan (lines 635–643), and a seven-layer ReDoS safety check on regex patterns (lines 445–517). **That's the IP.** It is perhaps 400 lines of interesting code. It is not patentable and not secret; a good engineer could read a few OWASP and homoglyph-attack papers and reproduce it in a sprint.
 
-**Verdict:** No durable moat. The moat is operational hygiene and documentation, not algorithmic advantage.
+**Verdict (standalone view):** no durable moat in the OSS layer. **Verdict (open-core view):** expected and correct. In the open-core view, durable moat must live in Agora IV / AEGIS; the fact that it is not visible in AIPEA is neither surprising nor concerning — but it means AIPEA cannot be the thing being evaluated.
 
 ---
 
-## 4. The "Security-First" Narrative vs. the Code
+## 5. The "Security-First" Narrative vs. the Code
 
-AIPEA is marketed as a security-first prompt preprocessor suitable for regulated environments. This is where the gap between narrative and reality is widest.
+AIPEA is marketed as a security-first prompt preprocessor suitable for regulated environments. This is where the gap between narrative and reality is widest — and it matters *more*, not less, under an open-core framing because the OSS layer is the brand's public face for the paid products.
 
-### 4.1 Prompt-injection detection
+### 5.1 Prompt-injection detection
 
 What's there: **eleven hardcoded regex patterns** (`security.py:367–404`) covering `ignore.*previous.*instructions`, role-tag spoofing, SQL keywords (`DROP TABLE`, `UNION SELECT` — largely irrelevant in a prompt-injection context), and template-injection braces.
 
 - **Real strength:** Unicode normalization and confusables mapping *before* pattern match means naive homoglyph bypasses fail. That is better than many commercial competitors.
 - **Real weakness:** Signature-based detection. One paraphrase ("disregard prior directives from developers") defeats it. There is no published jailbreak-corpus testing, no fuzzing, no red-team history. Every test in `test_security.py` uses author-written payloads. An adversary reading this now-public code bypasses the ruleset in an afternoon.
 
-### 4.2 PII / PHI scanning
+### 5.2 PII / PHI scanning
 
 - **PII:** 6 regex categories — SSN, credit card, generic API key, `sk-`-prefixed keys, bearer token, password strings. That is all.
 - **PHI (HIPAA mode only):** 3 categories — MRN, DOB, patient-name. **No diagnosis codes, no medication names, no addresses, no phone numbers, no ICD-10.** A clinical query containing "Metformin 500mg BID, patient in Seattle" passes undetected.
 
 Calling this a PHI scanner in healthcare marketing is, charitably, aspirational.
 
-### 4.3 Compliance modes — the core honesty problem
+### 5.3 Compliance modes — the core honesty problem
 
 The product exposes three compliance modes: `GENERAL`, `HIPAA`, `TACTICAL` (plus deprecated `FEDRAMP`).
 
@@ -114,7 +171,7 @@ There is no BAA. No audit trail persistence. No encryption enforcement. No acces
 
 **FEDRAMP** was marketed until ADR-002 (2026-04-11) formally deprecated it as "a config-only stub with no behavioral enforcement." Crediting the team for the retraction, this is evidence of a prior period in which regulatory claims were made that the code did not support. That pattern — ship the label, defer the enforcement — is exactly the thing a VC should interrogate before taking the remaining compliance claims at face value.
 
-### 4.4 Independent audit
+### 5.4 Independent audit
 
 **None exists.** The `docs/claude/audits/` directory contains only self-reviews (including an adversarial self-review, which is useful but is not third-party attestation). The "second-reviewer gate" on security changes is two AI systems (GPT 5.4 Pro + Claude) plus Codex — not independent human auditors. There is no SOC 2, no penetration test, no CVE disclosure history, no bug-bounty program.
 
@@ -122,7 +179,7 @@ For a product positioning itself near healthcare and defense, the absence of ext
 
 ---
 
-## 5. Engineering Quality — The Legitimate Strengths
+## 6. Engineering Quality — The Legitimate Strengths
 
 Balanced against the above, the engineering is genuinely good.
 
@@ -137,52 +194,78 @@ This is what a healthy small codebase looks like. It is not what a venture-scale
 
 ---
 
-## 6. Red Flags & Diligence Questions
+## 7. Red Flags & Diligence Questions
 
-The following are items the VC should press on before writing a check.
+The following are items the VC should press on before writing a check. Under the open-core framing the emphasis has shifted from "is AIPEA a business?" to "is the funnel working, and what are the paid products?"
 
-1. **Who pays for AIPEA today?** Not an internal Undercurrent team — an arm's-length customer. If the answer is zero, the valuation must be justified purely on future potential, which is weak given (3) below.
-2. **What does "HIPAA mode" promise in the sales conversation?** Get the exact written claim and compare it to `security.py:734–744`. If sales is implying enforcement and the code performs detection, there is latent regulatory and reputational liability.
-3. **What is the durable technical advantage over LangChain / LlamaIndex / Guardrails-AI / NeMo-Guardrails / AWS Bedrock Guardrails?** Each of these is free or bundled and ships more sophisticated input-filtering. AIPEA's answer cannot be "minimal dependencies" — that is a taste preference, not a moat.
-4. **Why no external security audit?** For a product sold as security-first, the absence of SOC 2, external pentest, and published jailbreak-corpus evaluation is unusual.
-5. **How much of AIPEA's reason-to-exist is captured by the upstream Agora IV / AEGIS products?** If 80% of the value lives in the closed-source sister products, then AIPEA is a byproduct, not the business. The VC is then actually investing in products that weren't presented for review.
-6. **Bus factor.** `git shortlog -sn` shows effectively a single contributor. What happens to velocity and trust if that contributor leaves?
+**Funnel & adoption (open-core-specific):**
+
+1. **Monthly download trajectory on PyPI.** Is it growing month-over-month? What is the 30-day active install count?
+2. **External dependents.** How many non-Undercurrent GitHub repositories list `aipea` as a dependency? What do they use it for?
+3. **Community signal.** Stars, forks, external issues filed, external PRs merged, Discord/Slack activity, blog/Twitter mentions.
+4. **Funnel conversion.** What percentage of Agora IV / AEGIS pipeline — or closed revenue — originated from an AIPEA touchpoint? If the answer is "we don't track it," the gateway thesis is unfalsifiable.
+5. **Step-up articulation.** Can the seller draw a crisp line between what AIPEA deliberately does not do and what Agora IV / AEGIS add on top? Fuzzy answers here suggest the paid products may not be differentiated.
+
+**Claims hygiene (matters more in an open-core model, not less):**
+
+6. **What does "HIPAA mode" promise in marketing and in sales conversations?** Compare the written claim to `security.py:734–744`. Detection-only is defensible *if* the copy says so. Enforcement claims are a liability that flows downstream to the paid products.
 7. **The FedRAMP retraction.** Ask the founder directly: what other compliance claims in current marketing are not backed by enforcement in code? The honest ones admit this quickly. The unhealthy ones get defensive.
-8. **Metric anchoring in the repo's own docs.** CLAUDE.md is meticulous about anchoring metrics with commit/date. That rigor is admirable but also implies the team knows metrics drift. Ask to see today's coverage, test count, and bug-catch rate rather than documented numbers.
+8. **External security audit.** Is there a credible timeline to SOC 2 Type II, third-party pentest, or jailbreak-corpus evaluation? For an OSS project adjacent to regulated industries, eventual attestation is table stakes.
+
+**Technical defensibility (still relevant because the free layer still competes with other free layers):**
+
+9. **Durable advantage over LangChain / LlamaIndex / Guardrails-AI / NeMo-Guardrails / AWS Bedrock Guardrails.** Each is free or bundled and ships more sophisticated filtering. AIPEA's differentiation in the *OSS* category cannot be "minimal dependencies" — that is a taste preference.
+10. **Bus factor.** `git shortlog -sn` shows effectively a single contributor. What is the plan to turn AIPEA into a project with real community maintainers rather than a solo author with an OSS license?
+
+**What's behind the curtain:**
+
+11. **Agora IV and AEGIS, concretely.** Can the VC see the repositories, revenue, retention, and margin data? The investment case lives here, not in AIPEA.
+12. **Metric anchoring in repo docs.** CLAUDE.md is meticulous about anchoring metrics with commit/date. That rigor is admirable but also implies the team knows metrics drift. Ask to see today's coverage, test count, and bug-catch rate rather than documented numbers.
 
 ---
 
-## 7. What Would Change the Thesis
+## 8. What Would Change the Thesis
 
-AIPEA becomes interesting to a VC only if **at least two** of the following are true:
+Under the open-core / gateway framing, the investment becomes meaningfully more attractive if **at least two** of the following are true:
 
-- **External paying customers.** Logos, references, MRR. Not "we use it internally."
-- **An ML-based detection layer.** Replace the regex patterns with a fine-tuned injection classifier or embedding-based anomaly detector. That creates real adversarial-robustness and is the kind of moat that compounds with usage data.
-- **Actual compliance certification.** SOC 2 Type II at minimum; real BAA capability; independent pentest with published findings. Not "HIPAA mode" as a config flag.
-- **Cross-user learning.** Today, `learning.py` is per-installation. If anonymized feedback from many deployments improved the shared model, data network effects start to exist.
-- **Distribution surface.** Native integrations with Bedrock, SageMaker, Vertex AI, HuggingFace Inference — not just Exa/Firecrawl/Ollama.
+- **Demonstrable funnel conversion.** The seller can show that a non-trivial share of Agora IV / AEGIS pipeline and closed revenue originated from AIPEA exposure. This is the single most important signal.
+- **Visible OSS adoption.** Month-over-month download growth, a meaningful count of external dependents, external contributors merging real PRs, and third-party content (blog posts, comparison articles, integration guides) written without the seller's prompting.
+- **Strong paid products.** Agora IV and AEGIS, reviewed under the same lens applied here, demonstrate real differentiation, retention, and margin.
+- **Calibrated marketing.** Every compliance and security claim in the OSS layer matches what the code enforces; nothing needs to be retracted in the next twelve months.
+- **Credible audit roadmap.** A funded, timeboxed plan for SOC 2 Type II and an independent security audit of the free layer (prompt-injection specifically), even if completion is 12–18 months out.
 
-Without two of those, the company is a consultancy attached to a PyPI package.
+Absent most of these, the company is a consultancy attached to a PyPI package with two internal side projects.
 
 ---
 
-## 8. Recommendation
+## 9. Recommendation
 
-**Do not invest in AIPEA as a standalone.** The code is honest and the maintainer is competent, but there is no defensible moat, no customer validation, and the compliance narrative is softer than the marketing.
+**Do not form an investment decision on AIPEA alone.** The evidence in this repository cannot answer the question the VC is actually asking.
 
-**If evaluating Undercurrent Holdings more broadly**, treat AIPEA as a positive **signal about engineering culture** (real tests, honest ADRs, frank SECURITY.md) and then demand to see the actual revenue-bearing products — Agora IV and AEGIS — under the same diligence lens applied here. Those are the company; AIPEA is a support library.
+- **If the check is being written on AIPEA as the product,** decline. The open-source-gateway model requires a monetized tier, which this repo is not. AIPEA standalone is a maintenance project, not a venture.
+- **If the check is being written on Undercurrent Holdings (AIPEA + Agora IV + AEGIS),** AIPEA is a *positive signal* about engineering culture and a *plausible* open-core funnel. Treat that as earning the team the right to a second-stage diligence — on Agora IV and AEGIS specifically — under the same adversarial lens applied here. Do not proceed on the AIPEA review alone.
 
-**If pressured to invest anyway**, require as closing conditions:
-1. Independent pentest and SOC 2 readiness assessment (buyer-paid, seller-selected from a shortlist of three).
-2. Restatement of compliance claims in all marketing to match what the code enforces.
+**Before second-stage diligence is scheduled, request from the seller:**
+
+1. PyPI download trajectory (12 months, monthly).
+2. List of external repositories depending on `aipea` (any public GitHub-code search evidence is acceptable).
+3. Community metrics: stars, external issues, external PRs merged, community-channel sizes.
+4. Attributed funnel data: share of Agora IV / AEGIS pipeline and closed revenue that touched AIPEA first.
+5. Read access to Agora IV and AEGIS repositories and current customer lists.
+
+**If pressured to invest before that material is produced,** require as closing conditions:
+
+1. Independent pentest and SOC 2 readiness assessment of the OSS layer (buyer-paid, seller-selected from a shortlist of three).
+2. Restatement of every compliance claim in OSS marketing to match what the code enforces — done before close.
 3. A named design partner in either healthcare or defense with a signed LOI before funds release.
-4. Bus-factor mitigation: contractual commitment of the single contributor plus a second engineer funded from proceeds.
+4. Bus-factor mitigation: contractual commitment of the single current contributor plus at least one additional engineer funded from proceeds.
+5. A written, dated plan to demonstrate funnel conversion from AIPEA into paid products within 12 months, with measurable checkpoints.
 
-Absent those, the risk is not that AIPEA breaks — it almost certainly will not break, because the code is sober — it is that AIPEA **does not grow into anything**, and the capital funds a maintenance salary rather than a venture outcome.
+The core risk is not that AIPEA breaks — it almost certainly will not break, because the code is sober. The core risk is that **AIPEA remains a well-maintained internal tool with an OSS license**, the funnel never materializes, and the capital funds engineering salaries rather than a venture outcome. That risk is a question about the funnel and about the paid products. It is not a question this repository can answer.
 
 ---
 
-## 9. Key Evidence Cited
+## 10. Key Evidence Cited
 
 - `src/aipea/security.py:48-100` — Unicode confusables map (genuine IP).
 - `src/aipea/security.py:240-290, 367-404` — Hardcoded injection regex set.
@@ -201,4 +284,4 @@ Absent those, the risk is not that AIPEA breaks — it almost certainly will not
 
 ---
 
-*Prepared adversarially. Findings reflect evidence present in the repository as of 2026-04-24.*
+*Prepared adversarially. Findings reflect evidence present in the repository as of 2026-04-24. Amended on the same date to reflect seller's representation that AIPEA is intentionally open-source and positioned as a gateway to commercial products (Agora IV, AEGIS) — a framing that reshapes the diligence questions without resolving them.*
