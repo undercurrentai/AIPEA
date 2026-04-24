@@ -7,8 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> Batched for release as **v1.6.2** (target PyPI publish ≤2026-05-09).
-> All content below is merged to `main` as of 2026-04-24 (PRs #51, #52, #53).
+## [1.6.2] - 2026-04-24
 
 ### Added
 

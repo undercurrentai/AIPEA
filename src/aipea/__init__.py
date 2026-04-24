@@ -13,7 +13,7 @@ Usage:
 
 from __future__ import annotations
 
-__version__ = "1.6.1"
+__version__ = "1.6.2"
 
 # Configuration
 # Core enums and types
