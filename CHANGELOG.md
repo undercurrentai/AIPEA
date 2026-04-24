@@ -7,6 +7,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+> Batched for release as **v1.6.2** (target PyPI publish ≤2026-05-09).
+> All content below is merged to `main` as of 2026-04-24 (PRs #51, #52, #53).
+
+### Added
+
+- **`src/aipea/search.py`**: PEP 562 module-level `__getattr__` for the
+  legacy `HTTP_TIMEOUT` alias — every access now emits
+  `DeprecationWarning` AND re-resolves against current config (fixes
+  the #81 runtime-config-change gap as a side effect). Hard removal
+  scheduled for v2.0.0rc1 per `TODO.md §Release Roadmap`. AgoraIV's
+  14 existing references (shim + two regression tests) continue to
+  work; the warning fires once per process on first import.
+  *(PR #51)*
+- **`src/aipea/search.py`**: `_resolve_provider_url(env_var,
+  config_field)` private helper; `_resolve_exa_api_url` and
+  `_resolve_firecrawl_api_url` now delegate. No behavior change.
+  *(PR #51)*
+- **`tests/test_search.py::TestV162HTTPTimeoutDeprecation`**: 4 new
+  regression tests covering direct access, `from … import …`, live
+  re-resolution across `AIPEA_HTTP_TIMEOUT` env-var changes, and
+  unknown-attribute still-raising. *(PR #51)*
+- **`docs/adopters.md`** — NEW. Named adopters (Agora IV + AEGIS)
+  with integration patterns, AIPEA version pinned, and production
+  signals. Pydantic-pattern: named-adopters beat anonymized.
+  *(PR #51)*
+- **`docs/metrics.md`** — NEW. Engineering-quality signals table;
+  release-cadence history; adoption-signals section; live pepy.tech
+  download-trajectory badge + GitHub-native signal badges (stars,
+  forks, issues, last commit, contributors); "Signals we currently
+  do NOT publish — and why" section with explicit zero-counts
+  (funnel conversion, external contributors, design partners,
+  external PRs); opt-out install-telemetry declined-by-policy note
+  with forward-pointer to ADR-005 Plan C.2 rationale. *(PR #51 + #53)*
+- **`case-studies/agora-iv-v1.md`** — NEW. 10-week narrative
+  (v1.0.0 → v1.6.1) with Wave 18/19/20 defect counts, three
+  highlighted security fixes (#96 HIPAA leak, #107 ReDoS, #108
+  ZWSP bypass), honest-limits section, and reference index.
+  *(PR #51)*
+- **`docs/claude/audits/vc-adversarial-review-2026-04-24.md`** —
+  NEW. 349-line adversarial VC review merged verbatim with
+  maintainer editorial-note banner flagging stale metrics (67 →
+  238 commits; ~810 → 1,282 tests) and cross-linking to prior
+  adversarial review + forthcoming ADR-005. *(PR #52)*
+- **`README.md`**: "Adoption & metrics" block linking the three
+  new P5e-trio docs. *(PR #53)*
+- **GitHub Discussion #54**: "Are you using AIPEA? Tell us how — no
+  NDA required" — adopter-outreach thread. *(not committed; live
+  at [#54](https://github.com/undercurrentai/AIPEA/discussions/54))*
+
+### Changed
+
+- **`TODO.md`**: full restructure. Release Roadmap table
+  (v1.6.2 → v1.7.0 → v1.8.0 → v2.0.0rc1 → v2.0.0) with approved
+  2026-10-22 v2.0.0 target based on industry-norm deprecation
+  windows (NEP 23 / PEP 387 / SQLAlchemy). All 5 former Open
+  Questions closed with decision links. PR #52 Adversarial VC
+  Review response section tracking 6 phases. *(PR #51 + #53)*
+- **`SPECIFICATION.md`**: header, footer, §7.4 pattern count, and
+  §10 roadmap pointer synced to v1.6.1 state (P1-P4 → P1-P5,
+  TODO.md as canonical tracker). *(PR #51)*
+- **`CLAUDE.md`** (project): library version, `last_audit`, Source
+  LOC, and §12 ROADMAP reference all synced to v1.6.1.
+  *(PR #51)*
+- **`CONTRIBUTING.md` / `SECURITY.md`**: effective-date bumps.
+  `SECURITY.md` notes the bump reflects expanded injection-pattern
+  coverage shipped in v1.6.1. *(PR #51)*
+
+### Removed
+
+- **`benchmarks/`** (`run.sh` + `perf_baseline.json`) — scaffold-era
+  stub; never wired to CI; `pytest-benchmark` not a dep. Industry
+  data on hosted-runner benchmark gates (45% FP rate per CodSpeed
+  measurement) makes activation unwise for single-maintainer OSS.
+  *(PR #51)*
+- **`tools/ci/enforce_perf_gate.py`** — companion to the removed
+  `benchmarks/`. *(PR #51)*
+- **`Makefile`**: `perf:` target + `.PHONY` entry. *(PR #51)*
+- **`tools/ci/generate_scorecard.py`**: `("enforce_perf_gate.py",
+  "Perf Gate")` tuple entry in LINTERS. *(PR #51)*
+
+### Fixed
+
+- **`src/aipea/enhancer.py:1334-1342`** rolling-average bootstrap
+  asymmetry — verified as a **false positive** from `/discover`
+  2026-04-23; the `count == 1` branch already correctly
+  special-cases the first-update path. No code change required.
+  *(PR #51)*
+
+### Governance / meta
+
+- **Repo flipped PUBLIC** (2026-04-23). Pre-flip audit: zero
+  committed secrets / real API keys / AWS account IDs / PII leaks.
+  GitHub auto-enabled secret scanning, push protection, Dependabot
+  security updates, secret-scanning-non-provider-patterns, and
+  validity checks.
+- **GitHub Discussions enabled** (2026-04-23) for adopter-outreach
+  flow referenced from `docs/adopters.md`.
+- **Second-committer contract** budget authorized (~$40K/yr, ~0.25
+  FTE) per PR #52 response plan. Scope-of-work draft at
+  `~/.claude/plans/aipea-second-committer-sow-v0.md` (personal;
+  not committed).
+
 ## [1.6.1] - 2026-04-22
 
 ### Fixed
