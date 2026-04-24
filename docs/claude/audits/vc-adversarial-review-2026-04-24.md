@@ -26,8 +26,7 @@
 >
 > The maintainer response to this review is filed in
 > [`docs/adr/ADR-005-pr52-vc-adversarial-review-response.md`](../../adr/ADR-005-pr52-vc-adversarial-review-response.md)
-> (scheduled for v1.7.0, 2026-06-15) and in an appended §12 section at the
-> end of this document (same release cycle).
+> (shipped 2026-04-24 — includes §12 per-diligence-question appendix).
 
 ---
 

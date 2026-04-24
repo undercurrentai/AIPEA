@@ -170,9 +170,10 @@ searching for "dependents: 0".
   with appropriate anonymization of internal operational details.
 - **Opt-out install telemetry / phone-home pings** — **declined** by
   policy. Privacy-hostile to regulated consumers (HIPAA, TACTICAL);
-  contradicts AIPEA's security-substrate brand. Rationale: PR #52
-  response Plan C.2 in ADR-005. `pypistats` + GitHub Insights already
-  cover the same signal without the privacy cost.
+  contradicts AIPEA's security-substrate brand. Rationale:
+  [ADR-005 §C.2](adr/ADR-005-pr52-vc-adversarial-review-response.md#c2-opt-out-install-pings--telemetry).
+  `pypistats` + GitHub Insights already cover the same signal without
+  the privacy cost.
 
 ---
 

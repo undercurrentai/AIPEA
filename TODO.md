@@ -40,8 +40,10 @@ same day. The 23 review findings are triaged 13 Accept / 7 BD / 2 Decline
   (not committed). 6 open questions in §12 need maintainer + counsel
   review before v1 candidate distribution. Target: signed contract by
   2026-06-30; contractor start 2026-07-15.
-- [ ] **Phase 4.a**: `docs/adr/ADR-005-pr52-vc-adversarial-review-response.md`
-  + §12 maintainer appendix on the merged VC review (v1.7.0).
+- [x] **Phase 4.a**: [`docs/adr/ADR-005-pr52-vc-adversarial-review-response.md`](docs/adr/ADR-005-pr52-vc-adversarial-review-response.md)
+  — shipped 2026-04-24 (authored for v1.7.0 but landed early alongside
+  v1.6.2 release cycle). §12 per-diligence-question appendix folded
+  into the ADR.
 - [ ] **Phase 4.b**: Claims-audit sweep across README / SECURITY.md /
   SPECIFICATION.md / CLAUDE.md / aegis-adapter.md / agora-adapter.md
   (v1.7.0). Triple-AI gate will fire on this PR.
@@ -55,7 +57,7 @@ same day. The 23 review findings are triaged 13 Accept / 7 BD / 2 Decline
 - Review SOW v0 §12 open questions; produce v1 for candidate
   distribution.
 
-Declined (with rationale in ADR-005 when it ships):
+Declined (with full rationale + Revisit triggers in [ADR-005 §C.1/C.2](docs/adr/ADR-005-pr52-vc-adversarial-review-response.md)):
 - DistilBERT-scale classifier swap (review §5.1 / §10 Phase 1) — violates
   stdlib + httpx core; collapses AEGIS step-up.
 - Opt-out install telemetry (review §10 Phase 0) — privacy-hostile;

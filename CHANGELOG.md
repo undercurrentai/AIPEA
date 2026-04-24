@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`docs/adr/ADR-005-pr52-vc-adversarial-review-response.md`** —
+  NEW. Formal maintainer response to PR #52 adversarial VC review:
+  23-finding triage matrix (13 Accept / 7 BD / 2 Decline / 1 Defer),
+  locked user decisions, revised release roadmap, C.1/C.2 declined
+  decisions with MADR Revisit triggers (DistilBERT classifier swap;
+  opt-out install telemetry), and §12 per-diligence-question
+  appendix answering review §7 Q1-Q12. Authored in the v1.7.0 cycle
+  but landed early (v1.6.2 release window). Supersedes "forthcoming
+  ADR-005" placeholders in TODO.md, `CHANGELOG.md`, `docs/metrics.md`,
+  and the merged VC review editorial banner.
+
 ## [1.6.2] - 2026-04-24
 
 ### Added
