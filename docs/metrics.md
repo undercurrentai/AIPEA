@@ -1,7 +1,8 @@
 # AIPEA Metrics
 
 > Signals of AIPEA's adoption, usage, and engineering quality. Small
-> numbers, honestly reported. Updated 2026-04-23 (post-v1.6.1).
+> numbers, honestly reported. Updated 2026-04-24 (v1.6.3 telemetry
+> dashboard; post-PR #52 adversarial-review response).
 
 This page exists because an investor's first two questions are
 "who's using it?" and "who's about to?" — and "trust me" isn't an
@@ -92,13 +93,26 @@ AIPEA as a dependency. External adopters are welcome — open a
 [Discussion](https://github.com/undercurrentai/AIPEA/discussions) to
 be listed.
 
-### PyPI downloads
+### PyPI downloads — live charts
 
-Live at [`pypistats.org/packages/aipea`](https://pypistats.org/packages/aipea).
-Expect small absolute numbers through 2026 — AIPEA is a B2B library, not a
-consumer package. Trajectory matters more than absolute volume; we'll
-publish a trailing-30-day trend chart here once we have enough data for
-it to be meaningful (~v1.7.0, 2026-06).
+- **Trajectory chart** (last 30 days, updated daily):
+  [![Downloads](https://static.pepy.tech/badge/aipea/month)](https://pepy.tech/project/aipea)
+- **Cumulative**: [![Total downloads](https://static.pepy.tech/badge/aipea)](https://pepy.tech/project/aipea)
+- **Full dashboard**: [`pepy.tech/project/aipea`](https://pepy.tech/project/aipea)
+- **Raw stats**: [`pypistats.org/packages/aipea`](https://pypistats.org/packages/aipea)
+
+Expect small absolute numbers through 2026 — AIPEA is a B2B library,
+not a consumer package. Trajectory matters more than absolute volume.
+
+### GitHub activity — live
+
+- **Stars**: [![Stars](https://img.shields.io/github/stars/undercurrentai/AIPEA?style=flat)](https://github.com/undercurrentai/AIPEA/stargazers)
+- **Forks**: [![Forks](https://img.shields.io/github/forks/undercurrentai/AIPEA?style=flat)](https://github.com/undercurrentai/AIPEA/network/members)
+- **Open issues**: [![Issues](https://img.shields.io/github/issues/undercurrentai/AIPEA)](https://github.com/undercurrentai/AIPEA/issues)
+- **Last commit**: [![Last commit](https://img.shields.io/github/last-commit/undercurrentai/AIPEA)](https://github.com/undercurrentai/AIPEA/commits/main)
+- **Contributors**: [![Contributors](https://img.shields.io/github/contributors/undercurrentai/AIPEA)](https://github.com/undercurrentai/AIPEA/graphs/contributors)
+- **Dependent repos (public)**:
+  [`github.com/undercurrentai/AIPEA/network/dependents`](https://github.com/undercurrentai/AIPEA/network/dependents)
 
 ---
 
@@ -122,8 +136,27 @@ Beyond the automated gates:
 
 ---
 
-## What we don't publish (and why)
+## Signals we currently do NOT publish — and why
 
+Honest gaps, per the PR #52 adversarial VC review §7 diligence
+questions. We list these so the absence isn't discoverable only by
+searching for "dependents: 0".
+
+- **Funnel conversion rate** (AIPEA → Agora IV / AEGIS paid seats) —
+  blocked on AEGIS/Agora-side instrumentation. Tracked as Plan B
+  finding #14 in the
+  [PR #52 response plan](https://github.com/undercurrentai/AIPEA/blob/main/docs/adr/ADR-005-pr52-vc-adversarial-review-response.md)
+  (ADR-005 shipping v1.7.0). Until that exists, the open-core gateway
+  thesis cannot be quantified.
+- **External contributors**: **0** at 2026-04-24. Single-author repo
+  per `git shortlog -sn`. Bus-factor mitigation is active — see
+  `docs/MAINTAINERS.md` (v1.8.0) and the second-committer contract
+  (Plan B #16, authorized 2026-04-24).
+- **Signed design partners**: **0** at 2026-04-24 across healthcare /
+  fintech / defense verticals. Tracked as Plan B finding #21.
+- **External PRs merged**: **0** at 2026-04-24 (all 52 merged PRs
+  are from the maintainer). Inbound contribution path documented in
+  `CONTRIBUTING.md` + pinned Discussion (v1.6.3).
 - **Named customer counts beyond internal Undercurrent products** — we
   don't have design partners or beta customers yet. When we do, they'll
   appear in [`docs/adopters.md`](adopters.md) with their consent.
@@ -134,6 +167,11 @@ Beyond the automated gates:
 - **Internal incident-rate metrics** — covered under the Agora IV case
   study at [`case-studies/agora-iv-v1.md`](../case-studies/agora-iv-v1.md)
   with appropriate anonymization of internal operational details.
+- **Opt-out install telemetry / phone-home pings** — **declined** by
+  policy. Privacy-hostile to regulated consumers (HIPAA, TACTICAL);
+  contradicts AIPEA's security-substrate brand. Rationale: PR #52
+  response Plan C.2 in ADR-005. `pypistats` + GitHub Insights already
+  cover the same signal without the privacy cost.
 
 ---
 

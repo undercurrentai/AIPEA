@@ -44,6 +44,13 @@ User Query → SecurityScanner → QueryAnalyzer → SearchOrchestrator → Prom
 | **Tactical** | 2-5s | Standard queries with search context |
 | **Strategic** | 5-15s | Complex research, multi-source synthesis |
 
+### Adoption & metrics
+
+Named adopters and integration patterns → [`docs/adopters.md`](docs/adopters.md).
+Live download trajectory, engineering-quality signals, and the honest "not
+yet published" list → [`docs/metrics.md`](docs/metrics.md).
+Production narrative (Wave 18-20 hardening) → [`case-studies/agora-iv-v1.md`](case-studies/agora-iv-v1.md).
+
 ## Installation
 
 ```bash
