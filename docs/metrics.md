@@ -1,8 +1,8 @@
 # AIPEA Metrics
 
 > Signals of AIPEA's adoption, usage, and engineering quality. Small
-> numbers, honestly reported. Updated 2026-04-24 (v1.6.3 telemetry
-> dashboard; post-PR #52 adversarial-review response).
+> numbers, honestly reported. Updated 2026-04-24 (v1.6.2 shipped to
+> PyPI; PR #52 adversarial-review response in flight).
 
 This page exists because an investor's first two questions are
 "who's using it?" and "who's about to?" — and "trust me" isn't an
@@ -38,11 +38,11 @@ See the README badges for live rendering of these.
 
 ---
 
-## Engineering-quality signals (2026-04-23)
+## Engineering-quality signals (2026-04-24)
 
 | Metric | Value | Source of truth |
 |---|---|---|
-| Library version | 1.6.1 | [`pyproject.toml:7`](../pyproject.toml), [PyPI](https://pypi.org/project/aipea/1.6.1/) |
+| Library version | 1.6.2 | [`pyproject.toml:7`](../pyproject.toml), [PyPI](https://pypi.org/project/aipea/1.6.2/) |
 | Source LOC | ~10,662 | `wc -l src/aipea/*.py` |
 | Test count | 1,282 collected | `pytest --collect-only` |
 | Test coverage | 93.46% | Codecov, `make test` |
@@ -69,9 +69,10 @@ See the README badges for live rendering of these.
 | v1.5.0 | 2026-04-15 | Compliance-aware learning (ADR-003; PR #40) |
 | v1.6.0 | 2026-04-15 | Taint-aware feedback averaging (ADR-004; PR #44) |
 | v1.6.1 | 2026-04-22 | Injection-regex hardening (8 → 10 patterns; PR #50) |
+| v1.6.2 | 2026-04-24 | PR #52 VC-review response, telemetry dashboard, HTTP_TIMEOUT deprecation, P5e trio, benchmarks deleted (PRs #51/#52/#53/#55/#56) |
 
-Average cadence from v1.3.0 onward: ~1 release/10 days. 9 PyPI releases
-over ~10 weeks. Next planned release: v1.6.2 (~2026-05-09) per the
+Average cadence from v1.3.0 onward: ~1 release/10 days. 10 PyPI releases
+over ~10 weeks. Next planned release: v1.7.0 (~2026-06-15) per the
 approved v2.0.0 roadmap in [`TODO.md`](../TODO.md).
 
 ---
