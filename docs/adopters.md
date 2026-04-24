@@ -3,7 +3,7 @@
 > Who's using AIPEA in production, what they use it for, and which version
 > they're tested against. Updated 2026-04-23.
 
-AIPEA is young (v1.6.1, shipped 2026-04-23) and maintained by a small team
+AIPEA is young (v1.6.2, shipped 2026-04-24) and maintained by a small team
 at [Undercurrent Holdings](https://github.com/undercurrentai). This page
 names the adopters we know about. If you're using AIPEA and want to be
 listed (or prefer to stay anonymous), open a PR or email
