@@ -3,14 +3,51 @@
 Canonical tracker for all pending work. Replaces scattered items from ROADMAP.md,
 NEXT_STEPS.md, KNOWN_ISSUES.md, SPECIFICATION.md, and discovery findings.
 
-Last updated: 2026-04-23 (post-v1.6.1 release + approved v2.0.0 roadmap;
-1,282 tests, 93.46% coverage, 50 exports, 10,662 LOC)
+Last updated: 2026-04-24 (post-v1.6.2 + PR #52 adversarial VC review
+merged + v1.6.3 telemetry dashboard in flight).
 
 > **Architect's release plan**: see `~/.claude/plans/you-are-the-senior-dynamic-micali.md`
-> for the approved v1.6.2 → v1.7.0 → v1.8.0 → v2.0.0rc1 → v2.0.0 roadmap,
-> industry-norm evidence, and verification gates per release. Decisions on
-> the five former Open Questions are recorded below in the sections they
-> affect.
+> for the approved v1.6.2 → v1.7.0 → v1.8.0 → v2.0.0rc1 → v2.0.0 roadmap.
+> **PR #52 adversarial VC review response plan**: see
+> `~/.claude/plans/pr52-vc-adversarial-response-2026-04-24.md` for the
+> 23-finding triage matrix, user decisions (2026-04-24), and sequenced
+> execution against v1.6.3 / v1.7.0 / v1.8.0.
+
+---
+
+## PR #52 Adversarial VC Review — Response (2026-04-24)
+
+PR #52 merged 2026-04-24 at squash `f92d253`. Response plan approved the
+same day. The 23 review findings are triaged 13 Accept / 7 BD / 2 Decline
+/ 1 Defer. Execution sequenced:
+
+- [x] **Phase 1**: Merge PR #52 with editorial banner (2026-04-24).
+- [ ] **Phase 2**: v1.6.3 telemetry dashboard (this PR).
+- [ ] **Phase 3**: Second-committer scope-of-work (BD; budget authorized
+  2026-04-24). Target: contract signed before v1.8.0 start (2026-08).
+- [ ] **Phase 4.a**: `ADR-005-pr52-vc-adversarial-review-response.md` +
+  §12 maintainer appendix on the merged VC review (v1.7.0).
+- [ ] **Phase 4.b**: Claims-audit sweep across README / SECURITY.md /
+  SPECIFICATION.md / CLAUDE.md / aegis-adapter.md / agora-adapter.md
+  (v1.7.0). Triple-AI gate will fire on this PR.
+- [ ] **Phase 4.c**: Adversarial benchmark suite in `tests/adversarial/`
+  + non-gating nightly CI (v1.7.0).
+
+Declined (with rationale in ADR-005 when it ships):
+- DistilBERT-scale classifier swap (review §5.1 / §10 Phase 1) — violates
+  stdlib + httpx core; collapses AEGIS step-up.
+- Opt-out install telemetry (review §10 Phase 0) — privacy-hostile;
+  `pypistats` + GitHub Insights give same signal free.
+
+Deferred:
+- Independent pentest ($25-40K, review §5.4) — until post-v1.7.0 claims
+  audit completes.
+- Clinical reviewer for PHI tranche ($2-5K, review §10 Phase 1) — v1.8.0
+  PHI catalog expansion ships behind opt-in flag pending sign-off.
+- Federated learning endpoint (review §10 Phase 2) — v3.0+ architectural
+  change; not v1.x scope.
+
+---
 
 ---
 
