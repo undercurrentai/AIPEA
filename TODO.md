@@ -3,15 +3,23 @@
 Canonical tracker for all pending work. Replaces scattered items from ROADMAP.md,
 NEXT_STEPS.md, KNOWN_ISSUES.md, SPECIFICATION.md, and discovery findings.
 
-Last updated: 2026-04-24 (post-v1.6.2 + PR #52 adversarial VC review
-merged + v1.6.3 telemetry dashboard in flight).
+Last updated: 2026-04-24 (v1.6.2 content fully merged to `main`;
+awaiting PyPI release cut).
 
 > **Architect's release plan**: see `~/.claude/plans/you-are-the-senior-dynamic-micali.md`
 > for the approved v1.6.2 → v1.7.0 → v1.8.0 → v2.0.0rc1 → v2.0.0 roadmap.
 > **PR #52 adversarial VC review response plan**: see
 > `~/.claude/plans/pr52-vc-adversarial-response-2026-04-24.md` for the
 > 23-finding triage matrix, user decisions (2026-04-24), and sequenced
-> execution against v1.6.3 / v1.7.0 / v1.8.0.
+> execution against v1.6.2 / v1.7.0 / v1.8.0.
+>
+> **Release-label note**: PR #53 was authored with a `docs(v1.6.3):`
+> commit prefix, which was the PR-level working name used during
+> drafting. At release-cut time, the content ships as part of the
+> single **v1.6.2** PyPI release alongside PR #51 and PR #52 content
+> — no separate v1.6.3 release is planned. References to "v1.6.3"
+> elsewhere in this file or the response plan refer to that
+> PR-working-label, not a distinct PyPI version.
 
 ---
 
@@ -21,17 +29,31 @@ PR #52 merged 2026-04-24 at squash `f92d253`. Response plan approved the
 same day. The 23 review findings are triaged 13 Accept / 7 BD / 2 Decline
 / 1 Defer. Execution sequenced:
 
-- [x] **Phase 1**: Merge PR #52 with editorial banner (2026-04-24).
-- [ ] **Phase 2**: v1.6.3 telemetry dashboard (this PR).
-- [ ] **Phase 3**: Second-committer scope-of-work (BD; budget authorized
-  2026-04-24). Target: contract signed before v1.8.0 start (2026-08).
-- [ ] **Phase 4.a**: `ADR-005-pr52-vc-adversarial-review-response.md` +
-  §12 maintainer appendix on the merged VC review (v1.7.0).
+- [x] **Phase 1**: Merge PR #52 with editorial banner.
+  ✅ 2026-04-24, squash `f92d253`.
+- [x] **Phase 2**: Telemetry dashboard (pepy.tech + GitHub badges in
+  `docs/metrics.md`, honest-gaps section, README linkage, pinned-
+  Discussion #54). ✅ 2026-04-24, PR #53 squash `712b182`. Ships with
+  v1.6.2 PyPI release.
+- [x] **Phase 3**: Second-committer scope-of-work v0.
+  ✅ 2026-04-24, drafted at `~/.claude/plans/aipea-second-committer-sow-v0.md`
+  (not committed). 6 open questions in §12 need maintainer + counsel
+  review before v1 candidate distribution. Target: signed contract by
+  2026-06-30; contractor start 2026-07-15.
+- [ ] **Phase 4.a**: `docs/adr/ADR-005-pr52-vc-adversarial-review-response.md`
+  + §12 maintainer appendix on the merged VC review (v1.7.0).
 - [ ] **Phase 4.b**: Claims-audit sweep across README / SECURITY.md /
   SPECIFICATION.md / CLAUDE.md / aegis-adapter.md / agora-adapter.md
   (v1.7.0). Triple-AI gate will fire on this PR.
 - [ ] **Phase 4.c**: Adversarial benchmark suite in `tests/adversarial/`
   + non-gating nightly CI (v1.7.0).
+
+**Manual follow-ups (outside repo-editable scope)**:
+- Pin GitHub Discussion #54 via the UI (GraphQL `pinDiscussion`
+  mutation is not exposed; one-click UI action: Discussion #54 →
+  "..." → "Pin discussion" → "Chevron Up").
+- Review SOW v0 §12 open questions; produce v1 for candidate
+  distribution.
 
 Declined (with rationale in ADR-005 when it ships):
 - DistilBERT-scale classifier swap (review §5.1 / §10 Phase 1) — violates
@@ -49,17 +71,15 @@ Deferred:
 
 ---
 
----
-
 ## Release Roadmap (approved 2026-04-23)
 
-| Release | Target | Scope |
-|---|---|---|
-| **v1.6.2** | 2026-05-09 | Doc sync + 4 implicit-TODO cleanups + `benchmarks/` delete + P5e unilateral trio (adopters.md, metrics.md, case-studies/agora-iv-v1.md). `HTTP_TIMEOUT` gets `DeprecationWarning` (not deletion). |
-| **v1.7.0** | 2026-06-15 | `AIPEAConfig.source_of()` + CLI migration. AEGIS adapter contract audit + AIPEA-side integration test. `DeprecationWarning` on `create_model_specific_prompt`. `MIGRATION.md` v0 draft. `tests/test_models.py`. |
-| **v1.8.0** | 2026-08-01 | AgoraIV migration PRs (AgoraIV adopts `source_of()`, drops deprecated imports). Final minor pre-rc1. |
-| **v2.0.0rc1** | 2026-09-01 | Remove FedRAMP, HTTP_TIMEOUT alias, `create_model_specific_prompt`. Inline `TierProcessor` ABC. Finalize `MIGRATION.md`. |
-| **v2.0.0** | 2026-10-22 | GA (≥2 weeks rc1 soak, zero unresolved blockers). |
+| Release | Target | State | Scope |
+|---|---|---|---|
+| **v1.6.2** | 2026-05-09 | **on `main`; awaiting PyPI cut** | Doc sync + 3 code cleanups (HTTP_TIMEOUT DeprecationWarning, DRY URL resolver; rolling-avg was a false positive) + `benchmarks/` delete + P5e trio + PR #52 adversarial-review merge + v1.6.3-labeled telemetry dashboard (PR #53). All shipped to `main` via PRs #51 + #52 + #53 on 2026-04-24. |
+| **v1.7.0** | 2026-06-15 | queued | `AIPEAConfig.source_of()` + CLI migration. AEGIS adapter contract audit + AIPEA-side integration test. `DeprecationWarning` on `create_model_specific_prompt`. `MIGRATION.md` v0 draft. `tests/test_models.py`. **+ PR #52 Phase 4.a** (ADR-005 + §12 appendix) **+ Phase 4.b** (claims audit) **+ Phase 4.c** (adversarial benchmark suite). |
+| **v1.8.0** | 2026-08-01 | queued | AgoraIV migration PRs (AgoraIV adopts `source_of()`, drops deprecated imports). PII catalog expansion (tranche 1: phone, email, street-address, bank-account, IPv4-private). PHI catalog expansion (tranche 2: medication names, ICD-10, CPT, DEA) — **behind opt-in flag pending clinical-reviewer sign-off** (Plan B #20 deferred). `docs/MAINTAINERS.md`. `.github/CODEOWNERS` updated with second committer. Final minor pre-rc1. |
+| **v2.0.0rc1** | 2026-09-01 | queued | Remove `FEDRAMP`, `HTTP_TIMEOUT` alias, `create_model_specific_prompt`. Inline `TierProcessor` ABC. Remove `phi_redaction_enabled` if v1.7.0 claims audit finds it unused. Finalize `MIGRATION.md`. |
+| **v2.0.0** | 2026-10-22 | queued | GA (≥2 weeks rc1 soak, zero unresolved blockers, AgoraIV migrated off deprecated symbols). |
 
 Rationale for the timing (full evidence in the plan file): NumPy NEP 23
 floor is 1 year deprecation→removal; PEP 387 is 2 minor versions; SQLAlchemy
@@ -68,7 +88,10 @@ old; 6 months + 2 minor releases is the minimum defensible window.
 
 ---
 
-## Immediate (v1.6.2) — target 2026-05-09
+## Immediate (v1.6.2) — ON `main`, awaiting PyPI cut (target 2026-05-09)
+
+All sub-items shipped via PRs #51 + #52 + #53 on 2026-04-24. Cutting the
+release is a version-bump + tag operation — no remaining code work.
 
 ### A. Doc version sync — COMPLETE (2026-04-23 via `/docs-sync`)
 
@@ -91,51 +114,52 @@ cycle are closed:
 **v1.6.2 re-sync** (after the release below ships): bump all v1.6.1 →
 v1.6.2 headers, same pattern.
 
-### B. Code-quality cleanups (≈2 hrs; safe — ship with v1.6.2)
+### B. Code-quality cleanups — COMPLETE (2026-04-24 via PR #51)
 
 From `/discover` 2026-04-23; revised per the approved plan.
 
-- [ ] **[MEDIUM] `src/aipea/search.py:114-116`** — Attach `DeprecationWarning`
-  to `HTTP_TIMEOUT` module-level alias. ***Revised***: direct verification
-  of AgoraIV found **14 active references** (`aipea_search_providers.py`
-  shim + `tests/regression/test_bh26_fixes.py` + `tests/regression/test_deferred_wave5.py`),
-  so the alias cannot be deleted without consumer-breaking. Instead, wrap
-  with `warnings.warn(DeprecationWarning(...), stacklevel=2)` on access,
-  pattern-matching `security.py:144` FedRAMP warning. Hard deletion moves
-  to v2.0.0.
-- [ ] **[MEDIUM] `src/aipea/search.py:44-63`** — Extract
-  `_resolve_provider_url(env_var, config_field, default)` helper. Refactor
-  `_resolve_exa_api_url` and `_resolve_firecrawl_api_url` to call it. No
-  behavior change.
-- [ ] **[LOW] `src/aipea/enhancer.py:1334-1342`** — Fix rolling-average
-  bootstrap asymmetry. Special-case `count == 1 → current_avg = new_time_ms`.
+- [x] **[MEDIUM] `src/aipea/search.py`** — `HTTP_TIMEOUT` alias now emits
+  `DeprecationWarning` via PEP 562 `__getattr__` AND respects runtime
+  config changes (solves #81 as a side effect). AgoraIV's 14 references
+  continue to work. Hard deletion scheduled v2.0.0rc1. 4 regression
+  tests in `TestV162HTTPTimeoutDeprecation`.
+- [x] **[MEDIUM] `src/aipea/search.py`** — `_resolve_provider_url(env_var,
+  config_field)` helper extracted; `_resolve_exa_api_url` and
+  `_resolve_firecrawl_api_url` delegate. No behavior change.
+- [x] **[LOW] `src/aipea/enhancer.py:1334-1342`** — **FALSE POSITIVE**
+  from `/discover`; code already correctly special-cases `count == 1`.
+  No code change required; documented in CHANGELOG.
 
 **Deferred to v1.7.0** (bundled with `source_of()` work below):
-- ~~`src/aipea/cli.py:84, 117, 129, 139, 309` — migrate `cfg._sources` reads~~
+- `src/aipea/cli.py:84, 117, 129, 139, 309` — migrate `cfg._sources`
+  reads to `source_of()` accessor.
 
-### C. Dead-code deletion (Decision 2 — `benchmarks/`)
+### C. Dead-code deletion (Decision 2 — `benchmarks/`) — COMPLETE (PR #51)
 
-- [ ] **Delete `benchmarks/`** — `run.sh` + `perf_baseline.json` are
-  scaffold-era stubs (single commit 2909d34, never edited; explicit
-  "TEMPLATE — ... No benchmarks configured — skipping." text). Not
-  referenced by any `.github/workflows/*`. `pytest-benchmark` not a dep.
-  `rm -rf benchmarks/`. Also remove the "Benchmark regression detection"
-  Opportunity line below (closed).
+- [x] **Deleted `benchmarks/`** — stubs removed; accompanying cleanup:
+  `tools/ci/enforce_perf_gate.py` deleted, `Makefile` `perf:` target +
+  `.PHONY` entry removed, `tools/ci/generate_scorecard.py` LINTERS
+  tuple entry removed.
 
-### D. Commercial validation surface (Decision 5 — P5e unilateral trio)
+### D. Commercial validation surface (Decision 5 — P5e trio) — COMPLETE (PR #51 + #53)
 
 Shipped alongside v1.6.2; non-engineering-blocking but investor-visible.
 
-- [ ] **`docs/adopters.md`** — list Agora IV + AEGIS by name, versions
-  tested, integration pattern (shim vs direct). Both are Undercurrent
-  Holdings internal products (no NDA concern). Pydantic-pattern: named
-  adopters beat anonymized.
-- [ ] **`docs/metrics.md`** — PyPI download badge + dependent-repos badge
-  + stars growth + trailing-30-day pypistats link. Link from README.
-- [ ] **`case-studies/agora-iv-v1.md`** — Wave 19/20 hardening narrative:
-  13 defects found, zero escaped, real injection-detection-rate,
-  latency p50/p95 per tier, compliance-mode FP rate. Technical-investor
-  readable, specific not adjective-driven.
+- [x] **`docs/adopters.md`** — Agora IV + AEGIS named adopters with
+  integration patterns and production signals.
+- [x] **`docs/metrics.md`** — initial version in PR #51, enriched in
+  PR #53 with live pepy.tech + GitHub-native badges, honest-gaps
+  section with explicit zero-counts (funnel conversion, external
+  contributors, design partners, external PRs), opt-out install
+  telemetry declined-by-policy note.
+- [x] **`case-studies/agora-iv-v1.md`** — 10-week Wave 18/19/20
+  narrative with three highlighted security fixes and honest-limits
+  section.
+- [x] **`README.md`** — "Adoption & metrics" block linking the trio
+  (shipped PR #53).
+- [x] **GitHub Discussion #54** — "Are you using AIPEA? Tell us how —
+  no NDA required" adopter-outreach thread opened 2026-04-24.
+  **Manual follow-up**: pin via GitHub UI.
 
 **Parked (BD work, not engineering)**:
 - P5e item (4) — design-partner outreach to HIPAA / TACTICAL-defense /
@@ -156,9 +180,10 @@ Shipped alongside v1.6.2; non-engineering-blocking but investor-visible.
 - [ ] **Add `tests/test_config.py::test_source_of_public_accessor`** —
   public accessor contract; existing `_sources` tests remain as
   internal-invariant coverage.
-- [ ] **ADR-006** (optional but encouraged) — formalize public/private
+- [ ] **ADR-007** (optional but encouraged) — formalize public/private
   boundary decision in an ADR so v2.0.0+ can't accidentally expose more
-  internals.
+  internals. (ADR-005 and ADR-006 are reserved for PR #52 VC-response
+  and v2.0 deprecation batch respectively per 2026-04-24 decision.)
 
 ### F. AEGIS adapter contract audit (Decision 4 — pivotal reframing)
 
@@ -212,6 +237,29 @@ contract the adapter consumes.
 - [ ] **`ai/risk-register.yaml`** — populate both `review_date:` fields
   (lines 22, 41) with real quarterly dates.
 
+### J-bis. PR #52 Phase 4 (ships with v1.7.0)
+
+Per the approved PR #52 response plan. Each is its own PR; triple-AI
+gate fires on 4.b (claims audit touches security.py indirectly via
+source-link anchors) and 4.c (CI workflow change).
+
+- [ ] **Phase 4.a** — `docs/adr/ADR-005-pr52-vc-adversarial-review-response.md`
+  (≤250 lines, triage matrix + user decisions + critical path) +
+  append `## 12. Maintainer Response (2026-04-24)` section to the
+  merged VC review walking §7's 12 diligence questions.
+- [ ] **Phase 4.b** — Claims-audit sweep across README / SECURITY.md /
+  SPECIFICATION.md / CLAUDE.md / `docs/integration/aegis-adapter.md` /
+  `docs/integration/agora-adapter.md` against `src/aipea/security.py`.
+  Rewrite narrower-than-code claims; retract unbacked ones; add
+  source-code link anchors. Emit `DeprecationWarning` on any surface
+  that claims enforcement the code doesn't provide. File ADR-006 for
+  the v2.0 deprecation batch (per 2026-04-24 numbering decision).
+- [ ] **Phase 4.c** — `tests/adversarial/` corpus suite (OWASP LLM Top
+  10 + LLM-Attacks AdvBench subset + Garak subset; MIT-compatible
+  licenses only) + `.github/workflows/adversarial.yml` (nightly
+  non-gating at first); baseline hit-rate published to
+  `docs/metrics.md` **including losses**.
+
 ---
 
 ## Medium-term (v1.8.0 → v2.0.0rc1 → v2.0.0)
@@ -222,6 +270,26 @@ contract the adapter consumes.
   swapping the 14 `HTTP_TIMEOUT` references and 4
   `create_model_specific_prompt` shim references to non-deprecated APIs.
   Unblocks rc1 without breaking AgoraIV CI.
+- [ ] **PII catalog expansion (tranche 1)** — add `phone_us`, `email`,
+  `street_address` (US), `bank_account` (with routing-context
+  proximity), `ipv4_private` (RFC 1918). Regression tests under
+  `TestV180PiiCatalogExpansion`. Addresses PR #52 review §5.2 finding
+  #3. File **ADR-008** for rationale (additive, not a removal — so
+  not part of ADR-006 v2.0 deprecation batch).
+- [ ] **PHI catalog expansion (tranche 2)** — add `medication_name`
+  (top-500 generic+brand, FDA Orange Book MIT-compat extract),
+  `icd10_code`, `cpt_code`, `dea_number` (with checksum). **Behind
+  opt-in flag pending clinical-reviewer sign-off** — clinical
+  reviewer contract deferred per 2026-04-24 user decision; ships
+  with "pending clinical review" CHANGELOG marker. Regression tests
+  under `TestV180PhiCatalogExpansion`. Addresses PR #52 review §5.2
+  finding #4.
+- [ ] **`docs/MAINTAINERS.md`** — NEW. Module ownership table,
+  response SLAs, escalation paths, PR-review rotation. Co-authored
+  with the contracted second committer once onboarded.
+- [ ] **`.github/CODEOWNERS`** — update to list the contracted second
+  committer as human backup reviewer on security-critical paths.
+  Depends on Plan B #16 contract signed by 2026-06-30.
 - [ ] **Final-pass quality gates** — any lingering minor work picked up
   between v1.7.0 and rc1.
 
@@ -259,6 +327,10 @@ v1.7.0 → v2.0.0rc1).
 - [ ] **`search.py:114-116 HTTP_TIMEOUT` alias removal** — 14 AgoraIV
   references migrated in v1.8.0. Deprecation added v1.6.2; hard removal
   v2.0.0rc1.
+- [ ] **`phi_redaction_enabled` boolean field removal** — per PR #52
+  review §5.3 finding #6, no code consumes this flag. v1.7.0 Phase 4.b
+  claims audit confirms; if unused, remove at v2.0.0rc1. If some caller
+  reads it, document semantics and keep.
 
 ---
 
