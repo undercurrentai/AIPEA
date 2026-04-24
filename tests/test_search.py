@@ -1232,11 +1232,80 @@ class TestHTTPTimeoutEnvVar:
     """Regression: invalid AIPEA_HTTP_TIMEOUT must not crash module import."""
 
     def test_timeout_default_value(self) -> None:
-        """HTTP_TIMEOUT should have a valid default."""
-        from aipea.search import HTTP_TIMEOUT
+        """HTTP_TIMEOUT should have a valid default (still works post-deprecation)."""
+        import warnings
+
+        with warnings.catch_warnings():
+            # Deprecation signal is asserted separately in
+            # TestV162HTTPTimeoutDeprecation; suppress here so we can assert
+            # the value contract in isolation.
+            warnings.simplefilter("ignore", DeprecationWarning)
+            from aipea.search import HTTP_TIMEOUT
 
         assert isinstance(HTTP_TIMEOUT, float)
         assert HTTP_TIMEOUT > 0
+
+
+class TestV162HTTPTimeoutDeprecation:
+    """v1.6.2 regression: HTTP_TIMEOUT emits DeprecationWarning on access.
+
+    Scheduled for hard removal in v2.0.0. External consumers (AgoraIV's
+    shim + test_bh26_fixes.py + test_deferred_wave5.py) will see the
+    warning on first import; they migrate in AgoraIV's v1.8.0 window per
+    the approved v2.0.0 roadmap (TODO.md §Release Roadmap).
+    """
+
+    def test_access_emits_deprecation_warning(self) -> None:
+        """Accessing aipea.search.HTTP_TIMEOUT fires DeprecationWarning."""
+        import aipea.search as search_mod
+
+        with pytest.warns(DeprecationWarning, match="HTTP_TIMEOUT is deprecated"):
+            value = search_mod.HTTP_TIMEOUT
+
+        assert isinstance(value, float)
+        assert value > 0
+
+    def test_from_import_emits_deprecation_warning(self) -> None:
+        """`from aipea.search import HTTP_TIMEOUT` fires DeprecationWarning.
+
+        This is the exact pattern AgoraIV's shim uses, so the warning must
+        fire through ``from ... import ...`` (PEP 562 __getattr__ handles this).
+        """
+        with pytest.warns(DeprecationWarning, match="v1.6.2"):
+            from aipea.search import HTTP_TIMEOUT
+
+        assert isinstance(HTTP_TIMEOUT, float)
+        assert HTTP_TIMEOUT > 0
+
+    def test_access_returns_current_resolved_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Each access re-resolves against runtime config (#81 semantics preserved).
+
+        The whole point of replacing the eager binding with __getattr__ is
+        that the value respects runtime changes to AIPEA_HTTP_TIMEOUT.
+        """
+        import warnings
+
+        import aipea.search as search_mod
+
+        monkeypatch.setenv("AIPEA_HTTP_TIMEOUT", "17.0")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            first = search_mod.HTTP_TIMEOUT
+
+        monkeypatch.setenv("AIPEA_HTTP_TIMEOUT", "42.0")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            second = search_mod.HTTP_TIMEOUT
+
+        assert first == 17.0
+        assert second == 42.0
+
+    def test_unknown_attribute_still_raises_attribute_error(self) -> None:
+        """PEP 562 __getattr__ must not swallow normal attribute errors."""
+        import aipea.search as search_mod
+
+        with pytest.raises(AttributeError, match="no attribute"):
+            _ = search_mod.THIS_DOES_NOT_EXIST
 
 
 # =============================================================================

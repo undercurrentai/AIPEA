@@ -99,4 +99,4 @@ We credit reporters (with permission) in the release notes of the fix. If you pr
 
 ---
 
-*AIPEA Security Policy | Owner: @joshuakirby | Effective: v1.6.0 (2026-04-15)*
+*AIPEA Security Policy | Owner: @joshuakirby | Effective: v1.6.1 (2026-04-22; prior v1.6.0 policy text unchanged — date bumped to reflect expanded injection-pattern coverage shipped in v1.6.1)*

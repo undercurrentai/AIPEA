@@ -117,4 +117,4 @@ PyPI releases are ASK-first per `CLAUDE.md §2.2`. Do not cut a release without 
 
 ---
 
-*Contributing guide updated 2026-04-15 for v1.6.0. For questions, open a GitHub Discussion.*
+*Contributing guide updated 2026-04-22 for v1.6.1. For questions, open a GitHub Discussion.*

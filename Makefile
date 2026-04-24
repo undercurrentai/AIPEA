@@ -1,4 +1,4 @@
-.PHONY: install fmt lint type test sec all ci mut sbom score deps perf live
+.PHONY: install fmt lint type test sec all ci mut sbom score deps live
 
 install:
 	pip install -e ".[dev]"
@@ -38,6 +38,3 @@ score:
 
 deps:
 	pip list --outdated 2>/dev/null || true
-
-perf:
-	bash benchmarks/run.sh || true

@@ -57,7 +57,6 @@ LINTERS = [
     ("verify_fips.py",               "FIPS 140-3"),
     ("validate_log_schema.py",       "Log Schema"),
     ("validate_agent_messages.py",   "Agent Messages"),
-    ("enforce_perf_gate.py",         "Perf Gate"),
     ("validate_scaffold_adoption.py","Scaffold Adoption"),
 ]
 

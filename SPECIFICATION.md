@@ -1,5 +1,5 @@
 # AIPEA Specification
-> **AI Prompt Engineer Agent** | Version 1.6.0 | 2026-04-15
+> **AI Prompt Engineer Agent** | Version 1.6.1 | 2026-04-22
 
 ```yaml
 status: ACCEPTED
@@ -1155,8 +1155,11 @@ consumer's resilience characteristics.
 
 ## 10. Future Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the full roadmap with 6 prioritized features
-(P1-P4), implementation sketches, and planned environment variables.
+See [`TODO.md`](TODO.md) for the canonical tracker of active work (Immediate,
+Short-term, Medium-term, Declined, Open Questions, Opportunities) and
+[`docs/ROADMAP.md`](docs/ROADMAP.md) for the historical design rationale
+on prioritized features P1-P5 (P1-P4 now shipped; P5a-P5d are the
+investor-review follow-ups, most shipped in Waves A-C).
 
 ---
 
@@ -1428,5 +1431,5 @@ Stored in `docs/design-reference/` for historical reference:
 
 ---
 
-*AIPEA Specification v1.6.0 — AI Prompt Engineer Agent*
-*Undercurrent Holdings | 2026-04-15 (v1.6.0 released)*
+*AIPEA Specification v1.6.1 — AI Prompt Engineer Agent*
+*Undercurrent Holdings | 2026-04-22 (v1.6.1 released; PyPI 2026-04-23)*

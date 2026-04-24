@@ -32,6 +32,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
+from typing import Any
 
 import httpx
 
@@ -41,26 +42,38 @@ logger = logging.getLogger(__name__)
 _ATX_HEADER_RE = re.compile(r"^(\s{0,3})#")
 
 
-def _resolve_exa_api_url() -> str:
-    """Resolve Exa API URL from env var, config files, or default."""
-    env_val = os.environ.get("AIPEA_EXA_API_URL")
+def _resolve_provider_url(env_var: str, config_field: str) -> str:
+    """Resolve a provider URL: env var > config files > config default.
+
+    Shared lazy-resolver used by :func:`_resolve_exa_api_url`,
+    :func:`_resolve_firecrawl_api_url`, and any future provider URL
+    resolvers. Extracted from the per-provider copies in v1.6.2.
+
+    Args:
+        env_var: Environment variable name (e.g. ``"AIPEA_EXA_API_URL"``).
+        config_field: Attribute name on ``AIPEAConfig`` (e.g. ``"exa_api_url"``).
+
+    Returns:
+        Resolved URL string.
+    """
+    env_val = os.environ.get(env_var)
     if env_val is not None:
         return env_val
+    # Lazy import to avoid circular deps and import-time cost
     from aipea.config import load_config
 
     cfg = load_config()
-    return cfg.exa_api_url
+    return str(getattr(cfg, config_field))
+
+
+def _resolve_exa_api_url() -> str:
+    """Resolve Exa API URL from env var, config files, or default."""
+    return _resolve_provider_url("AIPEA_EXA_API_URL", "exa_api_url")
 
 
 def _resolve_firecrawl_api_url() -> str:
     """Resolve Firecrawl API URL from env var, config files, or default."""
-    env_val = os.environ.get("AIPEA_FIRECRAWL_API_URL")
-    if env_val is not None:
-        return env_val
-    from aipea.config import load_config
-
-    cfg = load_config()
-    return cfg.firecrawl_api_url
+    return _resolve_provider_url("AIPEA_FIRECRAWL_API_URL", "firecrawl_api_url")
 
 
 def _resolve_http_timeout() -> float:
@@ -111,9 +124,32 @@ def _get_api_key(env_var: str, constructor_value: str | None) -> str:
     return str(getattr(cfg, field_name, "")) if field_name else ""
 
 
-# Back-compat alias; live call sites invoke _resolve_http_timeout() directly
-# so runtime config changes take effect without a process restart. (#81)
-HTTP_TIMEOUT = _resolve_http_timeout()
+# DEPRECATED in v1.6.2; scheduled for removal in v2.0.0.
+#
+# ``aipea.search.HTTP_TIMEOUT`` is exposed via PEP 562 module-level
+# ``__getattr__`` so every access emits a DeprecationWarning AND returns
+# the currently-resolved timeout (respecting runtime .env / TOML /
+# ``AIPEA_HTTP_TIMEOUT`` changes — see #81). Live AIPEA call sites invoke
+# ``_resolve_http_timeout()`` directly.
+#
+# Known external consumers (AgoraIV's ``aipea_search_providers.py`` shim and
+# its ``test_bh26_fixes.py`` / ``test_deferred_wave5.py`` regression tests)
+# will see the warning on first import; they migrate in AgoraIV's v1.8.0
+# window per the approved v2.0.0 roadmap (see TODO.md §Release Roadmap).
+def __getattr__(name: str) -> Any:
+    if name == "HTTP_TIMEOUT":
+        import warnings
+
+        warnings.warn(
+            "aipea.search.HTTP_TIMEOUT is deprecated since v1.6.2 and will "
+            "be removed in v2.0.0. Use aipea.search._resolve_http_timeout() "
+            "instead — it returns the current value and respects runtime "
+            "config changes, which the module-level constant cannot.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _resolve_http_timeout()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # =============================================================================
