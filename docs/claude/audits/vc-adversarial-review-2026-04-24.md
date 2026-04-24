@@ -7,6 +7,28 @@
 > **Posture:** Adversarial. Defending the capital-allocator's interests, not the seller's narrative.
 > **Reviewer role:** Outside technical diligence (no engagement bias)
 
+> **Editorial note (maintainer, 2026-04-24):** Preserved verbatim per the
+> AIPEA "adversarial reviews retained in full" convention (cf.
+> [`investor-review-adversarial-2026-04-11.md`](investor-review-adversarial-2026-04-11.md)).
+> Two metric claims in §2.1 are stale against live repo state at merge time
+> and are flagged here rather than edited in the body:
+>
+> - §2.1 says "**67 commits**, effectively single-author";
+>   `git log --oneline | wc -l` on `main` at 2026-04-24 returns **238**.
+> - §2.1 says "**18,291 LOC tests, ~810 test methods**";
+>   `pytest --collect-only -q` on `main` at 2026-04-24 returns **1,282
+>   collected tests**; source LOC is **10,662** per
+>   `wc -l src/aipea/*.py`.
+>
+> See [`docs/adopters.md`](../../adopters.md) and
+> [`docs/metrics.md`](../../metrics.md) (shipped in v1.6.2) for authoritative
+> live numbers. Substantive findings hold regardless of the drift.
+>
+> The maintainer response to this review is filed in
+> [`docs/adr/ADR-005-pr52-vc-adversarial-review-response.md`](../../adr/ADR-005-pr52-vc-adversarial-review-response.md)
+> (scheduled for v1.7.0, 2026-06-15) and in an appended §12 section at the
+> end of this document (same release cycle).
+
 ---
 
 ## 1. Executive Summary
