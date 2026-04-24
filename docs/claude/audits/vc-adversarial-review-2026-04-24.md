@@ -265,7 +265,69 @@ The core risk is not that AIPEA breaks — it almost certainly will not break, b
 
 ---
 
-## 10. Key Evidence Cited
+## 10. Path Forward — Current State to Full Vision
+
+The design-reference (`docs/design-reference/`) sketches a larger system than AIPEA alone; the library is one organ of it. The right transition is **not** to evolve AIPEA into a SaaS — `CLAUDE.md §1.2` correctly scopes AIPEA as a library. The transition is to harden AIPEA in place while the surrounding commercial products (Agora IV, AEGIS) are built to production scale around it.
+
+What follows is a staged path with explicit exit criteria. Useful both as a roadmap for the team and as tranched-capital gates for the investor.
+
+### Phase 0 — Pre-conditions (0–30 days)
+
+Nothing downstream is worth doing until these are in motion.
+
+- **De-risk bus factor.** A second committer with push rights. Module ownership documented. ADR review partner established.
+- **Instrument OSS telemetry.** Opt-out install pings, PyPI download dashboard, GitHub traffic tracking. The gateway thesis is unfalsifiable without this data.
+- **Claims audit.** Every compliance statement in README, website, and sales material walked against `security.py`. Retract or reword anything the code does not enforce. One more FedRAMP-style retraction in public is avoidable.
+
+**Exit:** Two committers with commit access. 12 months of download history visible. No unbacked compliance claim in any external surface.
+
+### Phase 1 — Earn the right to monetize (1–6 months)
+
+Turn AIPEA from "plausible detection substrate" into "measurably better than the OSS alternatives in its category."
+
+- **Adversarial benchmark.** Evaluate AIPEA against published jailbreak corpora (OWASP LLM Top 10, public injection datasets, 3–4 academic adversarial suites). Publish results — including losses.
+- **Independent pentest** of `security.py` and the search-result scanning path. One reputable firm, scoped narrowly, findings posted to the repo. Cheap (~$25–40K) and disproportionately credible.
+- **Swap regex injection layer for a fine-tuned small classifier** (DistilBERT-scale, ONNX-exported). Keep regex as fallback. Single most leveraged technical change: adversarial robustness moves from "patch-and-pray" to "trainable."
+- **Broaden PII/PHI catalogs** to match real-world healthcare and financial surfaces (phone, address, medication names, ICD-10, account-number patterns). Clinical reviewer in the loop.
+- **Sign 3 named design partners** — one healthcare, one regulated fintech, one public-sector/defense. Each with a signed LOI, a named contact, and a use case AIPEA+AEGIS actually solves.
+
+**Exit:** Published adversarial benchmark competitive against Guardrails-AI / NeMo-Guardrails / LlamaGuard. Independent pentest report posted. Three design-partner LOIs. First external-contributor PRs merged.
+
+### Phase 2 — Commercialize the edges, not the library (6–12 months)
+
+Most of the capital goes here. AIPEA stays narrow; the surrounding products become real.
+
+- **AEGIS as the enforcement layer on top of AIPEA detection.** Redaction, blocking, audit-trail persistence, role-based policy engine. This is what enterprise buyers pay for.
+- **Agora IV as a multi-tenant service,** not a library import. Managed deployment, billing, metering, per-tenant isolation. The design-reference AWS deployment doc is the starting sketch.
+- **Compliance infrastructure, in order:** SOC 2 Type II audit started (9-month clock), BAA capability for HIPAA customers, signed DPA template for GDPR, explicit FedRAMP-Moderate roadmap *only* if public-sector pipeline justifies it. Do not claim any of these before they are real.
+- **Cross-instance learning endpoint** (opt-in, differentially private). The design-reference implies this; the shipped `learning.py` does not have it. Once it exists, AIPEA gains a data network effect: every adopter improves the shared detection, which improves the product, which attracts more adopters. The only place AIPEA itself gains a moat.
+- **Pricing page and self-serve flow.** Free OSS → Team → Enterprise (with BAA/SSO/audit). Metering enforced in the service tier, not in AIPEA.
+
+**Exit:** AEGIS + Agora IV in production with paying design partners. SOC 2 Type II achieved. Federated-learning endpoint serving real traffic. Revenue, even if small, from non-Undercurrent accounts.
+
+### Phase 3 — Convert or pivot (12–24 months)
+
+- **Funnel conversion measured.** Target: 3–5% of AIPEA monthly active installs → paid trial → paid seat, within a year of instrumentation. If the number is an order of magnitude below that, the gateway thesis is falsified and the company should reposition as direct enterprise sales.
+- **Reference customers by vertical.** 3 healthcare, 3 public-sector, 3 fintech — each quotable.
+- **Analyst coverage** for the compliance-aware-LLM-orchestration category. If the category doesn't exist, define it.
+- **Open-core maintainers program.** At least one external maintainer with merge rights. Bus factor structurally solved.
+
+**Exit:** ARR at a level that justifies Series B economics. Category position defensible against AWS Bedrock Guardrails / NVIDIA NeMo-Guardrails / LangChain's enterprise tier.
+
+### What NOT to Do
+
+- **Do not evolve AIPEA into a SaaS.** Keep it a library. The SaaS is AEGIS+Agora.
+- **Do not ship billing or tier-gating code into AIPEA.** Free and unmetered. Metering lives upstack.
+- **Do not chase FedRAMP until Phase 3** unless a named public-sector prospect is funding it. ATO is an 18-month, multi-million-dollar rabbit hole and the revenue rarely justifies it without a design partner.
+- **Do not bring "future enhancement" labels** from the design-reference (federated learning, quantum-resistant, NAS) into AIPEA roadmap language until each has a customer-signed reason to exist. That is the habit that produced the FedRAMP retraction.
+
+### Critical Path
+
+The single item that must be true before anything else is measurable or fundable: **download / adoption telemetry must exist and must be growing.** Without it, every later milestone is unmeasurable and every later claim is unfalsifiable. It is the cheapest, most leveraged, most-neglected item in the entire plan.
+
+---
+
+## 11. Key Evidence Cited
 
 - `src/aipea/security.py:48-100` — Unicode confusables map (genuine IP).
 - `src/aipea/security.py:240-290, 367-404` — Hardcoded injection regex set.
