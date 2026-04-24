@@ -1,8 +1,0 @@
-{
-  "tolerance_pct": 10,
-  "metrics": {
-    "p99_ms": 200,
-    "throughput_qps": {"threshold": 1000, "direction": "higher_is_better"},
-    "error_rate": {"threshold": 0.01, "direction": "lower_is_better"}
-  }
-}
