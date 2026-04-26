@@ -1,4 +1,4 @@
-.PHONY: install fmt lint type test sec all ci mut sbom score deps live
+.PHONY: install fmt lint type test sec all ci mut sbom score deps live adversarial adversarial-update-baseline
 
 install:
 	pip install -e ".[dev]"
@@ -38,3 +38,9 @@ score:
 
 deps:
 	pip list --outdated 2>/dev/null || true
+
+adversarial:
+	pytest tests/test_adversarial.py -v -m adversarial
+
+adversarial-update-baseline:
+	python -m tests.test_adversarial --update-baseline
