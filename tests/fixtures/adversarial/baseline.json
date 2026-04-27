@@ -1,5 +1,5 @@
 {
-  "snapshot_date": "2026-04-26",
+  "snapshot_date": "2026-04-27",
   "bright_line": {
     "total": 56,
     "passed": 56,
@@ -7,7 +7,7 @@
   },
   "extended": {
     "total": 64,
-    "passed": 1,
-    "pass_rate": 0.0156
+    "passed": 16,
+    "pass_rate": 0.25
   }
 }
