@@ -413,27 +413,27 @@ class SecurityScanner:
         r"(?:bypass|reset|cancel|nullify|revoke|terminate)\s+all\s+"
         r"(?:(?:of|the|your|my|these|those|previous|prior|above|earlier|preceding|system|developer|assistant)\s+)*"
         r"instructions\b",
-        # Wave-21 (D4-B): cross-language instruction-override pattern.
-        # Source: ClawGuard 2026 evasion-techniques analysis
-        # (prompttools.co/blog/prompt-injection-evasion-techniques,
-        # 2026-03-24). Multilingual LLMs accept instructions in any
-        # language they were trained on, so an attacker can pick a
-        # foreign override verb to bypass English-only regex layers.
-        # This pattern matches direct verb + noun pairs across 7
-        # NON-ENGLISH verb forms (fr/es/de/it/nl/sv/pl) x 7 noun forms
-        # without determiner/quantifier filler (the optional filler
-        # would trip the ReDoS-safety nested-quantifier heuristic).
-        # English `ignore` is intentionally NOT in this verb group —
-        # patterns 1 and 2 above already cover English `ignore` +
-        # `instructions` with required qualifiers, and adding `ignore`
-        # here would block benign bare phrases like "don't ignore
-        # instructions from your manager" (no qualifier present).
-        # The cross-mix attack surface "English verb + foreign noun"
-        # (e.g. "ignore Anweisungen") is intentionally NOT covered
-        # here — it's an unusual attack form; if it becomes real, the
-        # ADR-009 red-team CLI will surface it.
-        r"(?:ignorer|ignorar|ignoriere|ignora|negeer|ignorera|ignoruj)\s+"
-        r"(?:instructions|anweisungen|instrucciones|istruzioni|instructies|instruktioner|instrukcje)\b",
+        # Wave-21 (D4-B): cross-language coverage intentionally NOT
+        # included in the regex layer. A first-iteration P6 pattern
+        # (8 verbs x 7 nouns, then narrowed to 7 non-English verbs)
+        # was prototyped during PR #61 review; the AI second-reviewer
+        # gate (gpt-5.4-pro REQUEST_CHANGES, 2026-04-27) flagged that
+        # bare `verb + instructions` is ambiguous in any language —
+        # benign foreign prose like "ne pas ignorer instructions de
+        # votre patron" has the same shape as adversarial bare
+        # foreign payloads. Adding cross-language qualifiers
+        # (`précédentes`, `vorherigen`, `anteriores`, ...) would
+        # roughly double the pattern complexity and re-introduce the
+        # 200-char ReDoS-safety length cap problem.
+        # Per 2026 research (SafePrompt regex-only F1 ~0.43; TokenMix
+        # PromptBench classifier-only +18%), cross-language detection
+        # is the architectural ceiling regex hits fastest. The right
+        # tool is the LLM-as-judge tier proposed in ADR-010 (semantic
+        # scanner), which handles cross-language semantic intent
+        # natively. The corpus has zero foreign-language entries
+        # today, so deferring the regex layer here costs zero current
+        # coverage. ADR-009 red-team CLI will generate adversarial
+        # cross-language payloads for future evaluation.
         r"</?(system|user|assistant)>",
         r"\[/?(system|user|assistant|human)\]",  # Bracket-style role tags
         r"(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:",  # Conversation separator injection

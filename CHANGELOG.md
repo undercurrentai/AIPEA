@@ -9,9 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Wave-21 (D4-B): paraphrase-verb tier 2 + cross-language injection
-  patterns** in `src/aipea/security.py`. Three new entries appended to
-  `INJECTION_PATTERNS` (now 13 total, up from 10):
+- **Wave-21 (D4-B): paraphrase-verb tier 2 injection patterns** in
+  `src/aipea/security.py`. Two new entries appended to
+  `INJECTION_PATTERNS` (now 12 total, up from 10):
   - **P4 strong-cue paraphrase**: matches `bypass|reset|cancel|nullify|
     revoke|terminate` + (1-3 cue tokens) + `instructions`. Mirrors the
     shape of the v1.6.1 four-verb pattern (P1) but split into a separate
@@ -21,23 +21,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     them if they become real.
   - **P5 all-form paraphrase**: same six paraphrase verbs in the
     direct `bypass all instructions` shape. Mirrors P2.
-  - **P6 cross-language override**: 7 NON-ENGLISH verb forms
-    (`ignorer`/`ignorar`/`ignoriere`/`ignora`/`negeer`/`ignorera`/
-    `ignoruj`) × 7 noun forms (`instructions`/`anweisungen`/
-    `instrucciones`/`istruzioni`/`instructies`/`instruktioner`/
-    `instrukcje`). English `ignore` is intentionally excluded from
-    P6's verb group — patterns P1/P2 already cover English `ignore`+
-    `instructions` with required qualifiers, and including `ignore`
-    in P6 would block benign bare phrases like "don't ignore
-    instructions from your manager" (no qualifier present). The
-    cross-mix attack surface "English verb + foreign noun" is
-    therefore not covered by this wave; if it surfaces in the wild,
-    the ADR-009 red-team CLI will validate it. Source: ClawGuard
-    2026 evasion-techniques analysis
-    ([prompttools.co](https://prompttools.co/blog/prompt-injection-evasion-techniques),
-    2026-03-24). The pattern is verb+noun direct (no determiner filler)
-    so it stays under 200 chars and avoids the nested-quantifier
-    heuristic in `_is_regex_safe()`.
+- **Cross-language coverage intentionally NOT shipped in this wave.**
+  A first-iteration cross-language pattern (P6) was prototyped during
+  PR #61 review (8 verbs × 7 nouns, then narrowed to 7 non-English
+  verbs). The triple-AI second-reviewer gate flagged that bare
+  `verb + instructions` is ambiguous in any language — benign foreign
+  prose like "ne pas ignorer instructions de votre patron" has the
+  same shape as adversarial bare foreign payloads. The asymmetric
+  narrowing (English-verb removed for benign-prose protection;
+  non-English verbs left bare) was incoherent. Adding cross-language
+  qualifiers (`précédentes`, `vorherigen`, `anteriores`, …) would
+  roughly double the pattern complexity and re-introduce the
+  ReDoS-safety length-cap problem. Per 2026 research (SafePrompt
+  regex-only F1 ~0.43; TokenMix PromptBench classifier-only +18%),
+  cross-language detection is the architectural ceiling regex hits
+  fastest — the right tool is the LLM-as-judge tier proposed in
+  ADR-010 (semantic scanner). The corpus has zero foreign-language
+  entries today, so deferring the regex layer here costs zero current
+  coverage; ADR-009 red-team CLI will generate adversarial
+  cross-language payloads for future evaluation.
 - **`tests/test_security.py::TestWave21ParaphraseInjectionFamily`**
   (NEW): 14 paraphrase-verb positive cases, 13 cross-language positive
   cases, 14 false-positive guards covering benign uses of the new
