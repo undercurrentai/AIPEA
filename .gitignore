@@ -32,6 +32,9 @@ Thumbs.db
 # Codex runs (generated)
 .codex_runs/
 
+# Quality-gate skill state (per-run ephemera)
+.quality-gate/
+
 # Playwright MCP logs
 .playwright-mcp/
 
