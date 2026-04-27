@@ -394,6 +394,43 @@ class SecurityScanner:
         r"(?:everything|all)\s+"
         r"(?:above|below|before|earlier|preceding)"
         r"(?=\s*(?:[.!?,;:\n\r]|$))",
+        # Wave-21 (D4-B): paraphrase-verb tier 2 — strong-cue form.
+        # Same shape as pattern 1, but covers the six paraphrase verbs
+        # the OWASP corpus exposed beyond the four-verb baseline:
+        # bypass, reset, cancel, nullify, revoke, terminate. Split into
+        # a separate pattern (rather than appended to pattern 1) so
+        # each entry stays under _MAX_PATTERN_LENGTH (200 chars).
+        # The leading "(?<!\w)" lookbehind prevents matching the verb
+        # as a substring of a longer word ("preset previous
+        # instructions", "uncancel all instructions"); fixed-width
+        # lookbehind, no ReDoS impact.
+        # Verbs scrap, void, and abort are intentionally omitted — they
+        # are rare in the wild and "void instructions" / "scrap
+        # instructions" are awkward attack phrasings; the AI red-team
+        # engine (ADR-009) will surface them if they become real.
+        r"(?<!\w)(?:bypass|reset|cancel|nullify|revoke|terminate)\s+"
+        r"(?:(?:the|all|your|my|any|these|those|of)\s+)*"
+        r"(?:(?:previous|prior|above|earlier|preceding|system|developer|assistant)\s+){1,3}"
+        r"instructions\b",
+        # Wave-21 (D4-B): paraphrase-verb tier 2 — direct "all" form.
+        # Mirrors pattern 2 with the same six paraphrase verbs and the
+        # same "(?<!\w)" word-boundary guard.
+        r"(?<!\w)(?:bypass|reset|cancel|nullify|revoke|terminate)\s+all\s+"
+        r"(?:(?:of|the|your|my|these|those|previous|prior|above|earlier|preceding|system|developer|assistant)\s+)*"
+        r"instructions\b",
+        # Wave-21 (D4-B): cross-language coverage intentionally NOT
+        # included in the regex layer. The bare "verb + instructions"
+        # shape is ambiguous in any language (benign foreign prose
+        # like "ne pas ignorer instructions de votre patron" has the
+        # same shape as adversarial bare foreign payloads), and
+        # adding per-language qualifiers would roughly double pattern
+        # complexity and re-introduce the 200-char ReDoS-safety
+        # length cap problem. Per 2026 research (SafePrompt regex-only
+        # F1 ~0.43; TokenMix PromptBench classifier-only +18%),
+        # cross-language detection is the architectural ceiling regex
+        # hits fastest — the right tool is the LLM-as-judge tier in
+        # ADR-010 (semantic scanner). See PR #61 for the prototype +
+        # decision history.
         r"</?(system|user|assistant)>",
         r"\[/?(system|user|assistant|human)\]",  # Bracket-style role tags
         r"(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:",  # Conversation separator injection

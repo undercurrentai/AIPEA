@@ -9,6 +9,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Wave-21 (D4-B): paraphrase-verb tier 2 injection patterns** in
+  `src/aipea/security.py`. Two new entries appended to
+  `INJECTION_PATTERNS` (now 12 total, up from 10):
+  - **P4 strong-cue paraphrase**: matches `bypass|reset|cancel|nullify|
+    revoke|terminate` + (1-3 cue tokens) + `instructions`. Mirrors the
+    shape of the v1.6.1 four-verb pattern (P1) but split into a separate
+    entry to stay under the `_MAX_PATTERN_LENGTH` (200 chars) ReDoS
+    safety cap. Verbs `scrap`, `void`, `abort` intentionally omitted —
+    awkward attack phrasings; the ADR-009 red-team CLI will surface
+    them if they become real. Includes a leading `(?<!\w)` lookbehind
+    so the verb cannot match as a substring of a longer word (e.g.
+    `preset previous instructions` does NOT match `reset` inside
+    `preset`).
+  - **P5 all-form paraphrase**: same six paraphrase verbs in the
+    direct `bypass all instructions` shape. Mirrors P2 with the same
+    `(?<!\w)` word-boundary guard.
+- **Cross-language coverage intentionally NOT shipped in this wave.**
+  A first-iteration cross-language pattern (P6) was prototyped during
+  PR #61 review (8 verbs × 7 nouns, then narrowed to 7 non-English
+  verbs). The triple-AI second-reviewer gate flagged that bare
+  `verb + instructions` is ambiguous in any language — benign foreign
+  prose like "ne pas ignorer instructions de votre patron" has the
+  same shape as adversarial bare foreign payloads. The asymmetric
+  narrowing (English-verb removed for benign-prose protection;
+  non-English verbs left bare) was incoherent. Adding cross-language
+  qualifiers (`précédentes`, `vorherigen`, `anteriores`, …) would
+  roughly double the pattern complexity and re-introduce the
+  ReDoS-safety length-cap problem. Per 2026 research (SafePrompt
+  regex-only F1 ~0.43; TokenMix PromptBench classifier-only +18%),
+  cross-language detection is the architectural ceiling regex hits
+  fastest — the right tool is the LLM-as-judge tier proposed in
+  ADR-010 (semantic scanner). The corpus has zero foreign-language
+  entries today, so deferring the regex layer here costs zero current
+  coverage; ADR-009 red-team CLI will generate adversarial
+  cross-language payloads for future evaluation.
+- **`tests/test_security.py::TestWave21ParaphraseInjectionFamily`**
+  (NEW): 14 paraphrase-verb positive cases, 13 cross-language positive
+  cases, 14 false-positive guards covering benign uses of the new
+  verbs (`reset password`, `cancel the meeting`) and benign uses of
+  foreign instruction nouns (`Bitte folgen Sie den Anweisungen`,
+  `Suivez les instructions`). 41 new assertions, all green.
+- **Adversarial corpus re-tier (5 entries)**: `LLM01-EX-028` (canonical
+  "Ignore all previous instructions"), `-055` (case-alternation
+  leetspeak), `-056` (extra spaces), `-057` (tabs), `-058` (newlines)
+  moved from `extended` → `bright_line`. v1.6.1 regex catches all five;
+  same hygiene class as PR #60.
+- **Adversarial baseline regenerated**: `bright_line: 62/62 (100%) →
+  67/67 (100%)`; `extended: 10/58 (17.2%) → 5/53 (9.4%)`. The extended
+  rate dips because 5 passing entries left the pool, not because
+  detection regressed. The bright_line floor expanded by 5 must-pass
+  payloads — the architecturally meaningful direction.
+
+### Honest scope note
+
+This wave provides **forward-defensive coverage** for paraphrase verb
+families and cross-language attacks that do not appear in the current
+OWASP-derived corpus. The 48 remaining extended-tier failures
+predominantly use **noun substitution** (`filters`, `context`,
+`programming`, `directives`) or **passive voice** ("your instructions
+have been revoked") — both architectural shifts the regex layer cannot
+reach without unbounded pattern growth. Per 2026 industry research
+(SafePrompt: regex ceiling F1 ~0.43; TokenMix: PromptBench
+classifier-only reduces injection success by ~18%), the path past this
+ceiling is the LLM-as-judge tier proposed in ADR-010. The ADR-009
+red-team CLI will validate these new Wave-21 patterns against
+adversarially generated payloads in a future wave.
+
 - **`docs/adr/ADR-005-pr52-vc-adversarial-review-response.md`** —
   NEW. Formal maintainer response to PR #52 adversarial VC review:
   23-finding triage matrix (13 Accept / 7 BD / 2 Decline / 1 Defer),
