@@ -57,6 +57,7 @@ markers = [
     "integration: Integration tests (may need network/services)",
     "slow: Slow tests (inference, large models)",
     "live: Live end-to-end tests (real components, no mocks)",
+    "adversarial: Adversarial evaluation suite (OWASP LLM Top-10 corpus)",
 ]
 
 [tool.ruff]
