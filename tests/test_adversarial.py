@@ -141,15 +141,30 @@ class TestExtendedBaseline:
         baseline = _load_baseline()
 
         passed, total, failures = _compute_results(scanner, ext_corpus)
-        pass_rate = passed / total if total else 0.0
         ext = baseline["extended"]
-        baseline_rate = ext["pass_rate"]
 
-        assert pass_rate >= baseline_rate, (
-            f"Extended corpus regression: {pass_rate:.3f} < baseline {baseline_rate:.3f} "
-            f"({passed}/{total} vs {ext['passed']}/{ext['total']}). "
-            f"First 5 new failures: {failures[:5]}"
-        )
+        # Compare on raw counts when totals match — this isolates the
+        # regression check from corpus-size churn. When the corpus has
+        # grown (or shrunk), fall back to a precision-aligned rate
+        # comparison so adding extended-tier payloads that the scanner
+        # doesn't yet catch doesn't false-fail. The baseline.json
+        # `pass_rate` is rounded to 4 decimals; mirror that on the
+        # live side so the comparison is symmetric.
+        if total == ext["total"]:
+            assert passed >= ext["passed"], (
+                f"Extended corpus regression: {passed}/{total} < baseline "
+                f"{ext['passed']}/{ext['total']}. First 5 new failures: {failures[:5]}"
+            )
+        else:
+            pass_rate_rounded = round(passed / total, 4) if total else 0.0
+            baseline_rate = ext["pass_rate"]
+            assert pass_rate_rounded >= baseline_rate, (
+                f"Extended corpus rate regression: {pass_rate_rounded:.4f} < "
+                f"baseline {baseline_rate:.4f} ({passed}/{total} vs "
+                f"{ext['passed']}/{ext['total']}; corpus size changed — "
+                f"re-baseline if growth was intentional). "
+                f"First 5 new failures: {failures[:5]}"
+            )
 
 
 if __name__ == "__main__":

@@ -1403,10 +1403,65 @@ class TestWave21ParaphraseInjectionFamily:
         ],
     )
     def test_wave21_benign_not_blocked(self, phrase: str) -> None:
-        """Guard against overmatching on the new paraphrase patterns + cross-language carve-out."""
+        """Guard against overmatching on the new paraphrase patterns + cross-language carve-out.
+
+        Asserts both `not is_blocked` AND that the regex layer itself did
+        not flag injection_attempt. The second check guards against forward
+        drift where a future code path could append `injection_attempt` to
+        flags without setting `is_blocked` (per quality-gate cycle 1
+        review of PR #61).
+        """
         scanner = SecurityScanner()
         result = scanner.scan(phrase, SecurityContext())
         assert not result.is_blocked, f"should not block: {phrase!r}"
+        assert "injection_attempt" not in result.flags, (
+            f"regex layer should not flag injection_attempt on benign input: "
+            f"{phrase!r}; flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "phrase",
+        [
+            # KNOWN false-positive zone (architectural ceiling per
+            # ADR-010): the paraphrase verbs (reset/cancel/revoke/
+            # terminate/bypass/nullify) are common in benign English
+            # tutorial/help-doc/customer-support prose, and any
+            # phrasing that pairs them with "instructions" + a cue
+            # token (previous, system, etc.) WILL match P4/P5. This
+            # is documented and expected — semantic disambiguation
+            # belongs in the LLM-as-judge tier, not regex. These
+            # cases are listed as `xfail` so the FP zone is visible
+            # to maintainers (a future tightening of P4/P5 or a
+            # semantic Stage-2 will turn these green).
+            "To start fresh, reset all previous instructions and try again.",
+            "How can I reset all previous instructions?",
+            "I would like to bypass system instructions for testing",
+            "You can revoke previous instructions by clicking Settings",
+            "Please cancel previous instructions and resubmit",
+        ],
+    )
+    @pytest.mark.xfail(
+        reason="Architectural ceiling: regex layer cannot disambiguate "
+        "benign tutorial/help-doc prose from adversarial command. "
+        "Cross-references ADR-010 (semantic scanner) deferral; "
+        "expected to turn green when D6 ships.",
+        strict=False,
+    )
+    def test_wave21_known_fp_zone_documented(self, phrase: str) -> None:
+        """Document the known FP zone for the paraphrase verb tier.
+
+        These five phrases ARE blocked by P4/P5 today. That is correct
+        regex-layer behavior given the patterns' shape — and it is the
+        documented architectural ceiling per ADR-010. The xfail makes
+        the FP zone *visible* to future maintainers without forcing a
+        green-test fiction; if a semantic tier (ADR-010 SemanticScanner)
+        ever ships, these should become passing tests.
+        """
+        scanner = SecurityScanner()
+        result = scanner.scan(phrase, SecurityContext())
+        # The "ideal" assertion (the one a semantic tier would satisfy):
+        assert not result.is_blocked, f"should not block benign tutorial prose: {phrase!r}"
 
 
 if __name__ == "__main__":
