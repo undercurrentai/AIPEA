@@ -1,4 +1,4 @@
-"""AIPEA Adversarial Evaluation Suite (ADR-005).
+"""AIPEA Adversarial Evaluation Suite (ADR-008).
 
 Tests SecurityScanner against a vendored OWASP LLM Top-10 2026 corpus with
 a two-tier failure model:
