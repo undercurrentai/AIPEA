@@ -21,11 +21,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     them if they become real.
   - **P5 all-form paraphrase**: same six paraphrase verbs in the
     direct `bypass all instructions` shape. Mirrors P2.
-  - **P6 cross-language override**: 8 verb forms (`ignore`/`ignorer`/
-    `ignorar`/`ignoriere`/`ignora`/`negeer`/`ignorera`/`ignoruj`) ×
-    7 noun forms (`instructions`/`Anweisungen`/`instrucciones`/
-    `istruzioni`/`instructies`/`instruktioner`/`instrukcje`).
-    Source: ClawGuard 2026 evasion-techniques analysis
+  - **P6 cross-language override**: 7 NON-ENGLISH verb forms
+    (`ignorer`/`ignorar`/`ignoriere`/`ignora`/`negeer`/`ignorera`/
+    `ignoruj`) × 7 noun forms (`instructions`/`anweisungen`/
+    `instrucciones`/`istruzioni`/`instructies`/`instruktioner`/
+    `instrukcje`). English `ignore` is intentionally excluded from
+    P6's verb group — patterns P1/P2 already cover English `ignore`+
+    `instructions` with required qualifiers, and including `ignore`
+    in P6 would block benign bare phrases like "don't ignore
+    instructions from your manager" (no qualifier present). The
+    cross-mix attack surface "English verb + foreign noun" is
+    therefore not covered by this wave; if it surfaces in the wild,
+    the ADR-009 red-team CLI will validate it. Source: ClawGuard
+    2026 evasion-techniques analysis
     ([prompttools.co](https://prompttools.co/blog/prompt-injection-evasion-techniques),
     2026-03-24). The pattern is verb+noun direct (no determiner filler)
     so it stays under 200 chars and avoids the nested-quantifier

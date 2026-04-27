@@ -417,17 +417,23 @@ class SecurityScanner:
         # Source: ClawGuard 2026 evasion-techniques analysis
         # (prompttools.co/blog/prompt-injection-evasion-techniques,
         # 2026-03-24). Multilingual LLMs accept instructions in any
-        # language they were trained on, so an attacker can pick
-        # override verbs from one language and instruction nouns from
-        # another. This pattern matches direct verb + noun pairs across
-        # 8 verb forms (en/fr/es/de/it/nl/sv/pl) x 7 noun forms
-        # without the determiner/quantifier filler that would trip the
-        # ReDoS-safety heuristic — "ignore all previous instructions"
-        # variants in a single language are still caught by patterns 1
-        # and 2 above; this pattern adds the cross-language attack
-        # surface that pure-English regex misses.
-        r"(?:ignore|ignorer|ignorar|ignoriere|ignora|negeer|ignorera|ignoruj)\s+"
-        r"(?:instructions|Anweisungen|instrucciones|istruzioni|instructies|instruktioner|instrukcje)\b",
+        # language they were trained on, so an attacker can pick a
+        # foreign override verb to bypass English-only regex layers.
+        # This pattern matches direct verb + noun pairs across 7
+        # NON-ENGLISH verb forms (fr/es/de/it/nl/sv/pl) x 7 noun forms
+        # without determiner/quantifier filler (the optional filler
+        # would trip the ReDoS-safety nested-quantifier heuristic).
+        # English `ignore` is intentionally NOT in this verb group —
+        # patterns 1 and 2 above already cover English `ignore` +
+        # `instructions` with required qualifiers, and adding `ignore`
+        # here would block benign bare phrases like "don't ignore
+        # instructions from your manager" (no qualifier present).
+        # The cross-mix attack surface "English verb + foreign noun"
+        # (e.g. "ignore Anweisungen") is intentionally NOT covered
+        # here — it's an unusual attack form; if it becomes real, the
+        # ADR-009 red-team CLI will surface it.
+        r"(?:ignorer|ignorar|ignoriere|ignora|negeer|ignorera|ignoruj)\s+"
+        r"(?:instructions|anweisungen|instrucciones|istruzioni|instructies|instruktioner|instrukcje)\b",
         r"</?(system|user|assistant)>",
         r"\[/?(system|user|assistant|human)\]",  # Bracket-style role tags
         r"(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:",  # Conversation separator injection
