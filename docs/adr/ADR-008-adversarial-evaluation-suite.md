@@ -1,10 +1,11 @@
 # ADR-008: Adversarial Evaluation Suite
 
-- **Status**: Proposed
+- **Status**: Accepted (2026-04-27 — implemented in [PR #59](https://github.com/undercurrentai/AIPEA/pull/59), squashed at `7be9c99`)
 - **Date**: 2026-04-15 (renumbered from ADR-005 on 2026-04-27 to avoid
   collision with [ADR-005 — PR #52 VC adversarial review response](./ADR-005-pr52-vc-adversarial-review-response.md), merged 2026-04-24)
 - **Author**: @joshuakirby (with Claude design partnership)
 - **Implements**: ROADMAP D4 (adversarial red-team corpus)
+- **Implemented in**: [PR #59](https://github.com/undercurrentai/AIPEA/pull/59) — corpus (120 payloads), `tests/test_adversarial.py` harness, `make adversarial` + `make adversarial-update-baseline` targets, `adversarial` pytest marker. Initial baseline against v1.6.2 (post-merge): bright_line 62/62 (100%), extended 10/58 (17.2%).
 - **Fulfills**: [ADR-005](./ADR-005-pr52-vc-adversarial-review-response.md)
   Accept-track item — reviewer's §10 finding "tests verify author's
   regexes match author's payloads; not tested against published
