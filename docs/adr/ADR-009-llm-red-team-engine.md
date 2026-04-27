@@ -1,20 +1,24 @@
-# ADR-006: LLM-Driven Red Team Engine
+# ADR-009: LLM-Driven Red Team Engine
 
 - **Status**: Proposed
-- **Date**: 2026-04-15
+- **Date**: 2026-04-15 (renumbered from ADR-006 on 2026-04-27 to follow
+  ADR-008's renumber)
 - **Author**: @joshuakirby (with Claude design partnership)
 - **Implements**: ROADMAP D5 (continuous adversarial generation)
-- **Depends on**: [ADR-005](./ADR-005-adversarial-evaluation-suite.md) (Adversarial Evaluation Suite)
+- **Depends on**: [ADR-008](./ADR-008-adversarial-evaluation-suite.md) (Adversarial Evaluation Suite)
 
 ## Context
 
-ADR-005 shipped AIPEA's first external adversarial corpus — 120 curated
-OWASP LLM Top-10 payloads with a two-tier failure model. On day one, the
-corpus found a genuine gap: the canonical "ignore all previous
-instructions" string bypasses the scanner's regex. This validates the
-corpus approach but surfaces its limitation: **static corpora age.**
-OWASP LLM Top 10 2026 will be partially obsolete by 2027. Human curation
-scales linearly with effort.
+ADR-008 shipped AIPEA's first external adversarial corpus — 120 curated
+OWASP LLM Top-10 payloads with a two-tier failure model. The corpus's
+original draft (2026-04-15) flagged the canonical "ignore all previous
+instructions" string as bypassing the regex; v1.6.1 (PR #50) closed
+that specific gap before the corpus landed, so on rebase the corpus
+*validates* the v1.6.1 fix rather than exposes a live bypass. The
+underlying limitation of static corpora remains the design driver:
+**static corpora age.** OWASP LLM Top 10 2026 will be partially obsolete
+by 2027. Human curation scales linearly with effort, and v1.6.1 is one
+data point in a longer arc — the next bypass family is unknown.
 
 The 2026 landscape of automated red-teaming tools — Garak (NVIDIA),
 Promptfoo, DeepTeam (Confident AI), AutoRedTeamer — demonstrates that
@@ -121,7 +125,7 @@ A scheduled GitHub Actions workflow running weekly/monthly:
 | Option | Pros | Cons | Why Not |
 |--------|------|------|---------|
 | Use Garak directly as dev dep | Rich probe library, NVIDIA-maintained | Heavyweight dep (~50 transitive packages); breaks offline-first; Garak probes target LLM responses, not input scanners | Architecture mismatch — Garak tests model outputs, not input filters |
-| Manual corpus expansion only | Zero cost, zero deps | Doesn't scale; curator blind spots persist; ages between updates | ADR-005's day-one finding proves the gap |
+| Manual corpus expansion only | Zero cost, zero deps | Doesn't scale; curator blind spots persist; ages between updates | The Wave-19/20 Unicode bypasses (Cyrillic homoglyphs #97, ZWSP #108) — caught by internal audit only — prove curator blind spots |
 | Hire human red-team only | Highest quality findings | $50K-$150K per engagement; point-in-time, not continuous | Complementary, not alternative — D5 generates the budget justification for this |
 | Prompt-engineer against ChatGPT manually | Quick, free | Ad-hoc; unreproducible; no CI integration; no structured output | D5 automates this with structured technique seeding |
 

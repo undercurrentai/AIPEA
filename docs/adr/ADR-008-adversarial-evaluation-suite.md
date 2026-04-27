@@ -1,9 +1,14 @@
-# ADR-005: Adversarial Evaluation Suite
+# ADR-008: Adversarial Evaluation Suite
 
 - **Status**: Proposed
-- **Date**: 2026-04-15
+- **Date**: 2026-04-15 (renumbered from ADR-005 on 2026-04-27 to avoid
+  collision with [ADR-005 — PR #52 VC adversarial review response](./ADR-005-pr52-vc-adversarial-review-response.md), merged 2026-04-24)
 - **Author**: @joshuakirby (with Claude design partnership)
 - **Implements**: ROADMAP D4 (adversarial red-team corpus)
+- **Fulfills**: [ADR-005](./ADR-005-pr52-vc-adversarial-review-response.md)
+  Accept-track item — reviewer's §10 finding "tests verify author's
+  regexes match author's payloads; not tested against published
+  jailbreak corpora."
 
 ## Context
 

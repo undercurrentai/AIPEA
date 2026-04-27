@@ -1,18 +1,22 @@
-# ADR-007: LLM-Driven Semantic Scan Tier
+# ADR-010: LLM-Driven Semantic Scan Tier
 
 - **Status**: Proposed
-- **Date**: 2026-04-15
+- **Date**: 2026-04-15 (renumbered from ADR-007 on 2026-04-27 to follow
+  ADR-008's renumber)
 - **Author**: @joshuakirby (with Claude design partnership)
-- **Extends**: [ADR-005](./ADR-005-adversarial-evaluation-suite.md) (Adversarial Evaluation Suite)
-- **Depends on**: [ADR-006](./ADR-006-llm-red-team-engine.md) (LLM-Driven Red Team Engine, for evaluation)
+- **Extends**: [ADR-008](./ADR-008-adversarial-evaluation-suite.md) (Adversarial Evaluation Suite)
+- **Depends on**: [ADR-009](./ADR-009-llm-red-team-engine.md) (LLM-Driven Red Team Engine, for evaluation)
 
 ## Context
 
 AIPEA's `SecurityScanner` uses regex + Unicode normalization for prompt
-injection detection. The ADR-005 adversarial corpus measured this at
-**1.6% pass rate on extended payloads** (paraphrases, role-play, encoding,
-multi-language). No amount of regex expansion gets this above ~30%. The
-remaining 70% requires semantic understanding.
+injection detection. The ADR-008 adversarial corpus measures this at
+**low single-digit to low double-digit pass rate on extended payloads**
+(paraphrases, role-play, encoding, multi-language) — the precise number
+moves with each `INJECTION_PATTERNS` improvement (see
+`tests/fixtures/adversarial/baseline.json` for the live snapshot). No
+amount of regex expansion gets this above ~30%. The remaining 70%
+requires semantic understanding.
 
 Recent research validates **LLM-as-judge for prompt injection detection**
 as a production-ready pattern:
@@ -144,7 +148,7 @@ Mirrors the `force_offline` pattern from `ComplianceHandler`.
 ### Where it lives
 
 - New module: `src/aipea/semantic.py` (~250 LOC).
-- Reuses provider abstraction from ADR-006 (`src/aipea/redteam/providers.py`).
+- Reuses provider abstraction from ADR-009 (`src/aipea/redteam/providers.py`).
 - New exports: `SemanticScanner`, `SemanticScannerConfig`, `SemanticResult`
   (50 → 53 public symbols).
 - New constructor flag: `AIPEAEnhancer(enable_semantic_scan=False)`.
@@ -169,7 +173,7 @@ scope for v1 but could be a future ADR.
 | Option | Pros | Cons | Why Not |
 |--------|------|------|---------|
 | Embed a fine-tuned classifier (DeBERTa/DistilBERT) | Fastest inference (<10ms), no API cost | Breaks stdlib+httpx constraint; 500MB+ install; training pipeline needed | Architectural constraint violation |
-| Use only regex (status quo) | Zero latency, zero cost | F1 ~0.3-0.5; cannot handle paraphrases, role-play, encoding | ADR-005 corpus proves the gap |
+| Use only regex (status quo) | Zero latency, zero cost | F1 ~0.3-0.5; cannot handle paraphrases, role-play, encoding | ADR-008 corpus proves the gap |
 | Output validation only (no input semantic scan) | Catches model-side failures | Doesn't prevent adversarial prompts from reaching the model | Complementary, not alternative |
 | Mandatory semantic scan on all queries | Highest coverage | Latency + cost unacceptable for high-volume callers | Opt-in is the correct default |
 
@@ -177,7 +181,9 @@ scope for v1 but could be a future ADR.
 
 ### Positive
 
-- Lifts extended-corpus detection from ~1.6% to estimated ~70-90%.
+- Lifts extended-corpus detection from the regex-only baseline (low
+  single- to low double-digit pass rate, see `baseline.json`) to
+  estimated ~70-90%.
 - Provides audit-ready rationale per scan (LLM explains its judgment).
 - Integrates with existing flag infrastructure — taint-aware learning,
   search filtering, enhancement notes all consume the new flags.
