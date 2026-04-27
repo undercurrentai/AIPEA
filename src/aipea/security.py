@@ -400,40 +400,37 @@ class SecurityScanner:
         # bypass, reset, cancel, nullify, revoke, terminate. Split into
         # a separate pattern (rather than appended to pattern 1) so
         # each entry stays under _MAX_PATTERN_LENGTH (200 chars).
+        # The leading "(?<!\w)" lookbehind prevents matching the verb
+        # as a substring of a longer word ("preset previous
+        # instructions", "uncancel all instructions"); fixed-width
+        # lookbehind, no ReDoS impact.
         # Verbs scrap, void, and abort are intentionally omitted — they
         # are rare in the wild and "void instructions" / "scrap
         # instructions" are awkward attack phrasings; the AI red-team
         # engine (ADR-009) will surface them if they become real.
-        r"(?:bypass|reset|cancel|nullify|revoke|terminate)\s+"
+        r"(?<!\w)(?:bypass|reset|cancel|nullify|revoke|terminate)\s+"
         r"(?:(?:the|all|your|my|any|these|those|of)\s+)*"
         r"(?:(?:previous|prior|above|earlier|preceding|system|developer|assistant)\s+){1,3}"
         r"instructions\b",
         # Wave-21 (D4-B): paraphrase-verb tier 2 — direct "all" form.
-        # Mirrors pattern 2 with the same six paraphrase verbs.
-        r"(?:bypass|reset|cancel|nullify|revoke|terminate)\s+all\s+"
+        # Mirrors pattern 2 with the same six paraphrase verbs and the
+        # same "(?<!\w)" word-boundary guard.
+        r"(?<!\w)(?:bypass|reset|cancel|nullify|revoke|terminate)\s+all\s+"
         r"(?:(?:of|the|your|my|these|those|previous|prior|above|earlier|preceding|system|developer|assistant)\s+)*"
         r"instructions\b",
         # Wave-21 (D4-B): cross-language coverage intentionally NOT
-        # included in the regex layer. A first-iteration P6 pattern
-        # (8 verbs x 7 nouns, then narrowed to 7 non-English verbs)
-        # was prototyped during PR #61 review; the AI second-reviewer
-        # gate (gpt-5.4-pro REQUEST_CHANGES, 2026-04-27) flagged that
-        # bare `verb + instructions` is ambiguous in any language —
-        # benign foreign prose like "ne pas ignorer instructions de
-        # votre patron" has the same shape as adversarial bare
-        # foreign payloads. Adding cross-language qualifiers
-        # (`précédentes`, `vorherigen`, `anteriores`, ...) would
-        # roughly double the pattern complexity and re-introduce the
-        # 200-char ReDoS-safety length cap problem.
-        # Per 2026 research (SafePrompt regex-only F1 ~0.43; TokenMix
-        # PromptBench classifier-only +18%), cross-language detection
-        # is the architectural ceiling regex hits fastest. The right
-        # tool is the LLM-as-judge tier proposed in ADR-010 (semantic
-        # scanner), which handles cross-language semantic intent
-        # natively. The corpus has zero foreign-language entries
-        # today, so deferring the regex layer here costs zero current
-        # coverage. ADR-009 red-team CLI will generate adversarial
-        # cross-language payloads for future evaluation.
+        # included in the regex layer. The bare "verb + instructions"
+        # shape is ambiguous in any language (benign foreign prose
+        # like "ne pas ignorer instructions de votre patron" has the
+        # same shape as adversarial bare foreign payloads), and
+        # adding per-language qualifiers would roughly double pattern
+        # complexity and re-introduce the 200-char ReDoS-safety
+        # length cap problem. Per 2026 research (SafePrompt regex-only
+        # F1 ~0.43; TokenMix PromptBench classifier-only +18%),
+        # cross-language detection is the architectural ceiling regex
+        # hits fastest — the right tool is the LLM-as-judge tier in
+        # ADR-010 (semantic scanner). See PR #61 for the prototype +
+        # decision history.
         r"</?(system|user|assistant)>",
         r"\[/?(system|user|assistant|human)\]",  # Bracket-style role tags
         r"(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:",  # Conversation separator injection

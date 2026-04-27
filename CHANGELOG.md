@@ -18,9 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     entry to stay under the `_MAX_PATTERN_LENGTH` (200 chars) ReDoS
     safety cap. Verbs `scrap`, `void`, `abort` intentionally omitted —
     awkward attack phrasings; the ADR-009 red-team CLI will surface
-    them if they become real.
+    them if they become real. Includes a leading `(?<!\w)` lookbehind
+    so the verb cannot match as a substring of a longer word (e.g.
+    `preset previous instructions` does NOT match `reset` inside
+    `preset`).
   - **P5 all-form paraphrase**: same six paraphrase verbs in the
-    direct `bypass all instructions` shape. Mirrors P2.
+    direct `bypass all instructions` shape. Mirrors P2 with the same
+    `(?<!\w)` word-boundary guard.
 - **Cross-language coverage intentionally NOT shipped in this wave.**
   A first-iteration cross-language pattern (P6) was prototyped during
   PR #61 review (8 verbs × 7 nouns, then narrowed to 7 non-English

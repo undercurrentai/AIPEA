@@ -1368,6 +1368,15 @@ class TestWave21ParaphraseInjectionFamily:
             "nullify the contract",
             "reset the connection",
             "cancel the order",
+            # Word-boundary guards (the (?<!\w) lookbehind on P4/P5).
+            # Without it, "preset"/"uncancel" would substring-match
+            # "reset"/"cancel" and incorrectly block. Flagged by GPT
+            # 5.4 Pro round-3 review of PR #61.
+            "preset previous instructions",
+            "preset all instructions",
+            "uncancel all instructions",
+            "preset the system instructions",
+            "Preset all your previous instructions",
             # Cross-language deferred to ADR-010: bare foreign verb +
             # noun pairs must NOT trigger the regex layer. These guards
             # document the architectural decision — cross-language
