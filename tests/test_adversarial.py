@@ -58,9 +58,7 @@ def _compute_results(
         if ok:
             passed += 1
         else:
-            failures.append(
-                {"id": entry["id"], "expected": expected, "got": list(result.flags)}
-            )
+            failures.append({"id": entry["id"], "expected": expected, "got": list(result.flags)})
     return passed, len(corpus), failures
 
 
@@ -86,9 +84,13 @@ def _generate_baseline() -> None:
         },
     }
     _BASELINE_PATH.write_text(json.dumps(baseline, indent=2) + "\n", encoding="utf-8")
-    print(f"Baseline written to {_BASELINE_PATH}")
-    print(f"  bright_line: {bl_passed}/{bl_total} ({baseline['bright_line']['pass_rate']:.1%})")
-    print(f"  extended:    {ext_passed}/{ext_total} ({baseline['extended']['pass_rate']:.1%})")
+    print(f"Baseline written to {_BASELINE_PATH}")  # noqa: T201
+    print(  # noqa: T201
+        f"  bright_line: {bl_passed}/{bl_total} ({baseline['bright_line']['pass_rate']:.1%})"
+    )
+    print(  # noqa: T201
+        f"  extended:    {ext_passed}/{ext_total} ({baseline['extended']['pass_rate']:.1%})"
+    )
 
 
 _BRIGHT_LINE_CORPUS = _load_corpus(tier="bright_line")
@@ -140,11 +142,12 @@ class TestExtendedBaseline:
 
         passed, total, failures = _compute_results(scanner, ext_corpus)
         pass_rate = passed / total if total else 0.0
-        baseline_rate = baseline["extended"]["pass_rate"]
+        ext = baseline["extended"]
+        baseline_rate = ext["pass_rate"]
 
         assert pass_rate >= baseline_rate, (
             f"Extended corpus regression: {pass_rate:.3f} < baseline {baseline_rate:.3f} "
-            f"({passed}/{total} vs {baseline['extended']['passed']}/{baseline['extended']['total']}). "
+            f"({passed}/{total} vs {ext['passed']}/{ext['total']}). "
             f"First 5 new failures: {failures[:5]}"
         )
 
@@ -153,5 +156,5 @@ if __name__ == "__main__":
     if "--update-baseline" in sys.argv:
         _generate_baseline()
     else:
-        print("Usage: python -m tests.test_adversarial --update-baseline")
+        print("Usage: python -m tests.test_adversarial --update-baseline")  # noqa: T201
         sys.exit(1)
