@@ -9,6 +9,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Wave-21 (D4-B): paraphrase-verb tier 2 + cross-language injection
+  patterns** in `src/aipea/security.py`. Three new entries appended to
+  `INJECTION_PATTERNS` (now 13 total, up from 10):
+  - **P4 strong-cue paraphrase**: matches `bypass|reset|cancel|nullify|
+    revoke|terminate` + (1-3 cue tokens) + `instructions`. Mirrors the
+    shape of the v1.6.1 four-verb pattern (P1) but split into a separate
+    entry to stay under the `_MAX_PATTERN_LENGTH` (200 chars) ReDoS
+    safety cap. Verbs `scrap`, `void`, `abort` intentionally omitted —
+    awkward attack phrasings; the ADR-009 red-team CLI will surface
+    them if they become real.
+  - **P5 all-form paraphrase**: same six paraphrase verbs in the
+    direct `bypass all instructions` shape. Mirrors P2.
+  - **P6 cross-language override**: 8 verb forms (`ignore`/`ignorer`/
+    `ignorar`/`ignoriere`/`ignora`/`negeer`/`ignorera`/`ignoruj`) ×
+    7 noun forms (`instructions`/`Anweisungen`/`instrucciones`/
+    `istruzioni`/`instructies`/`instruktioner`/`instrukcje`).
+    Source: ClawGuard 2026 evasion-techniques analysis
+    ([prompttools.co](https://prompttools.co/blog/prompt-injection-evasion-techniques),
+    2026-03-24). The pattern is verb+noun direct (no determiner filler)
+    so it stays under 200 chars and avoids the nested-quantifier
+    heuristic in `_is_regex_safe()`.
+- **`tests/test_security.py::TestWave21ParaphraseInjectionFamily`**
+  (NEW): 14 paraphrase-verb positive cases, 13 cross-language positive
+  cases, 14 false-positive guards covering benign uses of the new
+  verbs (`reset password`, `cancel the meeting`) and benign uses of
+  foreign instruction nouns (`Bitte folgen Sie den Anweisungen`,
+  `Suivez les instructions`). 41 new assertions, all green.
+- **Adversarial corpus re-tier (5 entries)**: `LLM01-EX-028` (canonical
+  "Ignore all previous instructions"), `-055` (case-alternation
+  leetspeak), `-056` (extra spaces), `-057` (tabs), `-058` (newlines)
+  moved from `extended` → `bright_line`. v1.6.1 regex catches all five;
+  same hygiene class as PR #60.
+- **Adversarial baseline regenerated**: `bright_line: 62/62 (100%) →
+  67/67 (100%)`; `extended: 10/58 (17.2%) → 5/53 (9.4%)`. The extended
+  rate dips because 5 passing entries left the pool, not because
+  detection regressed. The bright_line floor expanded by 5 must-pass
+  payloads — the architecturally meaningful direction.
+
+### Honest scope note
+
+This wave provides **forward-defensive coverage** for paraphrase verb
+families and cross-language attacks that do not appear in the current
+OWASP-derived corpus. The 48 remaining extended-tier failures
+predominantly use **noun substitution** (`filters`, `context`,
+`programming`, `directives`) or **passive voice** ("your instructions
+have been revoked") — both architectural shifts the regex layer cannot
+reach without unbounded pattern growth. Per 2026 industry research
+(SafePrompt: regex ceiling F1 ~0.43; TokenMix: PromptBench
+classifier-only reduces injection success by ~18%), the path past this
+ceiling is the LLM-as-judge tier proposed in ADR-010. The ADR-009
+red-team CLI will validate these new Wave-21 patterns against
+adversarially generated payloads in a future wave.
+
 - **`docs/adr/ADR-005-pr52-vc-adversarial-review-response.md`** —
   NEW. Formal maintainer response to PR #52 adversarial VC review:
   23-finding triage matrix (13 Accept / 7 BD / 2 Decline / 1 Defer),
