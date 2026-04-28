@@ -126,6 +126,46 @@ class TestResolveApiKey:
         assert resolve_api_key("FOOBAR_KEY") == ""
 
 
+class TestResolveApiKeyConfigFallback:
+    """Coverage for the swallowed-exception fallback paths in resolve_api_key.
+
+    These paths are reached when the optional `aipea.config` module is
+    absent or broken — both are silently swallowed and return "" per
+    the documented graceful-degradation contract.
+    """
+
+    def test_config_import_failure_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """If `aipea.config` import fails, return "" and log at DEBUG."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        # Inject an ImportError into the local-import path. We do this
+        # via `sys.modules` poisoning: setting `sys.modules["aipea.config"]`
+        # to None makes `import aipea.config` raise ImportError.
+        import sys
+
+        original = sys.modules.get("aipea.config")
+        monkeypatch.setitem(sys.modules, "aipea.config", None)
+        try:
+            result = resolve_api_key("ANTHROPIC_API_KEY")
+            assert result == ""
+        finally:
+            if original is not None:
+                sys.modules["aipea.config"] = original
+
+    def test_config_load_failure_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """If `aipea.config.load_config()` raises, return "" and log."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        import aipea.config
+
+        def _broken_load() -> object:
+            raise RuntimeError("config file corrupt")
+
+        monkeypatch.setattr(aipea.config, "load_config", _broken_load)
+        result = resolve_api_key("ANTHROPIC_API_KEY")
+        assert result == ""
+
+
 class TestResolveProviderUrl:
     def test_env_wins_over_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AIPEA_OLLAMA_HOST", "http://example:9999")
@@ -142,6 +182,19 @@ class TestResolveProviderUrl:
             "NONEXISTENT_ENV_FOR_TEST", "nonexistent_field_for_test", "http://default"
         )
         assert result == "http://default"
+
+    def test_config_load_failure_returns_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """If config layer raises during load, return default and log at DEBUG."""
+        monkeypatch.delenv("FOO_URL_TEST", raising=False)
+
+        import aipea.config
+
+        def _broken_load() -> object:
+            raise RuntimeError("config file corrupt")
+
+        monkeypatch.setattr(aipea.config, "load_config", _broken_load)
+        result = resolve_provider_url("FOO_URL_TEST", "foo_url", "http://fallback")
+        assert result == "http://fallback"
 
 
 # =============================================================================
