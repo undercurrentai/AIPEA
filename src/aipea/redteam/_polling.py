@@ -17,6 +17,7 @@ Terminal states mirror the OpenAI Responses API:
 
 from __future__ import annotations
 
+import enum
 import logging
 import time
 from collections.abc import Callable
@@ -55,12 +56,24 @@ class PollTimeoutError(Exception):
 
 
 def _extract_status(response: Any) -> str | None:
-    """Read `status` from either an attribute (SDK object) or a dict (raw httpx)."""
+    """Read `status` from an attribute (SDK object) or a dict (raw httpx).
+
+    Handles enum-typed status fields. Some provider SDKs (e.g. Anthropic
+    streaming events, custom internal SDKs) expose `status` as an
+    `enum.Enum` rather than a plain string. The naive `str(status)` for
+    those returns ``"Status.COMPLETED"`` instead of ``"completed"``,
+    which would never match `TERMINAL_STATES` and the loop would
+    poll-until-deadline. Prefer `.value` on enum members.
+    """
     status = getattr(response, "status", None)
     if status is not None:
+        if isinstance(status, enum.Enum):
+            return str(status.value)
         return str(status)
     if isinstance(response, dict):
         s = response.get("status")
+        if isinstance(s, enum.Enum):
+            return str(s.value)
         return str(s) if s is not None else None
     return None
 

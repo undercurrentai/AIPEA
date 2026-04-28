@@ -101,6 +101,19 @@ class RedTeamResult:
     latency_ms: int = 0
     """Wall-clock latency of the generation call in milliseconds."""
 
+    error: str | None = None
+    """Provider-side error category, or ``None`` on success.
+
+    When set, ``payload`` is empty (or partial) due to an upstream
+    failure: HTTP non-2xx, non-JSON response, missing expected field,
+    network error, etc. The downstream evaluator MUST skip results
+    with non-None ``error`` rather than scoring them as benign
+    generations — otherwise an HTTP 500 from a provider produces a
+    corpus row indistinguishable from a successful, undetected attack.
+    Suggested vocabulary: ``"http_error"``, ``"non_json"``,
+    ``"missing_field"``, ``"network"``, ``"timeout"``,
+    ``"empty_response"``."""
+
     @staticmethod
     def now_iso() -> str:
         """Return current UTC time as an ISO-8601 string with seconds precision."""

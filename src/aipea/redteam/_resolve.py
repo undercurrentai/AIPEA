@@ -25,15 +25,27 @@ def resolve_api_key(env_var: str, constructor_value: str | None = None) -> str:
         env_var: Name of the environment variable to check (e.g.
             ``ANTHROPIC_API_KEY``).
         constructor_value: Explicit value passed by the caller. Wins
-            over env + config when not None and not the empty string.
+            over env + config when non-empty after whitespace strip.
+            (Whitespace-pasted keys are a common real-world mistake;
+            stripping both env and constructor keeps the two paths
+            symmetric so the auth header doesn't silently get a leading
+            space that the upstream API rejects with 401.)
 
     Returns:
-        The resolved key, or empty string if not found anywhere. (Returning
-        empty string rather than raising mirrors `search.py:_get_api_key`
-        behavior so callers can degrade gracefully.)
+        The resolved key, or empty string if not found anywhere.
+
+        Empty string return — rather than raising — is a deliberate
+        graceful-degradation choice for the redteam package so an
+        absent or broken config layer doesn't propagate import-time
+        errors to consumers that may not have an `aipea.config`. This
+        differs from `src/aipea/search.py:_get_api_key` (which lets
+        config-import / config-load exceptions bubble); see the
+        ``except`` blocks below for the explicit deviation.
     """
     if constructor_value:
-        return constructor_value
+        stripped = constructor_value.strip()
+        if stripped:
+            return stripped
 
     env_value = os.environ.get(env_var, "").strip()
     if env_value:
@@ -43,13 +55,22 @@ def resolve_api_key(env_var: str, constructor_value: str | None = None) -> str:
     if field is None:
         return ""
 
+    # Deviation from search.py:_get_api_key — defensive swallow of the
+    # config-layer optional dep. Logged at DEBUG so the failure is visible
+    # via `aipea --log-level debug` without forcing a stack trace on every
+    # caller that doesn't have aipea.config installed.
+    import logging as _logging
+
+    log = _logging.getLogger(__name__)
     try:
         from aipea.config import load_config  # local import to avoid cycle
-    except Exception:
+    except Exception as exc:
+        log.debug("aipea.config import failed; treating %s as unset: %s", env_var, exc)
         return ""
     try:
         cfg = load_config()
-    except Exception:
+    except Exception as exc:
+        log.debug("aipea.config load failed; treating %s as unset: %s", env_var, exc)
         return ""
     return str(getattr(cfg, field, "") or "")
 
@@ -69,6 +90,14 @@ def resolve_provider_url(
 
     Returns:
         The resolved URL string.
+
+    Note:
+        Deliberate divergence from `src/aipea/search.py:_resolve_provider_url`,
+        which uses `os.environ.get(env_var)` (any non-None value wins,
+        including empty string). This helper strips + treats empty/
+        whitespace as not-set, falling through to config/default. The
+        whitespace-tolerant behavior prevents an empty-string env var
+        from silently breaking downstream URL construction.
     """
     env_value = os.environ.get(env_var, "").strip()
     if env_value:

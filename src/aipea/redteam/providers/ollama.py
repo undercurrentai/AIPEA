@@ -72,27 +72,60 @@ class OllamaProvider:
         Ollama doesn't natively support `n=` like OpenAI; this method
         loops `num` times with the same prompt. For larger batches the
         caller is expected to use a frontier provider.
+
+        Connection-pooling note (load-bearing for B1 follow-up frontier
+        providers): when `self._client` is None we open ONE
+        `httpx.AsyncClient` for the whole batch via `async with`, then
+        let it close cleanly. Frontier providers (Anthropic /
+        OpenAI Responses / Codex) SHOULD copy this pattern rather than
+        the per-call construction the original draft used — TLS+TCP
+        handshake amortization + HTTP/2 reuse + keep-alive matter for
+        remote endpoints. Local-Ollama doesn't care, but the canonical
+        pattern matters.
         """
         chosen_model = model or self.default_model
         results: list[RedTeamResult] = []
-        for _ in range(max(1, num)):
-            result = await self._one_generation(
-                technique=technique,
-                prompt=prompt,
-                model=chosen_model,
-            )
-            results.append(result)
+        if self._client is not None:
+            # Caller-owned client: reuse for all `num` iterations.
+            for _ in range(max(1, num)):
+                results.append(
+                    await self._one_generation(
+                        client=self._client,
+                        technique=technique,
+                        prompt=prompt,
+                        model=chosen_model,
+                    )
+                )
+        else:
+            # Self-managed: ONE client for the whole batch.
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                for _ in range(max(1, num)):
+                    results.append(
+                        await self._one_generation(
+                            client=client,
+                            technique=technique,
+                            prompt=prompt,
+                            model=chosen_model,
+                        )
+                    )
         return results
 
     async def _one_generation(
         self,
         *,
+        client: httpx.AsyncClient,
         technique: Technique,
         prompt: str,
         model: str,
     ) -> RedTeamResult:
         """Single Ollama call. Returns a `RedTeamResult` (detected=False;
-        evaluator runs `SecurityScanner.scan()` later)."""
+        evaluator runs `SecurityScanner.scan()` later).
+
+        On provider error (HTTP non-2xx, non-JSON, missing field), the
+        returned RedTeamResult has empty `payload` AND `error` set to
+        a non-None category string. Downstream evaluator MUST check
+        `error` to distinguish "successful but undetected" from
+        "provider-side failure"."""
         url = f"{self.host.rstrip('/')}/api/generate"
         body = {
             "model": model,
@@ -100,7 +133,7 @@ class OllamaProvider:
             "stream": False,
         }
         started = time.perf_counter()
-        payload_text = await self._post(url, body)
+        payload_text, error = await self._post(client, url, body)
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         return RedTeamResult(
             payload=payload_text,
@@ -114,31 +147,42 @@ class OllamaProvider:
             refinement_round=0,
             cost_usd=0.0,
             latency_ms=elapsed_ms,
+            error=error,
         )
 
-    async def _post(self, url: str, body: dict[str, Any]) -> str:
+    async def _post(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        body: dict[str, Any],
+    ) -> tuple[str, str | None]:
         """Issue the POST and extract the `response` field.
+
+        Returns ``(text, error)`` — ``error`` is ``None`` on success or
+        a category string on failure. Empty ``text`` always pairs with
+        a non-None ``error`` so the evaluator can distinguish a real
+        empty completion from a provider failure.
 
         Ollama returns:
             {"model": "...", "response": "<generated text>", "done": true, ...}
         """
-        if self._client is not None:
-            response = await self._client.post(url, json=body, timeout=self.timeout)
-        else:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(url, json=body)
+        try:
+            response = await client.post(url, json=body, timeout=self.timeout)
+        except httpx.HTTPError as exc:
+            logger.warning("Ollama network error: %s", exc)
+            return "", "network"
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             logger.warning("Ollama HTTP %s: %s", exc.response.status_code, exc)
-            return ""
+            return "", "http_error"
         try:
             data = response.json()
         except (ValueError, json.JSONDecodeError) as exc:
             logger.warning("Ollama returned non-JSON: %s", exc)
-            return ""
+            return "", "non_json"
         text = data.get("response")
         if not isinstance(text, str):
             logger.warning("Ollama response missing 'response' field: %s", data)
-            return ""
-        return text.strip()
+            return "", "missing_field"
+        return text, None
