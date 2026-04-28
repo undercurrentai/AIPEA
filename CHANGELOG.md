@@ -57,12 +57,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **`pyproject.toml [project.optional-dependencies] redteam = []`**
     extras group. Zero new runtime deps (httpx + typer already
     present); the empty extras express adoption intent.
-  - **`.github/scripts/gpt_review.py` refactor**: replaced inline
-    `_poll_until_terminal()` with import from `aipea.redteam._polling`.
-    Drops ~35 LOC of duplicated logic; library and CI workflow now
-    share one canonical polling implementation. `_safe_cancel()`
-    helper preserves the `APIError`-only swallow pattern via
-    `contextlib.suppress`.
+  - **`.github/scripts/gpt_review.py` refactor — DEFERRED to follow-up
+    PR**: the helper now lives at `src/aipea/redteam/_polling.py` (B1
+    foundation, PR #64), but the consumer-side refactor of the CI script
+    is deferred to a separate PR landed AFTER this PR merges to `main`.
+    Reason: when both the workflow file AND the script change in the
+    same PR, `anthropics/claude-code-action@v1` rejects the run via its
+    "workflow validation" safety check (workflow on PR head must match
+    `main` exactly). Deferring the consumer refactor keeps this PR's
+    workflow surface unchanged. Producer side (the helper) remains
+    exported under `aipea.redteam._polling.poll_until_terminal`.
 
 - **Wave-21 (D4-B): paraphrase-verb tier 2 injection patterns** in
   `src/aipea/security.py`. Two new entries appended to

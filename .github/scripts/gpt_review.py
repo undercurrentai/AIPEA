@@ -41,15 +41,18 @@ Environment:
 from __future__ import annotations
 
 import argparse
-import contextlib
 import os
 import sys
+import time
 from pathlib import Path
 
 try:
     from openai import APIError, OpenAI
 except ImportError as exc:  # pragma: no cover - CI installs openai before running
-    sys.stderr.write(f"openai SDK not installed: {exc}\nInstall with: pip install 'openai>=2.11'\n")
+    sys.stderr.write(
+        f"openai SDK not installed: {exc}\n"
+        "Install with: pip install 'openai>=2.11'\n"
+    )
     sys.exit(2)
 
 
@@ -220,38 +223,33 @@ def _poll_until_terminal(
     poll_timeout_seconds: int,
     poll_interval_seconds: int,
 ) -> object:
-    """Wrapper around aipea.redteam._polling.poll_until_terminal.
-
-    The shared helper is provider-agnostic via callable interface; we
-    pass OpenAI SDK methods as the retrieve/cancel hooks. The library
-    version raises ``PollTimeoutError`` (custom exception) — we
-    convert to ``SystemExit`` here to preserve this script's existing
-    contract for the workflow's failure handler.
-
-    Refactor history: the polling loop was originally inlined here
-    (~35 LOC). PR-B1-followup extracted it to ``aipea.redteam._polling``
-    so the library and CI workflow share one canonical implementation.
-    """
-    from aipea.redteam._polling import PollTimeoutError, poll_until_terminal
-
-    try:
-        return poll_until_terminal(
-            response_id,
-            retrieve=lambda rid: client.responses.retrieve(rid),
-            cancel=lambda rid: _safe_cancel(client, rid),
-            poll_timeout_seconds=poll_timeout_seconds,
-            poll_interval_seconds=poll_interval_seconds,
-        )
-    except PollTimeoutError as exc:
-        raise SystemExit(f"gpt_review: {exc}") from exc
-
-
-def _safe_cancel(client: OpenAI, response_id: str) -> None:
-    """Best-effort response cancel — swallow ``APIError`` only; let
-    other exceptions propagate so the polling helper's own
-    cancel-failure logging can record them."""
-    with contextlib.suppress(APIError):
-        client.responses.cancel(response_id)
+    terminal = {"completed", "failed", "cancelled", "incomplete"}
+    deadline = time.monotonic() + poll_timeout_seconds
+    last_status = "queued"
+    while True:
+        if time.monotonic() > deadline:
+            # Best-effort cancel to free the server-side slot.
+            try:
+                client.responses.cancel(response_id)
+            except APIError:
+                pass
+            raise SystemExit(
+                f"gpt_review: response {response_id} did not reach a terminal state "
+                f"within {poll_timeout_seconds}s (last status: {last_status})"
+            )
+        try:
+            current = client.responses.retrieve(response_id)
+        except APIError as exc:
+            sys.stderr.write(f"gpt_review: retrieve failed ({exc}); retrying...\n")
+            time.sleep(poll_interval_seconds)
+            continue
+        status = getattr(current, "status", None)
+        if status != last_status:
+            sys.stderr.write(f"gpt_review: response status: {last_status} -> {status}\n")
+            last_status = status or "unknown"
+        if status in terminal:
+            return current
+        time.sleep(poll_interval_seconds)
 
 
 def _fallback_markdown(reason: str) -> str:
@@ -294,13 +292,17 @@ def main() -> int:
     try:
         diff_text = _read_diff(args.diff)
     except SystemExit as exc:
-        args.output.write_text(_fallback_markdown(f"failed to read diff: {exc}"), encoding="utf-8")
+        args.output.write_text(
+            _fallback_markdown(f"failed to read diff: {exc}"), encoding="utf-8"
+        )
         raise
 
     client = OpenAI()
     user_message = _build_user_message(diff_text)
 
-    sys.stderr.write(f"gpt_review: model={model} effort={effort} poll_timeout={poll_timeout}s\n")
+    sys.stderr.write(
+        f"gpt_review: model={model} effort={effort} poll_timeout={poll_timeout}s\n"
+    )
 
     try:
         initial = client.responses.create(
@@ -340,7 +342,9 @@ def main() -> int:
             poll_interval_seconds=poll_interval,
         )
     except SystemExit as exc:
-        args.output.write_text(_fallback_markdown(f"polling failed: {exc}"), encoding="utf-8")
+        args.output.write_text(
+            _fallback_markdown(f"polling failed: {exc}"), encoding="utf-8"
+        )
         raise
 
     status = getattr(final, "status", None)
@@ -361,7 +365,9 @@ def main() -> int:
         return 6
 
     args.output.write_text(markdown + "\n", encoding="utf-8")
-    sys.stderr.write(f"gpt_review: wrote {len(markdown)} chars to {args.output}\n")
+    sys.stderr.write(
+        f"gpt_review: wrote {len(markdown)} chars to {args.output}\n"
+    )
     return 0
 
 
