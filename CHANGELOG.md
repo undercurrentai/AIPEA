@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Wave-23: gpt_review.py polling-helper consumer refactor (deferred
+  Wave-22 item #10).** `.github/scripts/gpt_review.py` now imports
+  `poll_until_terminal` and `PollTimeoutError` from
+  `aipea.redteam._polling` rather than maintaining a duplicate inline
+  implementation. ~35 LOC of polling logic removed from the CI script;
+  the library and CI workflow now share one canonical implementation.
+  `.github/workflows/ai-second-review.yml`'s gpt-review job adds
+  `pip install -e .` so the script can resolve the import. `_safe_cancel`
+  closure inside `main()` preserves the original APIError-only swallow
+  semantics via `contextlib.suppress(APIError)`. `PollTimeoutError` is
+  caught and converted to `SystemExit` with the same fallback-markdown
+  side effect so the existing CI fail-closed behavior is unchanged.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator

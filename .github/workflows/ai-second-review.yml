@@ -127,9 +127,16 @@ jobs:
             echo "diff_truncated=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install OpenAI SDK
+      - name: Install OpenAI SDK + aipea
         if: steps.diff.outputs.diff_empty != 'true'
-        run: pip install --quiet "openai>=2.11"
+        # `aipea` is installed editable so gpt_review.py can import the
+        # shared polling helper at `aipea.redteam._polling`. The package's
+        # only runtime dep is httpx (already small), so this adds ~1s to
+        # the step. See ADR-009 / Wave-22 for the helper-extraction
+        # rationale and Wave-23 for the consumer-side refactor.
+        run: |
+          pip install --quiet "openai>=2.11"
+          pip install --quiet -e .
 
       - name: Run gpt-5.4-pro review
         if: steps.diff.outputs.diff_empty != 'true'

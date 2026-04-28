@@ -41,9 +41,9 @@ Environment:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import sys
-import time
 from pathlib import Path
 
 try:
@@ -55,6 +55,10 @@ except ImportError as exc:  # pragma: no cover - CI installs openai before runni
     )
     sys.exit(2)
 
+# Shared polling helper, exported by the aipea package since v1.7.0
+# (PR #64 + #65, ADR-009 / Wave-22). The library + this CI script now
+# share one canonical poll-until-terminal implementation.
+from aipea.redteam._polling import PollTimeoutError, poll_until_terminal
 
 SYSTEM_PROMPT = """\
 You are the gpt-5.4-pro half of AIPEA's automated dual-AI second-reviewer
@@ -216,42 +220,6 @@ def _extract_text(response: object) -> str:
     return "\n".join(p for p in parts if p).strip()
 
 
-def _poll_until_terminal(
-    client: OpenAI,
-    response_id: str,
-    *,
-    poll_timeout_seconds: int,
-    poll_interval_seconds: int,
-) -> object:
-    terminal = {"completed", "failed", "cancelled", "incomplete"}
-    deadline = time.monotonic() + poll_timeout_seconds
-    last_status = "queued"
-    while True:
-        if time.monotonic() > deadline:
-            # Best-effort cancel to free the server-side slot.
-            try:
-                client.responses.cancel(response_id)
-            except APIError:
-                pass
-            raise SystemExit(
-                f"gpt_review: response {response_id} did not reach a terminal state "
-                f"within {poll_timeout_seconds}s (last status: {last_status})"
-            )
-        try:
-            current = client.responses.retrieve(response_id)
-        except APIError as exc:
-            sys.stderr.write(f"gpt_review: retrieve failed ({exc}); retrying...\n")
-            time.sleep(poll_interval_seconds)
-            continue
-        status = getattr(current, "status", None)
-        if status != last_status:
-            sys.stderr.write(f"gpt_review: response status: {last_status} -> {status}\n")
-            last_status = status or "unknown"
-        if status in terminal:
-            return current
-        time.sleep(poll_interval_seconds)
-
-
 def _fallback_markdown(reason: str) -> str:
     return (
         "## Verdict\n\n"
@@ -334,18 +302,25 @@ def main() -> int:
 
     sys.stderr.write(f"gpt_review: response id={response_id}\n")
 
+    def _safe_cancel(rid: str) -> None:
+        # Best-effort cancel to free the server-side slot. APIError is
+        # the only swallowed exception (matches pre-Wave-23 behavior).
+        with contextlib.suppress(APIError):
+            client.responses.cancel(rid)
+
     try:
-        final = _poll_until_terminal(
-            client,
+        final = poll_until_terminal(
             response_id,
+            retrieve=client.responses.retrieve,
+            cancel=_safe_cancel,
             poll_timeout_seconds=poll_timeout,
             poll_interval_seconds=poll_interval,
         )
-    except SystemExit as exc:
+    except PollTimeoutError as exc:
         args.output.write_text(
             _fallback_markdown(f"polling failed: {exc}"), encoding="utf-8"
         )
-        raise
+        raise SystemExit(f"gpt_review: {exc}") from exc
 
     status = getattr(final, "status", None)
     if status != "completed":
