@@ -155,9 +155,10 @@ class TestPackageIntegrity:
         ]:
             assert mod is not None
 
-    def test_all_has_50_symbols(self):
-        # ADR-004 (2026-04-14) added FLAG_*, LearningRecordResult. 44 → 50.
-        assert len(aipea.__all__) == 50
+    def test_all_has_60_symbols(self):
+        # ADR-004 (2026-04-14) added FLAG_*, LearningRecordResult: 44 → 50.
+        # B1-followup (Wave-22, 2026-04-28) added 10 redteam exports: 50 → 60.
+        assert len(aipea.__all__) == 60
 
     def test_version_matches_pyproject(self):
         assert aipea.__version__ == "1.6.2"

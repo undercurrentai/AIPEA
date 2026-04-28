@@ -1,10 +1,10 @@
 """Provider registry + Protocol re-export for the redteam package.
 
 Concrete providers implementing `RedTeamProvider`:
-  - `OllamaProvider` — local LLM via httpx (PR-B1, this commit)
-  - `AnthropicProvider` — Messages API streaming (PR-B1, follow-up)
-  - `OpenAIResponsesProvider` — Responses API background mode (PR-B1, follow-up)
-  - `OpenAICodexProvider` — gpt-5.3-codex Responses API (PR-B1, follow-up)
+  - `OllamaProvider` — local LLM via httpx (B1 foundation, shipped)
+  - `AnthropicProvider` — Messages API streaming with adaptive thinking (B1 follow-up)
+  - `OpenAIResponsesProvider` — Responses API background mode (B1 follow-up)
+  - `OpenAICodexProvider` — gpt-5.3-codex Responses API (B1 follow-up)
 """
 
 from __future__ import annotations
@@ -12,7 +12,10 @@ from __future__ import annotations
 import inspect
 
 from aipea.redteam._types import RedTeamProvider
+from aipea.redteam.providers.anthropic import AnthropicProvider
 from aipea.redteam.providers.ollama import OllamaProvider
+from aipea.redteam.providers.openai_codex import OpenAICodexProvider
+from aipea.redteam.providers.openai_responses import OpenAIResponsesProvider
 
 
 def _validate_provider(provider_cls: type) -> None:
@@ -43,10 +46,12 @@ def _validate_provider(provider_cls: type) -> None:
         )
 
 
-# Provider registry — extended as later providers ship in B1.
-# CLI uses this to power `aipea redteam list-providers`.
+# Provider registry. CLI uses this to power `aipea redteam list-providers`.
 PROVIDERS: dict[str, type[RedTeamProvider]] = {
     OllamaProvider.name: OllamaProvider,
+    AnthropicProvider.name: AnthropicProvider,
+    OpenAIResponsesProvider.name: OpenAIResponsesProvider,
+    OpenAICodexProvider.name: OpenAICodexProvider,
 }
 
 # Validate every registered provider at package import time. Adding a
@@ -71,7 +76,10 @@ def get_provider(name: str) -> type[RedTeamProvider]:
 
 __all__ = [
     "PROVIDERS",
+    "AnthropicProvider",
     "OllamaProvider",
+    "OpenAICodexProvider",
+    "OpenAIResponsesProvider",
     "RedTeamProvider",
     "_validate_provider",
     "get_provider",
