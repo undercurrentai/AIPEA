@@ -152,3 +152,37 @@ A scheduled GitHub Actions workflow running weekly/monthly:
 - The engine tests AIPEA's *input scanner*, not an LLM's responses. This
   is architecturally different from Garak/Promptfoo/DeepTeam, which test
   model outputs. Both approaches are complementary.
+
+---
+
+## Implementation Status (informational; status field unchanged)
+
+As of 2026-04-28, the **B1 foundation** is in-progress on branch
+`feat/redteam-b1-providers`:
+
+| Component | Status |
+|-----------|--------|
+| `RedTeamProvider` Protocol + `RedTeamResult` frozen dataclass + `Technique` StrEnum (8 OWASP categories) | ✓ landed (`src/aipea/redteam/_types.py`) |
+| Long-call response polling helper extracted from `gpt_review.py:219-253` | ✓ landed (`src/aipea/redteam/_polling.py`); CI workflow refactor to import from package is B1 follow-up |
+| API-key + URL resolution chain (env > config > default) | ✓ landed (`src/aipea/redteam/_resolve.py`) |
+| Provider registry + import-time `_validate_provider` (async-coroutine + attribute checks) | ✓ landed (`src/aipea/redteam/providers/__init__.py`) |
+| `OllamaProvider` reference impl (httpx → local Ollama, 5 error categories) | ✓ landed (`src/aipea/redteam/providers/ollama.py`) |
+| 52 foundation tests (97.33% module coverage) | ✓ landed (`tests/test_redteam_b1_foundation.py`) |
+| `AnthropicProvider` (streaming with adaptive thinking for Opus 4.7) | B1 follow-up |
+| `OpenAIResponsesProvider` (`gpt-5.5-pro` background mode + 25-min poll cap) | B1 follow-up |
+| `OpenAICodexProvider` (`gpt-5.3-codex`) | B1 follow-up |
+| Generator (technique-seeded prompts + iterative refinement ≤3 rounds) | B1 follow-up |
+| Evaluator (`SecurityScanner.scan()` + TF-IDF novelty score) | B1 follow-up |
+| Reporter (Markdown audit report writer) | B1 follow-up |
+| CLI integration (`aipea redteam run / list-techniques / list-providers`) | B1 follow-up |
+| `pyproject.toml [project.optional-dependencies] redteam = []` extras | B1 follow-up |
+| `.github/scripts/gpt_review.py` refactor to import shared polling helper | B1 follow-up |
+| Budget ledger + circuit breaker + `aipea redteam daemon` continuous mode | B2 |
+| Council Mode synthesis + AgenticRed generational archive + weekly cron | B3 |
+
+**Status field**: `Proposed` (unchanged). The status moves to
+`Accepted` only when B3 lands per the multi-PR plan; the B1 / B2
+intermediate merges document themselves via this Implementation
+Status table rather than promoting the formal status. This avoids
+ratcheting the ADR through partial states — the design remains
+proposed until the full design is realized.

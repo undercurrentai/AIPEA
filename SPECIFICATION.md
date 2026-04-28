@@ -201,8 +201,21 @@ aipea/                           # pip install aipea
 ├── _types.py                    # ProcessingTier, QueryType, SearchStrategy, etc.
 ├── config.py                    # AIPEAConfig, load_config (stdlib-only config system)
 ├── cli.py                       # CLI commands: configure, check, doctor, info
-└── __main__.py                  # python -m aipea entry point
+├── __main__.py                  # python -m aipea entry point
+└── redteam/                     # [B1 foundation, in-progress per ADR-009]
+    ├── __init__.py              # Public surface (extends parent __all__ at B1 follow-up)
+    ├── _types.py                # RedTeamProvider Protocol, RedTeamResult, Technique StrEnum
+    ├── _resolve.py              # ANTHROPIC_API_KEY/OPENAI_API_KEY env > config > default
+    ├── _polling.py              # Long-call response polling helper (extracted from
+    │                              .github/scripts/gpt_review.py:219-253)
+    └── providers/
+        ├── __init__.py          # Provider registry + _validate_provider()
+        └── ollama.py            # OllamaProvider reference impl (httpx → local Ollama)
 ```
+
+The `redteam/` sub-package is currently on branch
+`feat/redteam-b1-providers` (not yet on main). See §10.1 for status
+and ADR-009 for the design rationale.
 
 ---
 
@@ -1160,6 +1173,21 @@ Short-term, Medium-term, Declined, Open Questions, Opportunities) and
 [`docs/ROADMAP.md`](docs/ROADMAP.md) for the historical design rationale
 on prioritized features P1-P5 (P1-P4 now shipped; P5a-P5d are the
 investor-review follow-ups, most shipped in Waves A-C).
+
+### 10.1 ADR-009 Implementation Status
+
+ADR-009 (LLM-Driven Red Team Engine) was formally proposed
+2026-04-15 ([`docs/adr/ADR-009-llm-red-team-engine.md`](docs/adr/ADR-009-llm-red-team-engine.md)).
+The B1 foundation — provider abstraction, `RedTeamProvider` Protocol,
+`RedTeamResult` dataclass, `Technique` StrEnum, `OllamaProvider`
+reference, long-call polling helper, and API-key resolution chain —
+is in-progress on branch `feat/redteam-b1-providers` (52 tests at
+97.33% module coverage, no new runtime dependencies). B1 follow-up
+adds 3 frontier providers (Anthropic Opus 4.7, OpenAI Responses gpt-5.5-pro,
+Codex), generator, evaluator, reporter, and CLI integration. B2
+introduces a budget ledger + continuous daemon mode. B3 closes ADR-009
+with Council Mode synthesis + AgenticRed-style generational archive +
+weekly CI cron. ADR-009 status remains `Proposed` until B3 lands.
 
 ---
 
