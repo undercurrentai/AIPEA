@@ -34,6 +34,12 @@ Issues = "https://github.com/undercurrentai/AIPEA/issues"
 cli = [
     "typer[all]>=0.12",
 ]
+# `redteam` extras are intentionally empty — the redteam package uses
+# only stdlib + httpx (already a core dep) + typer (already in [cli]
+# when using the CLI). The extras group exists so users can express
+# intent: `pip install aipea[redteam]` documents that they're adopting
+# the ADR-009 surface even though no new packages are installed.
+redteam = []
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

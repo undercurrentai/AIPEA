@@ -9,6 +9,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator
+  + reporter + CLI integration** (ADR-009 LLM-Driven Red Team Engine).
+  Building on the B1 foundation (PR #64), this wave completes B1 with:
+  - **3 frontier-model providers** (pure-httpx, no SDK runtime deps):
+    - `AnthropicProvider` (`src/aipea/redteam/providers/anthropic.py`):
+      Claude Opus 4.7 via Messages API SSE streaming with adaptive
+      thinking (`thinking: {type: "adaptive"}`). Manual `budget_tokens`
+      returns 400 on Opus 4.7+; streaming required to avoid HTTP
+      timeout on extended-thinking requests. Headers per
+      `docs.anthropic.com/en/api/streaming`.
+    - `OpenAIResponsesProvider` (`src/aipea/redteam/providers/openai_responses.py`):
+      gpt-5.5-pro via Responses API background mode
+      (`background: true, store: true`). Reuses `poll_until_terminal`
+      with 25-min cap. POST /v1/responses → poll GET /v1/responses/{id}
+      → POST /v1/responses/{id}/cancel on timeout.
+    - `OpenAICodexProvider` (`src/aipea/redteam/providers/openai_codex.py`):
+      gpt-5.3-codex via the same Responses-API background pattern; thin
+      subclass of `OpenAIResponsesProvider`.
+  - **`RedTeamGenerator`** (`src/aipea/redteam/generator.py`):
+    technique-seeded prompts for the 8 OWASP categories + iterative
+    refinement (≤3 rounds). Caught payloads from round N are fed back
+    as "evade these patterns" seeds into round N+1. Multi-payload
+    response splitting + amortized cost/latency attribution.
+  - **`RedTeamEvaluator`** (`src/aipea/redteam/evaluator.py`):
+    runs `SecurityScanner.scan()` + computes TF-IDF cosine novelty
+    score against the OWASP corpus. Stdlib-only TF-IDF
+    (`collections.Counter` + `math`) per the
+    `codingtechroom.com/.../tf-idf-similarity` reference; no sklearn
+    runtime dep. Skips `error`-tagged provider rows.
+  - **`RedTeamReporter`** (`src/aipea/redteam/reporter.py`):
+    writes JSON corpus-extension file +
+    `docs/security/redteam-report-<date>.md` audit report. Includes
+    per-technique catch rate, top-10 novel-bypass list, dual-use
+    disclaimer (mirrors Garak/Giskard convention).
+  - **CLI integration** (`src/aipea/cli.py`):
+    new `redteam` sub-typer with 3 subcommands —
+    `aipea redteam run --provider {ollama|anthropic|openai|codex}
+    --technique {paraphrase|...} --num N --rounds N`,
+    `aipea redteam list-techniques`,
+    `aipea redteam list-providers`.
+  - **Public API**: `__all__` extended 50 → 60 with `RedTeamProvider`,
+    `RedTeamResult`, `RedTeamGenerator`, `RedTeamEvaluator`,
+    `RedTeamReporter`, `Technique`, `OllamaProvider`,
+    `AnthropicProvider`, `OpenAIResponsesProvider`,
+    `OpenAICodexProvider`. ASK-first per CLAUDE.md §2.2.
+  - **`pyproject.toml [project.optional-dependencies] redteam = []`**
+    extras group. Zero new runtime deps (httpx + typer already
+    present); the empty extras express adoption intent.
+  - **`.github/scripts/gpt_review.py` refactor — DEFERRED to follow-up
+    PR**: the helper now lives at `src/aipea/redteam/_polling.py` (B1
+    foundation, PR #64), but the consumer-side refactor of the CI script
+    is deferred to a separate PR landed AFTER this PR merges to `main`.
+    Reason: when both the workflow file AND the script change in the
+    same PR, `anthropics/claude-code-action@v1` rejects the run via its
+    "workflow validation" safety check (workflow on PR head must match
+    `main` exactly). Deferring the consumer refactor keeps this PR's
+    workflow surface unchanged. Producer side (the helper) remains
+    exported under `aipea.redteam._polling.poll_until_terminal`.
+
 - **Wave-21 (D4-B): paraphrase-verb tier 2 injection patterns** in
   `src/aipea/security.py`. Two new entries appended to
   `INJECTION_PATTERNS` (now 12 total, up from 10):

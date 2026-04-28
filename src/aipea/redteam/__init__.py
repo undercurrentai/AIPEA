@@ -28,16 +28,32 @@ from aipea.redteam._polling import (
 )
 from aipea.redteam._resolve import resolve_api_key, resolve_provider_url
 from aipea.redteam._types import RedTeamProvider, RedTeamResult, Technique
-from aipea.redteam.providers import PROVIDERS, OllamaProvider, get_provider
+from aipea.redteam.evaluator import RedTeamEvaluator
+from aipea.redteam.generator import RedTeamGenerator
+from aipea.redteam.providers import (
+    PROVIDERS,
+    AnthropicProvider,
+    OllamaProvider,
+    OpenAICodexProvider,
+    OpenAIResponsesProvider,
+    get_provider,
+)
+from aipea.redteam.reporter import RedTeamReporter
 
 __all__ = [
     "DEFAULT_POLL_INTERVAL_SECONDS",
     "DEFAULT_POLL_TIMEOUT_SECONDS",
     "PROVIDERS",
     "TERMINAL_STATES",
+    "AnthropicProvider",
     "OllamaProvider",
+    "OpenAICodexProvider",
+    "OpenAIResponsesProvider",
     "PollTimeoutError",
+    "RedTeamEvaluator",
+    "RedTeamGenerator",
     "RedTeamProvider",
+    "RedTeamReporter",
     "RedTeamResult",
     "Technique",
     "get_provider",

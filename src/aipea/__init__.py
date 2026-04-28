@@ -64,6 +64,20 @@ from aipea.models import QueryAnalysis
 # Quality assessment
 from aipea.quality import QualityAssessor, QualityScore
 
+# Security
+from aipea.redteam import (
+    AnthropicProvider,
+    OllamaProvider,
+    OpenAICodexProvider,
+    OpenAIResponsesProvider,
+    RedTeamEvaluator,
+    RedTeamGenerator,
+    RedTeamProvider,
+    RedTeamReporter,
+    RedTeamResult,
+    Technique,
+)
+
 # Search
 from aipea.search import (
     Context7Provider,
@@ -74,8 +88,6 @@ from aipea.search import (
     SearchProvider,
     SearchResult,
 )
-
-# Security
 from aipea.security import (
     FLAG_CLASSIFIED_MARKER,
     FLAG_CUSTOM_BLOCKED,
@@ -101,6 +113,7 @@ __all__ = [
     "AIPEAEnhancer",
     "AIPEAError",
     "AdaptiveLearningEngine",
+    "AnthropicProvider",
     "ComplianceHandler",
     "ComplianceMode",
     "ConfigError",
@@ -117,6 +130,9 @@ __all__ = [
     "LearningPolicy",
     "LearningRecordResult",
     "OfflineKnowledgeBase",
+    "OllamaProvider",
+    "OpenAICodexProvider",
+    "OpenAIResponsesProvider",
     "ProcessingTier",
     "PromptEngine",
     "QualityAssessor",
@@ -124,6 +140,11 @@ __all__ = [
     "QueryAnalysis",
     "QueryAnalyzer",
     "QueryType",
+    "RedTeamEvaluator",
+    "RedTeamGenerator",
+    "RedTeamProvider",
+    "RedTeamReporter",
+    "RedTeamResult",
     "ScanResult",
     "SearchContext",
     "SearchOrchestrator",
@@ -136,6 +157,7 @@ __all__ = [
     "SecurityScanError",
     "SecurityScanner",
     "StorageTier",
+    "Technique",
     "__version__",
     "enhance_prompt",
     "get_enhancer",

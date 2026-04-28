@@ -733,3 +733,124 @@ else:
             console.print(f"\n[green]Seeded {count} entries to {db_path}[/green]")
         finally:
             kb.close()
+
+    # ================================================================
+    # aipea redteam (B1 follow-up — ADR-009)
+    # ================================================================
+    # Sub-typer for the redteam package. Three subcommands:
+    #   aipea redteam run          - generate adversarial payloads
+    #   aipea redteam list-techniques - list the 8 OWASP technique categories
+    #   aipea redteam list-providers  - list registered providers + default models
+    #
+    # The package uses dynamic imports so the CLI surface stays cheap when
+    # users don't invoke redteam.
+
+    redteam_app = typer.Typer(
+        name="redteam",
+        help="LLM-driven adversarial-payload generation (ADR-009).",
+        no_args_is_help=True,
+    )
+
+    @redteam_app.command("run")
+    def redteam_run(
+        provider: str = typer.Option("ollama", "--provider", "-p", help="Provider name."),
+        num: int = typer.Option(5, "--num", "-n", help="Payloads per round."),
+        technique: str = typer.Option(
+            "paraphrase", "--technique", "-t", help="Attack-vector technique."
+        ),
+        rounds: int = typer.Option(1, "--rounds", "-r", help="Iterative refinement rounds (1-3)."),
+        model: str | None = typer.Option(None, "--model", "-m", help="Override default model."),
+        output_dir: Path | None = typer.Option(  # noqa: B008 - typer convention
+            None, "--output", "-o", help="Output directory (defaults to project paths)."
+        ),
+    ) -> None:
+        """Generate adversarial payloads via the named provider + technique."""
+        import asyncio
+
+        from aipea.redteam import (
+            RedTeamEvaluator,
+            RedTeamGenerator,
+            RedTeamReporter,
+            Technique,
+            get_provider,
+        )
+
+        try:
+            provider_cls = get_provider(provider)
+        except KeyError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise SystemExit(1) from exc
+        try:
+            technique_enum = Technique(technique)
+        except ValueError as exc:
+            valid = [t.value for t in Technique]
+            console.print(f"[red]Unknown technique {technique!r}; valid: {', '.join(valid)}[/red]")
+            raise SystemExit(1) from exc
+
+        provider_inst = provider_cls()
+        evaluator = RedTeamEvaluator()
+        generator = RedTeamGenerator(provider_inst, evaluator=evaluator)
+        reporter = (
+            RedTeamReporter(json_dir=output_dir, md_dir=output_dir)
+            if output_dir
+            else RedTeamReporter()
+        )
+
+        console.print(
+            f"[bold]Running redteam[/bold]: provider={provider}, "
+            f"technique={technique}, num={num}, rounds={rounds}"
+        )
+        results = asyncio.run(
+            generator.run(
+                technique=technique_enum,
+                num=num,
+                rounds=rounds,
+                model=model,
+            )
+        )
+        json_path, md_path = reporter.write(results, provider=provider)
+
+        valid_results = [r for r in results if r.error is None and r.payload]
+        detected = sum(1 for r in valid_results if r.detected)
+        rate = (detected / len(valid_results) * 100.0) if valid_results else 0.0
+        console.print(
+            f"[green]Done[/green]: {len(valid_results)} valid payloads, "
+            f"{detected} detected ({rate:.1f}% catch rate). "
+            f"JSON: {json_path}, Report: {md_path}"
+        )
+
+    @redteam_app.command("list-techniques")
+    def redteam_list_techniques() -> None:
+        """List the 8 OWASP-aligned attack-vector techniques."""
+        from aipea.redteam import Technique as _Technique
+
+        table = Table(title="Red-Team Techniques", border_style="cyan")
+        table.add_column("Name", style="bold")
+        table.add_column("Description")
+        descriptions = {
+            "encoding_bypass": "base64/hex/ROT13/Unicode-encoded payloads",
+            "paraphrase": "verb-substituted instruction overrides",
+            "role_play": "DAN-style persona switches",
+            "multi_language": "cross-language verb+noun pairs",
+            "indirect_injection": "instructions hidden in document/tool output",
+            "delimiter_abuse": "role-tag / XML / JSON / markdown delimiter injection",
+            "unicode_evasion": "homoglyph / zero-width / RLO / combining marks",
+            "instruction_smuggling": "adversarial intent in benign task wrapper",
+        }
+        for t in _Technique:
+            table.add_row(t.value, descriptions.get(t.value, ""))
+        console.print(table)
+
+    @redteam_app.command("list-providers")
+    def redteam_list_providers() -> None:
+        """List the registered providers and their default models."""
+        from aipea.redteam import PROVIDERS
+
+        table = Table(title="Red-Team Providers", border_style="cyan")
+        table.add_column("Name", style="bold")
+        table.add_column("Default Model")
+        for name, cls in sorted(PROVIDERS.items()):
+            table.add_row(name, cls.default_model)
+        console.print(table)
+
+    app.add_typer(redteam_app, name="redteam")
