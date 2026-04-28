@@ -635,6 +635,85 @@ class TestRedTeamResultErrorField:
         assert r.error == "http_error"
 
 
+class TestOllamaProviderUltrathinkEdgeCases:
+    """Ultrathink Phase 3 regression tests for boundary + soft-failure cases."""
+
+    def test_num_zero_returns_empty_list(self) -> None:
+        """`num=0` is "no generations requested" — must NOT silently
+        produce one result via `max(1, num)` clamping."""
+        stub = _StubAsyncClient()
+        p = OllamaProvider(client=stub)  # type: ignore[arg-type]
+        results = asyncio.run(p.generate(technique=Technique.PARAPHRASE, prompt="x", num=0))
+        assert results == []
+        assert stub.calls == []
+
+    def test_num_negative_returns_empty_list(self) -> None:
+        """`num<0` (likely a bug in caller) returns empty list rather
+        than producing 1 result via `max(1, num)` clamping."""
+        stub = _StubAsyncClient()
+        p = OllamaProvider(client=stub)  # type: ignore[arg-type]
+        results = asyncio.run(p.generate(technique=Technique.PARAPHRASE, prompt="x", num=-3))
+        assert results == []
+        assert stub.calls == []
+
+    def test_empty_response_string_marked_as_error(self) -> None:
+        """200 OK + `{"response": ""}` — model produced no content
+        (refusal/filter). Must set `error="empty_response"` so the
+        evaluator can skip the row. This is the cycle-2 nuance closed."""
+
+        class _EmptyResp:
+            status_code = 200
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, Any]:
+                return {"response": ""}
+
+        class _EmptyClient:
+            async def post(self, url: str, *, json: dict[str, Any], timeout: float = 0) -> Any:
+                return _EmptyResp()
+
+        p = OllamaProvider(client=_EmptyClient())  # type: ignore[arg-type]
+        results = asyncio.run(p.generate(technique=Technique.PARAPHRASE, prompt="x", num=1))
+        assert results[0].payload == ""
+        assert results[0].error == "empty_response"
+
+
+class TestExtractStatusUltrathinkEdgeCases:
+    """Ultrathink Phase 3 regression tests for malformed-response paths."""
+
+    def test_none_response_returns_none_status(self) -> None:
+        """A None response — defensive guard for buggy retrieve callables.
+        Polling loop will see status=None, treat as not-terminal, keep
+        polling until deadline. Acceptable behavior; this test pins it."""
+        from aipea.redteam._polling import _extract_status
+
+        assert _extract_status(None) is None
+
+    def test_empty_dict_returns_none_status(self) -> None:
+        """A response dict with no `status` key — same defensive path."""
+        from aipea.redteam._polling import _extract_status
+
+        assert _extract_status({}) is None
+
+    def test_dict_with_explicit_none_status(self) -> None:
+        """`{"status": None}` — explicit-null status, same as missing."""
+        from aipea.redteam._polling import _extract_status
+
+        assert _extract_status({"status": None}) is None
+
+    def test_object_with_no_status_attr(self) -> None:
+        """An object that has no `status` attribute and isn't a dict —
+        e.g., a malformed SDK response. Returns None."""
+        from aipea.redteam._polling import _extract_status
+
+        class _NoStatus:
+            other_field = "foo"
+
+        assert _extract_status(_NoStatus()) is None
+
+
 class TestOllamaProviderConnectionPooling:
     """Regression for Lane B finding #5 (MEDIUM C2): when the caller
     does NOT inject a client, all `num` iterations of one `generate()`

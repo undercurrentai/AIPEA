@@ -83,11 +83,16 @@ class OllamaProvider:
         remote endpoints. Local-Ollama doesn't care, but the canonical
         pattern matters.
         """
+        # Honor `num <= 0` as "no generations requested" — early-return
+        # with empty list. Previously `max(1, num)` silently produced
+        # one generation for `num=0`, which is the wrong default.
+        if num <= 0:
+            return []
         chosen_model = model or self.default_model
         results: list[RedTeamResult] = []
         if self._client is not None:
             # Caller-owned client: reuse for all `num` iterations.
-            for _ in range(max(1, num)):
+            for _ in range(num):
                 results.append(
                     await self._one_generation(
                         client=self._client,
@@ -99,7 +104,7 @@ class OllamaProvider:
         else:
             # Self-managed: ONE client for the whole batch.
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                for _ in range(max(1, num)):
+                for _ in range(num):
                     results.append(
                         await self._one_generation(
                             client=client,
@@ -185,4 +190,13 @@ class OllamaProvider:
         if not isinstance(text, str):
             logger.warning("Ollama response missing 'response' field: %s", data)
             return "", "missing_field"
+        if text == "":
+            # 200 OK + `{"response": ""}` — model produced no content
+            # (refusal, filter, prompt fully consumed, etc.). Treat as
+            # `error="empty_response"` for the redteam pipeline because
+            # an empty completion is non-actionable as an attack
+            # candidate; downstream evaluator should skip these rows
+            # the same way it skips network/http_error rows.
+            logger.info("Ollama returned empty response (model refusal or filter)")
+            return "", "empty_response"
         return text, None

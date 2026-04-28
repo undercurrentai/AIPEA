@@ -105,14 +105,26 @@ class RedTeamResult:
     """Provider-side error category, or ``None`` on success.
 
     When set, ``payload`` is empty (or partial) due to an upstream
-    failure: HTTP non-2xx, non-JSON response, missing expected field,
-    network error, etc. The downstream evaluator MUST skip results
-    with non-None ``error`` rather than scoring them as benign
-    generations — otherwise an HTTP 500 from a provider produces a
-    corpus row indistinguishable from a successful, undetected attack.
-    Suggested vocabulary: ``"http_error"``, ``"non_json"``,
-    ``"missing_field"``, ``"network"``, ``"timeout"``,
-    ``"empty_response"``."""
+    failure or a model-side refusal. The downstream evaluator MUST
+    skip results with non-None ``error`` rather than scoring them as
+    benign generations — otherwise an HTTP 500 from a provider (or a
+    silently-empty completion) produces a corpus row indistinguishable
+    from a successful, undetected attack.
+
+    Canonical vocabulary (extend as new providers ship):
+      - ``"http_error"`` — provider returned non-2xx status.
+      - ``"non_json"`` — body was not valid JSON.
+      - ``"missing_field"`` — JSON OK but expected `response` /
+        `output` / `content` field absent or wrong type.
+      - ``"network"`` — `httpx.HTTPError` (connect, read, transport).
+      - ``"timeout"`` — provider-specific deadline exceeded
+        (e.g. background-mode poll cap).
+      - ``"empty_response"`` — 200 OK + empty content (model refusal,
+        safety filter, prompt fully consumed). Distinct from
+        ``"http_error"`` because the call succeeded; distinct from
+        ``None`` because there's nothing for the evaluator to score.
+      - ``"budget_exceeded"`` — daemon-mode rule trip (B2 will
+        populate this)."""
 
     @staticmethod
     def now_iso() -> str:
