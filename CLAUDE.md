@@ -29,8 +29,8 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~10,662 (as of v1.6.2, 2026-04-24) |
-| **Exports** | 50 symbols in `__all__` (as of ADR-004; was 44 in v1.5.0) |
+| **Source LOC** | ~11,510 (branch `feat/redteam-b1-providers`, 2026-04-28); ~10,662 on main (v1.6.2, 2026-04-24) |
+| **Exports** | 50 symbols in `__all__` (as of ADR-004; was 44 in v1.5.0). B1 foundation does NOT extend the package `__all__`; +6 exports planned for B1 follow-up |
 | **Build backend** | hatchling — **do NOT run `poetry install` / `poetry lock` / `poetry run` in this directory**. It silently creates an orphan venv in `~/Library/Caches/pypoetry/virtualenvs/aipea-*`. Use `make install` (pip + `.venv/`). |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
@@ -168,6 +168,23 @@ enhancer.py    <- imports ALL (facade); lazy-imports learning (opt-in via enable
 cli.py         <- imports config (optional: typer, rich, httpx)
 __main__.py    <- imports cli.app (CLI entry point)
 ```
+
+**Optional sub-package** (B1 foundation on `feat/redteam-b1-providers`,
+not yet on main; ADR-009 implementation):
+```
+redteam/
+├── _polling.py        <- stdlib only; long-call response polling helper
+│                         (extracted from .github/scripts/gpt_review.py:219-253)
+├── _resolve.py        <- stdlib only; ANTHROPIC_API_KEY/OPENAI_API_KEY env > config > default
+├── _types.py          <- stdlib only; RedTeamProvider Protocol +
+│                         RedTeamResult frozen dataclass + Technique StrEnum (8 OWASP cats)
+├── providers/
+│   ├── __init__.py    <- registry + _validate_provider (async-coroutine + attribute checks)
+│   └── ollama.py      <- stdlib + httpx; OllamaProvider reference impl
+└── __init__.py        <- public package surface (imports flow into the parent
+                          src/aipea/__init__.py at B1 follow-up)
+```
+B1 follow-up adds: AnthropicProvider, OpenAIResponsesProvider, OpenAICodexProvider, generator, evaluator, reporter, CLI integration. B2 adds the budget ledger + daemon. B3 adds Council Mode + AgenticRed archive + weekly cron.
 
 ### Design Principles
 
