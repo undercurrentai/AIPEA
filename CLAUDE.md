@@ -335,15 +335,15 @@ Inherits parent policy (see root `CLAUDE.md` Section 6.1).
 
 ### 7.2 Compliance Modes
 
-AIPEA supports 3 compliance modes. Changes to compliance behavior require ASK-first approval:
+AIPEA supports 3 compliance modes. Changes to compliance behavior require ASK-first approval. Each mode is an **input-inspection and model-allowlist control**, not enforcement of any regulatory regime — see `README.md §What AIPEA's Compliance Modes Do — and Do Not Do` and [`SPECIFICATION.md §3.1.3`](../../SPECIFICATION.md) for the enforcement-boundary contract.
 
-| Mode | Description | Restrictions |
-|------|-------------|-------------|
-| GENERAL | Standard use | None (except global forbidden models) |
-| HIPAA | Medical/PHI | BAA-covered models only, PHI-flagging (no redaction) |
-| TACTICAL | Military/Defense | Local models only, force offline, classified-marker flagging |
+| Mode | What AIPEA enforces in code | What AIPEA flags / sets as advisory metadata | Integrator must do |
+|---|---|---|---|
+| GENERAL | `validate_model()` against `GLOBAL_FORBIDDEN_MODELS` (`gpt-4o`, `gpt-4o-mini`); injection always blocked; PII always scanned | — | None mode-specific |
+| HIPAA | `validate_model()` against BAA-covered allowlist (substring) | PHI flagged via `phi_detected:*`; `phi_redaction_enabled=True` and `encryption_required=True` set on handler as advisory booleans | Redact / block on PHI flags; persist tamper-evident audit trail; encrypt at rest + in transit; obtain BAA per LLM provider; satisfy 45 C.F.R. § 164 |
+| TACTICAL | `validate_model()` against local-models allowlist (`llama-3.3-70b`); injection blocked; classified-marker scan | `force_offline=True` set on handler as advisory boolean; classified markers flagged via `classified_marker:*` | Honor `force_offline` by routing to local model + disabling external egress at app/infra layer; validate air-gap; AIPEA does NOT block network egress |
 
-**Deprecated:** `FEDRAMP` was a config-only stub with no behavioral enforcement. Formally deprecated in v1.3.4, scheduled for removal in v2.0.0. See [`docs/adr/ADR-002-fedramp-removal.md`](docs/adr/ADR-002-fedramp-removal.md).
+**Deprecated:** `FEDRAMP` was a config-only stub with no behavioral enforcement. Formally deprecated in v1.3.4, scheduled for removal in v2.0.0. Constructing a `ComplianceHandler` with `ComplianceMode.FEDRAMP` emits a `DeprecationWarning`. See [`docs/adr/ADR-002-fedramp-removal.md`](docs/adr/ADR-002-fedramp-removal.md).
 
 ### 7.3 Third-Party Licensing
 
