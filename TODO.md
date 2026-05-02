@@ -54,8 +54,51 @@ same day. The 23 review findings are triaged 13 Accept / 7 BD / 2 Decline
 - Pin GitHub Discussion #54 via the UI (GraphQL `pinDiscussion`
   mutation is not exposed; one-click UI action: Discussion #54 →
   "..." → "Pin discussion" → "Chevron Up").
-- Review SOW v0 §12 open questions; produce v1 for candidate
-  distribution.
+
+### PR #52 Phase 3 follow-up — Second-committer counsel handoff (DEFERRED)
+
+Status as of 2026-05-02: SOW v0 § 12 questions resolved 2026-04-28;
+SOW v0 §4/§7/§9 rewritten with the locked decisions (rigor-protocol
+pass 2026-04-28); legal-voice transformation produced a
+counsel-ready Independent Contractor Agreement v1 at
+`~/.claude/plans/aipea-second-committer-agreement-v1.md` (2026-05-02).
+
+**Remaining work, deferred to a focused counsel-handoff session**:
+
+- [ ] Fork Apache ICLA v2.2 verbatim (sourced 2026-05-02 from
+  https://www.apache.org/licenses/icla.pdf) into
+  `~/.claude/plans/aipea-cla-v1.md` with the §12 decision-#1
+  substitution (`Undercurrent Holdings, LLC` for "The Apache
+  Software Foundation"). **Counsel-flag** the nonprofit-status
+  clause in the standard ICLA recital — Undercurrent Holdings, LLC
+  is not a nonprofit, so the verbatim language does not apply
+  cleanly; counsel should either strike or substitute parallel
+  for-profit-LLC language.
+- [ ] Draft counsel-handoff cover email (≤300 words) at
+  `~/.claude/plans/aipea-counsel-handoff-cover-email.md` orienting
+  counsel to the 3-document packet (Agreement v1, ICLA v1, v0 SOW
+  for context) plus the 5 inline `[[CHECK AUTHORITY]]` flags in the
+  Agreement and the nonprofit-status flag in the ICLA fork.
+- [ ] Open Checkr account on `josh@undercurrentholdings.com`
+  (per SOW §9.1; was scheduled 2026-04-30; slipped).
+- [ ] Counsel review window — 1-2 hrs / ~$300-600. Three numbered
+  items per SOW v0 §13 plus the new ICLA-nonprofit-language flag.
+- [ ] Apply counsel feedback; ship Agreement v1.1 + ICLA v1.1 to
+  candidate-outreach packet by 2026-05-21 (revised target — original
+  2026-05-07 ship missed; outreach 2026-05-15 → 2026-05-21).
+
+**Why deferred**: this work is fully external (counsel review +
+account-opening); none of the remaining items depend on AIPEA-repo
+engineering. Bus-factor mitigation timeline (contractor start
+2026-07-15) is unaffected by a 2-week slip on the SOW counsel
+handoff. Engineering capacity better deployed on v1.7.0 Phase 4.b
+claims-audit and Phase 4.c adversarial corpus.
+
+**Resume trigger**: when maintainer has a counsel meeting scheduled
+or self-blocks ~30 min to fork the ICLA and draft the cover email.
+Slot the work alongside v1.7.0 ship (target 2026-06-15) so
+contractor outreach (2026-05-15 → slipped to 2026-05-21) and the
+v1.7.0 Phase 4.b claims-audit PR run in parallel without contention.
 
 Declined (with full rationale + Revisit triggers in [ADR-005 §C.1/C.2](docs/adr/ADR-005-pr52-vc-adversarial-review-response.md)):
 - DistilBERT-scale classifier swap (review §5.1 / §10 Phase 1) — violates
