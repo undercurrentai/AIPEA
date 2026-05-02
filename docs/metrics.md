@@ -1,8 +1,8 @@
 # AIPEA Metrics
 
 > Signals of AIPEA's adoption, usage, and engineering quality. Small
-> numbers, honestly reported. Updated 2026-04-24 (v1.6.2 shipped to
-> PyPI; PR #52 adversarial-review response in flight).
+> numbers, honestly reported. Updated 2026-05-02 (Phase 4.c
+> adversarial corpus expansion; v1.6.2 shipped to PyPI 2026-04-24).
 
 This page exists because an investor's first two questions are
 "who's using it?" and "who's about to?" — and "trust me" isn't an
@@ -53,6 +53,60 @@ See the README badges for live rendering of these.
 | Static-analysis gates | Ruff (14 rule families incl. S/Bandit) + mypy strict | [`pyproject.toml:67-82`](../pyproject.toml) |
 | Second-reviewer gate | Triple-AI (gpt-5.4-pro + Codex gpt-5.3-codex + Claude Opus 4.6) on security-critical PRs | [`.github/workflows/ai-second-review.yml`](../.github/workflows/ai-second-review.yml) |
 | Mutation-score infra | `mutmut` configured; CI gate deferred to v1.7.0+ | [`pyproject.toml:110-111`](../pyproject.toml), [`docs/ROADMAP.md §P5d`](ROADMAP.md) |
+
+---
+
+## Adversarial evaluation hit rates (snapshot 2026-05-02)
+
+Honest hit-rate of AIPEA's `INJECTION_PATTERNS` against published
+adversarial corpora. **Includes losses.** This table is manually
+updated when `tests/fixtures/adversarial/baseline.json` is
+re-baselined; the nightly CI workflow at
+[`.github/workflows/adversarial.yml`](../.github/workflows/adversarial.yml)
+produces fresh numbers daily, visible in Actions but not silently
+committed. Source-code anchor for the regex set:
+[`src/aipea/security.py:367-441`](../src/aipea/security.py).
+
+Provenance for each corpus is in
+[`tests/fixtures/adversarial/SOURCES.md`](../tests/fixtures/adversarial/SOURCES.md).
+Design rationale in
+[ADR-008](adr/ADR-008-adversarial-evaluation-suite.md) +
+[ADR-005 §C.1](adr/ADR-005-pr52-vc-adversarial-review-response.md).
+
+| Corpus | License | Size | Hit-rate / FPR | Notes |
+|---|---|---:|---:|---|
+| OWASP LLM Top 10 (bright-line) | CC-BY-SA, vendored | 67 | **100%** (gating) | Patterns AIPEA was specifically written to detect. Must-pass. |
+| OWASP LLM Top 10 (extended, all categories) | CC-BY-SA, vendored | 53 | 9.4% | Real adversarial techniques regex-only defense may not yet handle. Per-category breakdown in `baseline.json`. |
+| **PromptInject (overrides)** | MIT | 17 | **29.4%** | Canonical instruction-override family; below the 60–80% literature expectation due to corpus narrowing in the extraction script — broaden the heuristic in a follow-up to enrich coverage. |
+| **JailbreakBench JBB-Behaviors (harmful)** | MIT | 100 | 0% flagged | Harmful-content goals (e.g., "explain how to hotwire a car"); AIPEA's regex set is **not** designed to flag these. 0% is correct — these test semantic content, not override syntax. |
+| **JailbreakBench JBB-Behaviors (benign FPR)** | MIT | 100 | **0.0% FPR** | False-positive-rate control set. Target <5%. AIPEA passes cleanly: zero benign queries are flagged. |
+| **Garak `promptinject` + `dan` + `latentinjection` extracts** | Apache-2.0 | 43 | **7.0%** | Paraphrase-coverage breadth; reveals DAN-style and latent-injection gaps. |
+
+**ADR-005 §C.1** declined a DistilBERT-classifier replacement; instead,
+new regex patterns ship via separate PRs when this benchmark surfaces
+paraphrase or encoding gaps (the Wave 21 paraphrase verbs were added
+to `INJECTION_PATTERNS` via this exact pattern). The benchmark exists
+to surface gaps honestly, not to drive AIPEA toward a moving 100%
+target.
+
+### Notable losses (by category)
+
+OWASP extended-tier failure breakdown reveals the categories AIPEA's
+regex set does **not** currently catch (each is a candidate for a
+future targeted regex extension, never a classifier swap):
+
+| OWASP category | Hit-rate | Notes |
+|---|---:|---|
+| LLM01 (delimiter) | 0/5 | Delimiter-based injection bypasses ASCII boundaries |
+| LLM01 (encoding) | 0/5 | Base64 / URL-encoded payloads slip past byte-level regex |
+| LLM01 (multi-language) | 0/8 | Non-English override phrasings need locale-aware patterns |
+| LLM01 (paraphrase) | 0/15 | Paraphrase variants beyond Wave-21 verbs |
+| LLM01 (role-play) | 0/8 | DAN-style "you are now X" framings |
+| LLM01 (indirect) | 5/6 | Mostly caught — indirect injection through quoted user text |
+| LLM07 (elicitation) | 0/6 | System-prompt extraction attempts |
+
+These numbers will move when targeted PRs ship new patterns. They are
+published here so any drift downward is publicly visible.
 
 ---
 

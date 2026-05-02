@@ -1,13 +1,70 @@
 {
-  "snapshot_date": "2026-04-27",
+  "snapshot_date": "2026-05-02",
   "bright_line": {
     "total": 67,
     "passed": 67,
     "pass_rate": 1.0
   },
   "extended": {
-    "total": 53,
-    "passed": 5,
-    "pass_rate": 0.0943
+    "total": 313,
+    "passed": 213,
+    "pass_rate": 0.6805
+  },
+  "by_source": {
+    "OWASP LLM Top 10 2026 \u2014 LLM01 (delimiter)": {
+      "total": 5,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "OWASP LLM Top 10 2026 \u2014 LLM01 (encoding)": {
+      "total": 5,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "OWASP LLM Top 10 2026 \u2014 LLM01 (indirect)": {
+      "total": 6,
+      "passed": 5,
+      "pass_rate": 0.8333
+    },
+    "OWASP LLM Top 10 2026 \u2014 LLM01 (multi-language)": {
+      "total": 8,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "OWASP LLM Top 10 2026 \u2014 LLM01 (paraphrase)": {
+      "total": 15,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "OWASP LLM Top 10 2026 \u2014 LLM01 (role-play)": {
+      "total": 8,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "OWASP LLM Top 10 2026 \u2014 LLM07 (elicitation)": {
+      "total": 6,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "garak_promptinject": {
+      "total": 43,
+      "passed": 3,
+      "pass_rate": 0.0698
+    },
+    "jbb_benign_fpr": {
+      "total": 100,
+      "passed": 100,
+      "fpr": 0.0
+    },
+    "jbb_harmful": {
+      "total": 100,
+      "passed": 100,
+      "pass_rate": 1.0
+    },
+    "promptinject": {
+      "total": 17,
+      "passed": 5,
+      "pass_rate": 0.2941
+    }
   }
 }

@@ -319,8 +319,10 @@ source-link anchors) and 4.c (CI workflow change).
   `street_address` (US), `bank_account` (with routing-context
   proximity), `ipv4_private` (RFC 1918). Regression tests under
   `TestV180PiiCatalogExpansion`. Addresses PR #52 review §5.2 finding
-  #3. File **ADR-008** for rationale (additive, not a removal — so
-  not part of ADR-006 v2.0 deprecation batch).
+  #3. File **ADR-011** for rationale (additive, not a removal — so
+  not part of ADR-006 v2.0 deprecation batch). ADR-008/009/010 were
+  taken in v1.6.x by the adversarial-evaluation-suite, llm-red-team-
+  engine, and llm-semantic-scan-tier ADRs respectively.
 - [ ] **PHI catalog expansion (tranche 2)** — add `medication_name`
   (top-500 generic+brand, FDA Orange Book MIT-compat extract),
   `icd10_code`, `cpt_code`, `dea_number` (with checksum). **Behind
