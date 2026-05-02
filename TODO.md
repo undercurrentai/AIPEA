@@ -3,8 +3,9 @@
 Canonical tracker for all pending work. Replaces scattered items from ROADMAP.md,
 NEXT_STEPS.md, KNOWN_ISSUES.md, SPECIFICATION.md, and discovery findings.
 
-Last updated: 2026-04-24 (v1.6.2 content fully merged to `main`;
-awaiting PyPI release cut).
+Last updated: 2026-05-02 (v1.6.2 shipped to PyPI 2026-04-24;
+v1.7.0 Phase 4.a + 4.b + 4.c all merged to `main`; awaiting
+v1.7.0 release cut on 2026-06-15 target).
 
 > **Architect's release plan**: see `~/.claude/plans/you-are-the-senior-dynamic-micali.md`
 > for the approved v1.6.2 → v1.7.0 → v1.8.0 → v2.0.0rc1 → v2.0.0 roadmap.
@@ -44,11 +45,27 @@ same day. The 23 review findings are triaged 13 Accept / 7 BD / 2 Decline
   — shipped 2026-04-24 (authored for v1.7.0 but landed early alongside
   v1.6.2 release cycle). §12 per-diligence-question appendix folded
   into the ADR.
-- [ ] **Phase 4.b**: Claims-audit sweep across README / SECURITY.md /
-  SPECIFICATION.md / CLAUDE.md / aegis-adapter.md / agora-adapter.md
-  (v1.7.0). Triple-AI gate will fire on this PR.
-- [ ] **Phase 4.c**: Adversarial benchmark suite in `tests/adversarial/`
-  + non-gating nightly CI (v1.7.0).
+- [x] **Phase 4.b**: Claims-audit sweep across SPECIFICATION.md
+  §1.3 + §3.1.3 and CLAUDE.md §7.2 — calibrated to match
+  `src/aipea/security.py:727-819` ComplianceHandler reality.
+  README and SECURITY.md were already aligned; adapter docs
+  (aegis / agora) had no claims to audit.
+  ✅ 2026-05-02, PR #69 squash `e4ae911`. Triple-AI gate fired
+  (touches CLAUDE.md per §2.2 ASK-First) — all three reviewers
+  passed.
+- [x] **Phase 4.c**: Adversarial benchmark suite expansion —
+  3 new corpora (PromptInject MIT, JBB-Behaviors MIT, Garak
+  Apache-2.0); per-source baseline schema in
+  `tests/test_adversarial.py::TestExtendedBaselinePerSource`;
+  nightly non-gating CI workflow at
+  `.github/workflows/adversarial.yml` (cron `37 4 * * *`);
+  per-corpus hit-rate publication in `docs/metrics.md` including
+  honest losses; provenance in
+  `tests/fixtures/adversarial/SOURCES.md`.
+  ✅ 2026-05-02, PR #70 squash `f0a685a`. Triple-AI gate fired
+  (touches `.github/workflows/**` + `pyproject.toml`) —
+  GPT 5.4 Pro PASS (5m7s), Codex CLI PASS (1m37s), Claude Opus 4.6
+  PASS (3m43s).
 
 **Manual follow-ups (outside repo-editable scope)**:
 - Pin GitHub Discussion #54 via the UI (GraphQL `pinDiscussion`
@@ -120,8 +137,8 @@ Deferred:
 
 | Release | Target | State | Scope |
 |---|---|---|---|
-| **v1.6.2** | 2026-05-09 | **on `main`; awaiting PyPI cut** | Doc sync + 3 code cleanups (HTTP_TIMEOUT DeprecationWarning, DRY URL resolver; rolling-avg was a false positive) + `benchmarks/` delete + P5e trio + PR #52 adversarial-review merge + v1.6.3-labeled telemetry dashboard (PR #53). All shipped to `main` via PRs #51 + #52 + #53 on 2026-04-24. |
-| **v1.7.0** | 2026-06-15 | queued | `AIPEAConfig.source_of()` + CLI migration. AEGIS adapter contract audit + AIPEA-side integration test. `DeprecationWarning` on `create_model_specific_prompt`. `MIGRATION.md` v0 draft. `tests/test_models.py`. **+ PR #52 Phase 4.a** (ADR-005 + §12 appendix) **+ Phase 4.b** (claims audit) **+ Phase 4.c** (adversarial benchmark suite). |
+| **v1.6.2** | 2026-04-24 | **✅ shipped to PyPI 2026-04-24** (release tag `v1.6.2`, GitHub Release [v1.6.2](https://github.com/undercurrentai/AIPEA/releases/tag/v1.6.2)) | Doc sync + 3 code cleanups (HTTP_TIMEOUT DeprecationWarning, DRY URL resolver; rolling-avg was a false positive) + `benchmarks/` delete + P5e trio + PR #52 adversarial-review merge + v1.6.3-labeled telemetry dashboard. Shipped via PRs #51 + #52 + #53 + #55 + #56 + #57. |
+| **v1.7.0** | 2026-06-15 | **partial — 5 PRs merged to `main`**; release-cut pending | **Shipped**: ADR-005 (PR #58); ADR-008 adversarial suite + Wave-21 paraphrase verbs (PRs #59/#60/#61); ADR-009 LLM red-team engine PR-B1 + Wave-22 follow-up (PRs #64/#65); Phase 4.b claims audit (PR #69); Phase 4.c adversarial corpus expansion + nightly CI (PR #70). **Pending**: `AIPEAConfig.source_of()` + CLI migration; AEGIS adapter contract audit + AIPEA-side integration test; `DeprecationWarning` on `create_model_specific_prompt`; `MIGRATION.md` v0 draft; `tests/test_models.py`; governance-templates populate. |
 | **v1.8.0** | 2026-08-01 | queued | AgoraIV migration PRs (AgoraIV adopts `source_of()`, drops deprecated imports). PII catalog expansion (tranche 1: phone, email, street-address, bank-account, IPv4-private). PHI catalog expansion (tranche 2: medication names, ICD-10, CPT, DEA) — **behind opt-in flag pending clinical-reviewer sign-off** (Plan B #20 deferred). `docs/MAINTAINERS.md`. `.github/CODEOWNERS` updated with second committer. Final minor pre-rc1. |
 | **v2.0.0rc1** | 2026-09-01 | queued | Remove `FEDRAMP`, `HTTP_TIMEOUT` alias, `create_model_specific_prompt`. Inline `TierProcessor` ABC. Remove `phi_redaction_enabled` if v1.7.0 claims audit finds it unused. Finalize `MIGRATION.md`. |
 | **v2.0.0** | 2026-10-22 | queued | GA (≥2 weeks rc1 soak, zero unresolved blockers, AgoraIV migrated off deprecated symbols). |
@@ -133,10 +150,12 @@ old; 6 months + 2 minor releases is the minimum defensible window.
 
 ---
 
-## Immediate (v1.6.2) — ON `main`, awaiting PyPI cut (target 2026-05-09)
+## Completed (v1.6.2) — ✅ shipped to PyPI 2026-04-24
 
-All sub-items shipped via PRs #51 + #52 + #53 on 2026-04-24. Cutting the
-release is a version-bump + tag operation — no remaining code work.
+All sub-items shipped via PRs #51 + #52 + #53 + #55 + #56 + #57.
+Tag `v1.6.2` created at commit `bfd3b55`; GitHub Release published
+2026-04-24; PyPI publish via OIDC Trusted Publisher confirmed at
+[pypi.org/project/aipea/1.6.2](https://pypi.org/project/aipea/1.6.2/).
 
 ### A. Doc version sync — COMPLETE (2026-04-23 via `/docs-sync`)
 
@@ -282,28 +301,38 @@ contract the adapter consumes.
 - [ ] **`ai/risk-register.yaml`** — populate both `review_date:` fields
   (lines 22, 41) with real quarterly dates.
 
-### J-bis. PR #52 Phase 4 (ships with v1.7.0)
+### J-bis. PR #52 Phase 4 — ✅ all three Phase 4 deliverables shipped to `main`; will release with v1.7.0
 
-Per the approved PR #52 response plan. Each is its own PR; triple-AI
-gate fires on 4.b (claims audit touches security.py indirectly via
-source-link anchors) and 4.c (CI workflow change).
+Per the approved PR #52 response plan. All three Phase 4 PRs merged
+2026-04-24 → 2026-05-02. Triple-AI gate fired on 4.b and 4.c (and
+on 4.a per the source-anchor cross-link the ADR introduced).
 
-- [ ] **Phase 4.a** — `docs/adr/ADR-005-pr52-vc-adversarial-review-response.md`
-  (≤250 lines, triage matrix + user decisions + critical path) +
-  append `## 12. Maintainer Response (2026-04-24)` section to the
-  merged VC review walking §7's 12 diligence questions.
-- [ ] **Phase 4.b** — Claims-audit sweep across README / SECURITY.md /
-  SPECIFICATION.md / CLAUDE.md / `docs/integration/aegis-adapter.md` /
-  `docs/integration/agora-adapter.md` against `src/aipea/security.py`.
-  Rewrite narrower-than-code claims; retract unbacked ones; add
-  source-code link anchors. Emit `DeprecationWarning` on any surface
-  that claims enforcement the code doesn't provide. File ADR-006 for
-  the v2.0 deprecation batch (per 2026-04-24 numbering decision).
-- [ ] **Phase 4.c** — `tests/adversarial/` corpus suite (OWASP LLM Top
-  10 + LLM-Attacks AdvBench subset + Garak subset; MIT-compatible
-  licenses only) + `.github/workflows/adversarial.yml` (nightly
-  non-gating at first); baseline hit-rate published to
-  `docs/metrics.md` **including losses**.
+- [x] **Phase 4.a** — [`docs/adr/ADR-005-pr52-vc-adversarial-review-response.md`](docs/adr/ADR-005-pr52-vc-adversarial-review-response.md)
+  (~460 lines: triage matrix + user decisions + Revisit triggers + §12
+  per-diligence-question appendix). ✅ 2026-04-24, PR #58 squash
+  `b4b6df2`.
+- [x] **Phase 4.b** — Claims-audit sweep across SPECIFICATION.md
+  §1.3 + §3.1.3 + §10 and CLAUDE.md §7.2; verified
+  `src/aipea/security.py:727-819` ComplianceHandler enforcement
+  contract; calibrated all surfaces to "configuration metadata, not
+  enforcement"; added source-code link anchors. README and SECURITY.md
+  found already aligned. Adapter docs had no compliance claims to
+  audit. ✅ 2026-05-02, PR #69 squash `e4ae911`. Triple-AI gate fired
+  (CLAUDE.md §2.2 ASK-First) — all three reviewers passed. ADR-006
+  for v2.0 deprecation batch deferred to v2.0.0rc1 cycle (no
+  retractions surfaced; existing language fully calibrated).
+- [x] **Phase 4.c** — `tests/fixtures/adversarial/{promptinject,
+  jbb_behaviors, garak_promptinject}.json` (3 corpora; MIT/MIT/Apache-2.0)
+  + `tests/fixtures/adversarial/SOURCES.md` (provenance + Apache-2.0
+  NOTICE) + `tests/test_adversarial.py::TestExtendedBaselinePerSource`
+  + `.github/workflows/adversarial.yml` (cron `37 4 * * *`,
+  non-gating, Step Summary + artifact upload) +
+  `tests/render_adversarial_summary.py` (helper) + `docs/metrics.md`
+  "Adversarial evaluation hit rates" section publishing per-corpus
+  hit-rate **including losses**. AdvBench skipped (tests
+  harmful-content goals not override syntax). ✅ 2026-05-02, PR #70
+  squash `f0a685a`. Triple-AI gate fired (`.github/workflows/**` +
+  `pyproject.toml`) — GPT 5.4 Pro + Codex + Claude Opus 4.6 all PASS.
 
 ---
 

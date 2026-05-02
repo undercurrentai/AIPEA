@@ -1,7 +1,8 @@
 # AIPEA Adopters
 
 > Who's using AIPEA in production, what they use it for, and which version
-> they're tested against. Updated 2026-04-23.
+> they're tested against. Updated 2026-05-02 (post-v1.6.2 ship; Agora IV
+> row bumped to v1.6.2 with HTTP_TIMEOUT-deprecation migration note).
 
 AIPEA is young (v1.6.2, shipped 2026-04-24) and maintained by a small team
 at [Undercurrent Holdings](https://github.com/undercurrentai). This page
@@ -19,7 +20,7 @@ listed (or prefer to stay anonymous), open a PR or email
 |---|---|
 | **Role** | Primary extraction source and longest-running production consumer |
 | **Repo** | [`undercurrentai/agora-iv`](https://github.com/undercurrentai/agora-iv) (internal) |
-| **AIPEA version tested** | v1.6.1 (via shim: `aipea_search_providers.py`, `pcw_query_analyzer.py`, `pcw_prompt_engine.py`, `aipea_security_context.py`, `agora_prompt_enhancement.py`) |
+| **AIPEA version tested** | v1.6.2 (via shim: `aipea_search_providers.py`, `pcw_query_analyzer.py`, `pcw_prompt_engine.py`, `aipea_security_context.py`, `agora_prompt_enhancement.py`). **Migration note**: Agora IV's 14 `HTTP_TIMEOUT` references continue to work in v1.6.2 but now emit `DeprecationWarning` on first import via PEP 562 `__getattr__`; planned migration to `_resolve_http_timeout()` is scheduled in Agora IV's v4.2.0 cycle. Hard removal lands in AIPEA v2.0.0rc1 (target 2026-09-01). |
 | **Integration pattern** | Shim (wildcard re-export) + thin adapter for `enhance_for_agora()`. Preserves 2,187+ AgoraIV tests without import-path churn. |
 | **What Agora IV uses AIPEA for** | Security scanning (PII/PHI/injection), query analysis (complexity, domain, temporal needs), model-specific prompt formatting, multi-provider search orchestration (Exa, Firecrawl), and offline knowledge-base retrieval. |
 | **Production scale signal** | AIPEA was extracted from Agora IV v4.1.49 production — the security, knowledge, and search modules had shipped and been hardened under real-world load before extraction. All 20 Wave 18-20 bug-hunt findings (e.g. HIPAA compliance leak #96, ReDoS #107, zero-width Unicode bypass #108) were caught and fixed inside AIPEA before they could affect downstream Agora IV behavior. |

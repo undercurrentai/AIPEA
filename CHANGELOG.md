@@ -144,7 +144,86 @@ adversarially generated payloads in a future wave.
   appendix answering review §7 Q1-Q12. Authored in the v1.7.0 cycle
   but landed early (v1.6.2 release window). Supersedes "forthcoming
   ADR-005" placeholders in TODO.md, `CHANGELOG.md`, `docs/metrics.md`,
-  and the merged VC review editorial banner.
+  and the merged VC review editorial banner. *(PR #58, b4b6df2,
+  2026-04-24)*
+
+### Phase 4.b — Claims-audit calibration (2026-05-02, PR #69)
+
+- **SPECIFICATION.md §1.3** "Security by default" design principle:
+  rewrote to make input-inspection-not-enforcement contract explicit;
+  cross-linked README + SECURITY.md.
+- **SPECIFICATION.md §3.1.3 ComplianceHandler table**: new "Integrator's
+  responsibility" right-most column making the "configuration metadata,
+  not enforcement" boundary explicit. Source-code anchor:
+  `src/aipea/security.py:727-819`. Old "Yes / Yes / Yes" Encryption /
+  PHI Redaction / Force Offline columns reframed as advisory boolean
+  fields the integrator's application layer reads.
+- **CLAUDE.md §7.2 Compliance Modes**: rewrote 3-column "Restrictions"
+  table into 4-column layout — "What AIPEA enforces in code" / "What
+  AIPEA flags as advisory metadata" / "Integrator must do".
+- README and SECURITY.md found already calibrated; no edits needed.
+- Adapter docs (`docs/integration/{aegis,agora}-adapter.md`) had no
+  compliance claims to audit.
+- *(PR #69, e4ae911, 2026-05-02)*
+
+### Phase 4.c — Adversarial corpus expansion + nightly CI (2026-05-02, PR #70)
+
+- **`tests/fixtures/adversarial/promptinject.json`** (NEW; 17
+  entries; MIT) — agencyenterprise/PromptInject `prompt_data.py`
+  extracted via override-verb regex heuristic. Canonical
+  instruction-override family.
+- **`tests/fixtures/adversarial/jbb_behaviors.json`** (NEW; 200
+  entries; MIT) — JailbreakBench JBB-Behaviors harmful (100) +
+  benign FPR control (100). HuggingFace dataset CSVs.
+- **`tests/fixtures/adversarial/garak_promptinject.json`** (NEW; 43
+  entries; Apache-2.0) — NVIDIA/garak probes
+  `{promptinject,dan,latentinjection}.py` extracted via override-verb
+  regex. Paraphrase-coverage breadth.
+- **`tests/fixtures/adversarial/SOURCES.md`** (NEW) — full provenance
+  per corpus, license attribution, Apache-2.0 NOTICE for Garak,
+  re-extraction reproducibility notes.
+- **`tests/test_adversarial.py`**: added `_compute_results_by_source()`
+  helper + `TestExtendedBaselinePerSource` class with FPR-inverted
+  assertion path for `jbb_benign_fpr` source. `_generate_baseline()`
+  additively writes `by_source` map.
+- **`tests/fixtures/adversarial/baseline.json`**: regenerated with
+  `by_source` map (additive schema).
+- **`.github/workflows/adversarial.yml`** (NEW) — nightly cron
+  `'37 4 * * *'` non-gating; Blacksmith runner; SHA-pinned actions;
+  `continue-on-error: true`; writes per-corpus hit-rate Markdown to
+  `$GITHUB_STEP_SUMMARY`; uploads `baseline.json` artifact (30-day).
+- **`tests/render_adversarial_summary.py`** (NEW; ~80 LOC) — emits
+  Markdown table for `$GITHUB_STEP_SUMMARY`.
+- **`docs/metrics.md`** — new "Adversarial evaluation hit rates"
+  section with per-corpus table including OWASP per-category losses
+  (delimiter / encoding / multi-language / paraphrase / role-play /
+  elicitation: candidates for future targeted regex extensions per
+  ADR-005 §C.1, NOT a classifier swap).
+- **`pyproject.toml`** `[tool.ruff.lint.per-file-ignores]`: extended
+  for the two new CLI-style helpers (`tests/render_adversarial_summary.py`,
+  `tests/test_adversarial.py`) — T20 + E501 on table-row prints,
+  matching the precedent in `src/aipea/cli.py`.
+- *(PR #70, f0a685a, 2026-05-02)*
+
+### Documentation (2026-04-24 → 2026-05-02)
+
+- **`TODO.md`**: deferred SOW counsel-handoff work to a focused
+  future session with explicit resume trigger; engineering capacity
+  redirected to v1.7.0 Phase 4.b/4.c per the approved plan.
+  *(PR #68, 898a4c9, 2026-05-02)*
+- **`docs/positioning.md`** (NEW; ≤500 words) — formalizes the
+  open-core step-up: AIPEA detects, AEGIS enforces, Agora IV
+  orchestrates. Closes the ADR-005 §12 Q5 commitment and PR #52
+  review §7.5 diligence question. *(this PR)*
+- **`docs/adopters.md`**: bumped Agora IV row to v1.6.2 (was v1.6.1)
+  with HTTP_TIMEOUT-deprecation migration note. *(this PR)*
+
+### Removed FROM `[Unreleased]`
+
+- The "forthcoming ADR-005" placeholder language in TODO.md,
+  CHANGELOG.md, docs/metrics.md, and the merged VC review banner —
+  ADR-005 has shipped (PR #58), so the placeholders are obsolete.
+  *(superseded by ADR-005's actual content)*
 
 ## [1.6.2] - 2026-04-24
 
