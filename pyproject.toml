@@ -96,6 +96,8 @@ max-complexity = 15
 "tests/*" = ["S101", "S105", "S106", "S603", "S607"]  # Allow assert, hardcoded passwords, subprocess, partial paths in tests
 "src/aipea/cli.py" = ["T20"]  # CLI uses Rich console.print, not stdlib print
 "src/aipea/__main__.py" = ["T20"]  # Entry point
+"tests/render_adversarial_summary.py" = ["T20", "E501"]  # CLI helper writes Markdown to stdout for $GITHUB_STEP_SUMMARY; long lines are table rows
+"tests/test_adversarial.py" = ["T20", "E501"]  # Baseline-generation prints to stdout; long lines are table rows
 
 [tool.mypy]
 python_version = "3.12"
