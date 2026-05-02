@@ -71,8 +71,15 @@ production Agora IV codebase:
    `search`) import only stdlib + `httpx`. No framework lock-in.
 2. **Graceful degradation** — Every search call returns empty results on failure, never
    exceptions. Every tier falls back to the one below.
-3. **Security by default** — Injection patterns are always blocked regardless of
-   compliance mode. PII scanning is always on. Classified content forces offline.
+3. **Security by default (input inspection, not enforcement)** — Injection
+   patterns are always **flagged and `is_blocked` set** regardless of
+   compliance mode. PII scanning is always on. Classified content sets
+   the `force_offline` advisory flag in the resulting `ScanResult`,
+   which integrators must honor; AIPEA itself does not block network
+   egress, redact content, or persist an audit trail. See `README.md
+   §What AIPEA's Compliance Modes Do — and Do Not Do` and
+   [`SECURITY.md §Compliance Modes`](SECURITY.md) for the
+   enforcement-boundary contract.
 4. **Model-agnostic** — Works with any LLM. Model-specific formatting is an output
    concern, not an architectural dependency.
 5. **Air-gap ready** — Tier 0 (Offline) operates with zero network connectivity,
@@ -286,20 +293,39 @@ class ScanResult:
 
 #### 3.1.3 ComplianceHandler
 
-Configures operational parameters per compliance mode:
+`ComplianceHandler` exposes mode-specific **configuration metadata** to
+integrators. AIPEA itself does **not** enforce these values — they are
+attributes the integrator's application layer consumes. The table below
+lists the **values AIPEA sets** per mode and, in the right-most column,
+**what the integrator must do** to actually achieve compliant behavior.
+Reference: [`src/aipea/security.py:727-819`](src/aipea/security.py)
+(`ComplianceHandler` class definition).
 
-| Mode | Audit Retention | Encryption | Allowed Models | PHI Redaction | Force Offline |
-|------|----------------|------------|----------------|---------------|---------------|
-| GENERAL | 90 days | No | All | No | No |
-| HIPAA | 6 years (2190d) | Yes | claude-opus-4-6, gpt-5.2 (BAA-covered) | Yes | No |
-| TACTICAL | 7 years (2555d) | Yes | llama-3.3-70b (local only) | No | Yes |
+| Mode | `audit_retention_days` (informational) | `encryption_required` (advisory boolean) | `allowed_models` (enforced via `validate_model()`) | `phi_redaction_enabled` (advisory boolean) | `force_offline` (advisory boolean) | Integrator's responsibility |
+|---|---|---|---|---|---|---|
+| GENERAL | 90 | False | (none) | False | False | None mode-specific. |
+| HIPAA | 2190 (6 yrs) | True | `claude-opus-4-6`, `claude-opus-4-5`, `gpt-5.2` (substring match) | True | False | Persist scan-result audit trail to a tamper-evident store; redact or block on `phi_detected:*` flags; encrypt PHI at rest and in transit; obtain a BAA with each LLM provider; satisfy the HIPAA Security Rule, Privacy Rule, and 45 C.F.R. § 164 obligations. AIPEA flags PHI; the integrator is the covered entity. |
+| TACTICAL | 2555 (7 yrs) | True | `llama-3.3-70b` (substring match) | False | True | Honor `force_offline` by routing to a local model and disabling external network egress at the application or infrastructure layer; validate the air-gap; satisfy classification-handling requirements; AIPEA flags classified markers but does not enforce classification controls. |
 
-**Deprecated:** `FEDRAMP` previously appeared in this table. It was always a config-only stub with no behavioral enforcement and has been formally deprecated in v1.3.4 (removal scheduled for v2.0.0). See [`docs/adr/ADR-002-fedramp-removal.md`](docs/adr/ADR-002-fedramp-removal.md).
+**What `validate_model()` actually enforces** (the only value in this
+table AIPEA enforces in code): if the requested model identifier matches
+any string in `allowed_models` via case-insensitive substring match,
+`validate_model()` returns `True`. Otherwise it returns `False`. A global
+forbidden list (`gpt-4o`, `gpt-4o-mini`, set in `GLOBAL_FORBIDDEN_MODELS`)
+is checked first and overrides any mode-specific allowlist.
 
-Model validation uses **substring matching** (case-insensitive) against the allowed
-list, plus a global **forbidden list** (`gpt-4o`, `gpt-4o-mini`) that applies
-regardless of mode. The forbidden list is enforced via `GLOBAL_FORBIDDEN_MODELS`
-class variable, checked **before** mode-specific allowlists in `validate_model()`.
+**Everything else in this table is metadata.** `audit_retention_days`,
+`encryption_required`, `phi_redaction_enabled`, and `force_offline` are
+public attributes the integrator's code reads to make its own
+enforcement decisions. AIPEA does not redact PHI, does not persist any
+audit log, does not encrypt anything, and does not block network egress.
+
+**Deprecated:** `FEDRAMP` previously appeared in this table. It was
+always a config-only stub with no behavioral enforcement and has been
+formally deprecated in v1.3.4 (removal scheduled for v2.0.0).
+Constructing a `ComplianceHandler` with `ComplianceMode.FEDRAMP` emits a
+`DeprecationWarning`. See
+[`docs/adr/ADR-002-fedramp-removal.md`](docs/adr/ADR-002-fedramp-removal.md).
 
 #### 3.1.4 Convenience Functions
 
