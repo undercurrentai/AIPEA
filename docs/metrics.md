@@ -1,8 +1,9 @@
 # AIPEA Metrics
 
 > Signals of AIPEA's adoption, usage, and engineering quality. Small
-> numbers, honestly reported. Updated 2026-05-02 (Phase 4.c
-> adversarial corpus expansion; v1.6.2 shipped to PyPI 2026-04-24).
+> numbers, honestly reported. Updated 2026-05-02 (post-Phase-4.c PR #70
+> adversarial corpus expansion shipped; v1.6.2 shipped to PyPI 2026-04-24;
+> v1.7.0 release-cut target 2026-06-15).
 
 This page exists because an investor's first two questions are
 "who's using it?" and "who's about to?" — and "trust me" isn't an

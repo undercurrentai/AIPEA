@@ -70,25 +70,25 @@ lines, user-approved 2026-04-24).
 
 | # | Review section | Finding / recommendation | Track | Phase | Status |
 |---|---|---|---|---|---|
-| 1 | §5.1 | Signature-based injection detection; add adversarial corpus | **A** | v1.7.0 Phase 4.c | queued |
+| 1 | §5.1 | Signature-based injection detection; add adversarial corpus | **A** | v1.7.0 Phase 4.c | ✅ shipped (PR #59 ADR-008 + PR #70 expansion, 2026-05-02) |
 | 2 | §5.1 | Swap regex injection layer for DistilBERT-scale classifier | **C.1** | declined | Revisit trigger below |
 | 3 | §5.2 | PII catalog narrow; add phone / email / address / account / IPv4-private | **A** | v1.8.0 tranche 1 | queued (ADR-008) |
 | 4 | §5.2 | PHI catalog narrow; add medication / ICD-10 / CPT / DEA | **A** | v1.8.0 tranche 2 | queued (opt-in flag pending clinical review) |
-| 5 | §5.3 | HIPAA mode marketing-vs-code gap; claims audit | **A** | v1.7.0 Phase 4.b | queued |
-| 6 | §5.3 | `phi_redaction_enabled` consumed by nothing — wire or remove | **A** | v1.7.0 Phase 4.b + v2.0.0rc1 | queued |
-| 7 | §5.3 | TACTICAL mode advisory-only; document | **A** | v1.7.0 Phase 4.b | queued |
+| 5 | §5.3 | HIPAA mode marketing-vs-code gap; claims audit | **A** | v1.7.0 Phase 4.b | ✅ shipped (PR #69, e4ae911, 2026-05-02) |
+| 6 | §5.3 | `phi_redaction_enabled` consumed by nothing — wire or remove | **A** | v1.7.0 Phase 4.b audit + v2.0.0rc1 removal | partial — PR #69 audit confirmed no consumer; removal scheduled v2.0.0rc1 |
+| 7 | §5.3 | TACTICAL mode advisory-only; document | **A** | v1.7.0 Phase 4.b | ✅ shipped (PR #69, e4ae911, 2026-05-02) |
 | 8 | §5.4 | Independent pentest (narrow scope) | **B** | 2026-07 reconsider | deferred |
 | 9 | §5.4 | SOC 2 Type II | **B** | gated on #8 + first paying design partner | deferred |
-| 10 | §5.4 | GitHub Private Vulnerability Reporting | **A** | v1.7.0 | queued |
+| 10 | §5.4 | GitHub Private Vulnerability Reporting | **A** | v1.7.0 | queued (one-click GitHub UI action; not yet enabled) |
 | 11 | §7.1 | PyPI download trajectory dashboard | **A** | v1.6.2 | ✅ shipped (docs/metrics.md live badges) |
 | 12 | §7.2 | Dependent-repo count visibility | **A** | v1.6.2 | ✅ shipped (docs/metrics.md link) |
 | 13 | §7.3 | GitHub Discussions / community signal | **A** | v1.6.2 | ✅ shipped (Discussion #54 opened) |
 | 14 | §7.4 | Funnel conversion instrumentation (AEGIS / Agora IV side) | **B** | v1.8.0+ | deferred (external dep) |
-| 15 | §7.5 | Step-up articulation: "AIPEA detects / AEGIS enforces / Agora IV orchestrates" | **A** | v1.7.0 Phase 4.a | queued |
+| 15 | §7.5 | Step-up articulation: "AIPEA detects / AEGIS enforces / Agora IV orchestrates" | **A** | v1.7.0 Phase 4.a | ✅ shipped (`docs/positioning.md`, 2026-05-02 doc-sync PR) |
 | 16 | §7.10 | Bus factor = 1: second committer | **A** partial + **B** full | v1.7.0 CODEOWNERS docs + Phase 3 SOW | SOW v0 drafted 2026-04-24; contract-gated |
 | 17 | §7.11 | Agora IV / AEGIS diligence | **B** | out of AIPEA scope | out-of-band |
 | 18 | §10 Phase 0 | Opt-out install pings telemetry | **C.2** | declined | Revisit trigger below |
-| 19 | §10 Phase 1 | Adversarial benchmark suite (corpus + nightly CI) | **A** | v1.7.0 Phase 4.c | queued |
+| 19 | §10 Phase 1 | Adversarial benchmark suite (corpus + nightly CI) | **A** | v1.7.0 Phase 4.c | ✅ shipped (PR #59 ADR-008 foundation + PR #70 expansion + nightly CI, 2026-05-02) |
 | 20 | §10 Phase 1 | Clinical reviewer for PHI taxonomy | **B** | deferred | v1.8.0 opt-in-flagged until funded |
 | 21 | §10 Phase 1 | 3 named design partners (healthcare / fintech / defense) | **B** | BD capacity decision | deferred |
 | 22 | §10 Phase 2 | Federated learning endpoint | **D** | v3.0+ | deferred |
@@ -361,49 +361,79 @@ land in CHANGELOG; minor metric drift is expected.
 
 - One-line summary: **AIPEA detects; AEGIS enforces + governs;
   Agora IV orchestrates multi-model coordination.**
-- Formalized in `docs/positioning.md` shipping v1.7.0 Phase 4.a
-  alongside this ADR.
+- ✅ Formalized in [`docs/positioning.md`](../positioning.md)
+  (shipped 2026-05-02 in the doc-sync PR alongside this §12 update).
+  The full positioning page documents what each layer does and does
+  not do, the open-core boundary between AIPEA (free, MIT) and the
+  paid products built on top, and the integration surfaces.
 
 ### Q6: HIPAA mode marketing vs. code?
 
-- Current behavior (`src/aipea/security.py:734-744`): HIPAA mode
-  turns on 3 PHI regex categories, sets a BAA-covered model
-  allowlist via substring match, and sets
-  `phi_redaction_enabled = True` which **no code currently
-  consumes** (finding #6; audit-and-fix in v1.7.0 Phase 4.b).
+- Current behavior (`src/aipea/security.py:727-819` —
+  ComplianceHandler): HIPAA mode turns on 3 PHI regex categories,
+  sets a BAA-covered model allowlist via substring match, and sets
+  `phi_redaction_enabled = True` which no code currently consumes
+  (finding #6).
 - **Detection + allowlist** is the honest claim. No redaction, no
   BAA execution, no SOC 2. `SECURITY.md` already discloses this.
-- v1.7.0 Phase 4.b claims audit rewrites any marketing surface that
-  currently overclaims. `phi_redaction_enabled` either wired to
-  real behavior or removed at v2.0.0rc1.
+- ✅ **Phase 4.b claims audit completed (PR #69, 2026-05-02)**:
+  SPECIFICATION.md §1.3 + §3.1.3 and CLAUDE.md §7.2 calibrated to
+  match `security.py:727-819` enforcement contract. Old "Yes / Yes /
+  Yes" Encryption / PHI Redaction / Force Offline columns reframed as
+  advisory boolean fields the integrator's application layer reads;
+  new "Integrator's responsibility" right-most column makes the
+  configuration-vs-enforcement boundary explicit.
+- `phi_redaction_enabled` removal scheduled for v2.0.0rc1
+  (audit confirmed no consumer; deferred per the v2.0.0
+  breaking-changes window).
 
 ### Q7: Other unbacked compliance claims besides FedRAMP?
 
-- **Commitment**: v1.7.0 Phase 4.b walks every compliance claim in
-  README.md / SECURITY.md / SPECIFICATION.md / CLAUDE.md /
-  `docs/integration/aegis-adapter.md` / `docs/integration/agora-adapter.md`
-  against `security.py`. Each claim gets either (a) a
-  `security.py:LLL-MMM` source-link anchor, (b) a rewrite narrower
-  than claimed, or (c) a `DeprecationWarning` scheduled on the ADR-002
-  precedent.
-- **Known candidate**: HIPAA mode as discussed in Q6.
+- ✅ **Phase 4.b audit completed (PR #69, 2026-05-02)**: walked every
+  compliance claim in README.md, SECURITY.md, SPECIFICATION.md,
+  CLAUDE.md, `docs/integration/aegis-adapter.md`,
+  `docs/integration/agora-adapter.md` against `security.py:727-819`.
+  Findings:
+  - **README.md / SECURITY.md**: already calibrated to code
+    reality; no edits needed.
+  - **SPECIFICATION.md §1.3 + §3.1.3**: rewritten to make
+    input-inspection-not-enforcement explicit; added
+    `src/aipea/security.py:727-819` source-code anchor.
+  - **CLAUDE.md §7.2**: 3-column "Restrictions" table replaced with
+    4-column layout separating AIPEA-enforced from advisory-metadata
+    from integrator-responsibility.
+  - **adapter docs**: passing examples only; no compliance claims.
+- **No new retractions surfaced** beyond the FedRAMP retraction
+  already covered by ADR-002.
 - **Precedent**: ADR-002 (FedRAMP retraction, 2026-04-11) —
-  established the retract-and-deprecate pattern. Any new retraction
-  follows the same path.
+  established the retract-and-deprecate pattern. Any future
+  retraction would follow the same path.
 
 ### Q8: External audit timeline?
 
 - **Pentest** ($25-40K, narrow scope: `security.py` +
   search-result-scanning path): **deferred** (user decision #3).
-  Reconsider post-v1.7.0 Phase 4.b claims audit (~2026-07). Budget
-  authorization required.
+  Reconsider window now open (post-v1.7.0 Phase 4.b claims audit
+  completed 2026-05-02). Budget authorization required.
 - **SOC 2 Type II**: 9-month clock; gated on pentest-clean + first
   paying design partner. Earliest realistic completion 2027-Q1.
 - **Bug-bounty / Private Vulnerability Reporting**: **accepted**
-  (finding #10). GitHub PVR enabled in v1.7.0 Phase 4.b; no cost.
-- **Adversarial corpus benchmark**: **accepted** (findings #1 + #19).
-  Ships v1.7.0 Phase 4.c (nightly CI, non-gating initially).
-  Hit-rate published to `docs/metrics.md` **including losses**.
+  (finding #10). GitHub PVR enable is a one-click UI action;
+  scheduled for the next maintainer touch-point alongside the
+  pinned-Discussion-#54 follow-up. No cost.
+- **Adversarial corpus benchmark**: ✅ **shipped** (findings #1 + #19).
+  - **Foundation** (PR #59, 2026-04-27, ADR-008): OWASP LLM Top 10
+    corpus + two-tier failure model + bright-line gating in `ci.yml`.
+  - **Wave-21 paraphrase verbs** (PR #61, 2026-04-27): added 8 verbs
+    × 7 nouns to `INJECTION_PATTERNS` based on extended-tier corpus
+    findings; bright-line floor expanded by 5 must-pass payloads.
+  - **Phase 4.c expansion** (PR #70, 2026-05-02): 3 new corpora
+    (PromptInject MIT, JBB-Behaviors MIT, Garak Apache-2.0) +
+    per-source baseline schema +
+    [`.github/workflows/adversarial.yml`](../../.github/workflows/adversarial.yml)
+    nightly non-gating + per-corpus hit-rate publication in
+    [`docs/metrics.md`](../metrics.md) **including losses**. Provenance
+    in [`tests/fixtures/adversarial/SOURCES.md`](../../tests/fixtures/adversarial/SOURCES.md).
 
 ### Q9: Durable advantage vs. LangChain / LlamaIndex / Guardrails-AI / NeMo-Guardrails / AWS Bedrock Guardrails?
 
