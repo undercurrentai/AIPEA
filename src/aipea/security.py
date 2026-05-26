@@ -105,8 +105,24 @@ _CONFUSABLE_TRANS = str.maketrans(_CONFUSABLE_MAP)
 # and inter-word attacks).  Security scanning runs on BOTH the stripped
 # form AND a space-substituted form so \s-dependent injection patterns
 # also fire when invisible chars replace real spaces.  (#108, #108b)
+#
+# Cycle-2 expansion (F3, 2026-05-26): the prior class missed three
+# NFKC-stable invisibles documented in modern prompt-injection research
+# as inter-word evasion vectors against multi-word pattern detection:
+#   - U+034F  COMBINING GRAPHEME JOINER (CGJ) \u2014 Mn but used as invisible
+#             glue; preserved by NFKC
+#   - U+061C  ARABIC LETTER MARK (ALM)        \u2014 Cf (bidi); NFKC-stable
+#   - U+180E  MONGOLIAN VOWEL SEPARATOR (MVS) \u2014 Cf; NFKC-stable
+# Plus the TAG block U+E0020-U+E007F (Cf, plane 14) \u2014 used in the 2024
+# "ASCII smuggling" / Unicode-tag steganographic prompt-injection class.
+# These characters are NEVER expected in a legitimate LLM-bound query;
+# stripping them on the primary form (and replacing them with spaces on
+# the secondary form) is the conservative right call.
 _UNICODE_NEWLINE_RE = re.compile("[\u2028\u2029]")
-_ALL_INVISIBLE_RE = re.compile("[\u00ad\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff9-\ufffb]")
+_ALL_INVISIBLE_RE = re.compile(
+    "[\u034f\u061c\u00ad\u180e\u200b-\u200f\u2028-\u202f"
+    "\u2060-\u206f\ufeff\ufff9-\ufffb\U000e0020-\U000e007f]"
+)
 
 
 # =============================================================================
@@ -344,9 +360,17 @@ class SecurityScanner:
     # the flag would otherwise make [A-Z] and [a-z] match case-insensitively
     # (a Python regex gotcha), producing a massive HIPAA false-positive
     # surface on any query containing "patient" + two ordinary words. (#95)
+    # Multi-word PHI label literals MUST use `\s+` (not literal " ") so
+    # double-space, tab, and NFKC-equivalent whitespace variants ("medical
+    # \trecord", "medical\xa0record" — NBSP NFKC-normalizes to space —
+    # "medical  record") all match. The pre-fix literal-space form left
+    # these whitespace variants as an evasion class even with the two-form
+    # invisible-char rewrite, because once the invisible was replaced with
+    # `\s` the multi-space gap still didn't match the single literal space.
+    # (Cycle-2 F3.)
     PHI_PATTERNS: ClassVar[dict[str, str]] = {
-        "mrn": r"\b(MRN|medical record)\s*[:=]?\s*\d+\b",
-        "dob": r"\b(DOB|date of birth)\s*[:=]?\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",
+        "mrn": r"\b(MRN|medical\s+record)\s*[:=]?\s*\d+\b",
+        "dob": r"\b(DOB|date\s+of\s+birth)\s*[:=]?\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",
         "patient_name": r"\b(?i:patient)\s*[:=]?\s*[A-Z][a-z]+\s+[A-Z][a-z]+\b",
     }
 
@@ -354,7 +378,12 @@ class SecurityScanner:
     # rely on case-sensitive character classes to avoid false positives. (#95)
     _PHI_CASE_SENSITIVE: ClassVar[frozenset[str]] = frozenset({"patient_name"})
 
-    # Classified content markers - only checked in TACTICAL mode
+    # Classified content markers - only checked in TACTICAL mode.
+    # Kept as a list of display names so the resulting flags
+    # (`classified_marker:<NAME>`) remain stable as a public contract.
+    # The actual match patterns live in `_CLASSIFIED_MARKER_PATTERNS`
+    # below — see that table for why each marker uses the pattern it
+    # uses (cycle-2 F11: bare `\bSCI\b` was a false-positive farm).
     CLASSIFIED_MARKERS: ClassVar[list[str]] = [
         "TOP SECRET",
         "SECRET",
@@ -362,6 +391,33 @@ class SecurityScanner:
         "NOFORN",
         "SCI",
     ]
+
+    # Per-marker regex patterns (matched against `query.upper()` —
+    # all uppercase). Notes:
+    #   - "TOP SECRET": uses `\s+` between TOP and SECRET so the
+    #     multi-space / tab variants don't evade (mirror of the PHI
+    #     pattern repair for cycle-2 F3).
+    #   - Single-word markers ("SECRET", "CONFIDENTIAL", "NOFORN"):
+    #     standard `\b...\b` boundary.
+    #   - "SCI": IC-banner-context-anchored. Bare `\bSCI\b` false-
+    #     positively matched "sci-fi" (hyphen is a word boundary),
+    #     "the SCI department", "scientific" subword, etc. (cycle-2
+    #     F11; GPT 5.4 Pro empirical critique confirmed the naive
+    #     `(?<![\w-])SCI(?![\w-])` alternative ALSO matches "the SCI
+    #     department" because spaces are non-word non-hyphen.) The
+    #     fix anchors SCI to its IC compartment-delimiter context:
+    #     the marker must be preceded by `//` (the IC banner
+    #     compartment delimiter, as in `TS//SCI` / `TOP SECRET//SCI`)
+    #     or followed by `//` / `/<UPPER>` (as in `SCI//NOFORN` /
+    #     `SCI/REL`). This matches established IC tradecraft and
+    #     rejects the common-English false-positive class.
+    _CLASSIFIED_MARKER_PATTERNS: ClassVar[dict[str, str]] = {
+        "TOP SECRET": r"\bTOP\s+SECRET\b",
+        "SECRET": r"\bSECRET\b",
+        "CONFIDENTIAL": r"\bCONFIDENTIAL\b",
+        "NOFORN": r"\bNOFORN\b",
+        "SCI": r"(?<=//)SCI\b|\bSCI(?=//|/[A-Z])",
+    }
 
     # Injection patterns - always checked and always blocked
     INJECTION_PATTERNS: ClassVar[list[str]] = [
@@ -433,6 +489,19 @@ class SecurityScanner:
         # decision history.
         r"</?(system|user|assistant)>",
         r"\[/?(system|user|assistant|human)\]",  # Bracket-style role tags
+        # Conversation separator injection — INTENTIONALLY line-anchored.
+        # Cycle-2 F12 documents this as a deliberate regex-tier design
+        # boundary: a mid-line role token ("...text. Assistant: ...")
+        # is NOT caught here because broadening to mid-line introduces
+        # real false positives on benign English prose ("Ask the
+        # assistant:", "Try System: reboot first", etc.). Per the
+        # ADR-010 / PR #61 design decision logged immediately above,
+        # disambiguating benign role-mentions from adversarial separator
+        # injection at the regex layer hits the same cross-language
+        # FP-budget ceiling SafePrompt / TokenMix-PromptBench identified;
+        # the right tool for the mid-line case is the LLM-as-judge tier
+        # (ADR-010 semantic scanner). Tracked in
+        # `.quality-gate/accepted-findings.jsonl` as `wontfix`.
         r"(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:",  # Conversation separator injection
         r"DROP\s+TABLE",
         r"UNION\s+SELECT",
@@ -588,6 +657,18 @@ class SecurityScanner:
     def _check_classified_markers(self, query: str) -> tuple[list[str], bool]:
         """Check classified markers (TACTICAL mode).
 
+        Uses the per-marker pattern table `_CLASSIFIED_MARKER_PATTERNS`
+        rather than a blanket `\\b<marker>\\b` so that:
+          - "TOP SECRET" matches whitespace variants (single space,
+            double space, tab — cycle-2 F3).
+          - "SCI" requires IC-banner compartment-delimiter context
+            (preceded or followed by `//`) — cycle-2 F11. Bare
+            `\\bSCI\\b` is unsalvageable as a classified-marker
+            detector because the English subword "sci" appears in
+            countless benign contexts ("sci-fi", "scientific", "the
+            SCI department"). IC tradecraft pairs SCI with the
+            compartment delimiter `//`.
+
         Args:
             query: The query text to scan
 
@@ -597,11 +678,18 @@ class SecurityScanner:
         flags: list[str] = []
         force_offline = False
         query_upper = query.upper()
-        for marker in self.CLASSIFIED_MARKERS:
-            if re.search(rf"\b{re.escape(marker)}\b", query_upper):
-                flags.append(f"classified_marker:{marker}")
+        for name in self.CLASSIFIED_MARKERS:
+            pattern = self._CLASSIFIED_MARKER_PATTERNS.get(name)
+            if pattern is None:
+                # Defensive: any marker added to the list but missing
+                # from the pattern table falls back to the standard
+                # \b<marker>\b boundary so detection is never silently
+                # dropped on a future marker-list addition.
+                pattern = rf"\b{re.escape(name)}\b"
+            if re.search(pattern, query_upper):
+                flags.append(f"classified_marker:{name}")
                 force_offline = True
-                logger.warning("Classified marker detected, forcing offline: %s", marker)
+                logger.warning("Classified marker detected, forcing offline: %s", name)
         return flags, force_offline
 
     def _check_injection(self, query: str) -> tuple[list[str], bool]:
@@ -683,17 +771,44 @@ class SecurityScanner:
         is_blocked = False
         force_offline = False
 
-        # Always check PII patterns (stripped form — reconstitutes words)
-        flags.extend(self._check_pii(normalized_query))
+        # Always check PII patterns — scan BOTH forms (mirror of the
+        # existing injection two-form coverage). The stripped form
+        # reconstitutes intra-word splits ("ssn: 123-4​5-6789" →
+        # "ssn: 123-45-6789"); the spaced form catches the inter-word
+        # split that the strip would join into nonsense. Dedup flags
+        # via insertion-order dict so the audit log doesn't show
+        # duplicate `pii_detected:<name>` lines when both forms match.
+        # Cycle-2 F3.
+        pii_flags = list(
+            dict.fromkeys(self._check_pii(normalized_query) + self._check_pii(spaced_query))
+        )
+        flags.extend(pii_flags)
 
-        # Check PHI patterns only in HIPAA mode
+        # Check PHI patterns only in HIPAA mode — also two-form,
+        # because the multi-word labels (`medical record`,
+        # `date of birth`) are exactly the bypass surface the
+        # stripped form ("medicalrecord" / "dateofbirth") cannot
+        # match. Same dedup. Cycle-2 F3.
         if context.compliance_mode == ComplianceMode.HIPAA:
-            flags.extend(self._check_phi(normalized_query))
+            phi_flags = list(
+                dict.fromkeys(self._check_phi(normalized_query) + self._check_phi(spaced_query))
+            )
+            flags.extend(phi_flags)
 
-        # Check classified markers only in TACTICAL mode
+        # Check classified markers only in TACTICAL mode — also two-
+        # form. The "TOP SECRET" multi-word marker has the same
+        # bypass surface; the stripped form yields "TOPSECRET"
+        # (no match against `\bTOP\s+SECRET\b`), but the spaced
+        # form yields "TOP SECRET" which matches. `force_offline`
+        # is the OR of the two scans — once any classified marker
+        # is observed in any normalization of the input, route
+        # offline. Cycle-2 F3.
         if context.compliance_mode == ComplianceMode.TACTICAL:
-            classified_flags, force_offline = self._check_classified_markers(normalized_query)
+            norm_classified, norm_fo = self._check_classified_markers(normalized_query)
+            spaced_classified, spaced_fo = self._check_classified_markers(spaced_query)
+            classified_flags = list(dict.fromkeys(norm_classified + spaced_classified))
             flags.extend(classified_flags)
+            force_offline = norm_fo or spaced_fo
 
         # Check injection against BOTH forms — stripped catches intra-word
         # bypass (i\u200bgnore → ignore), spaced catches inter-word bypass
