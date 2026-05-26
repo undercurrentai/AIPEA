@@ -367,6 +367,49 @@ Verification: `make ci` (CI parity) clean — full suite **1635 passed /
 mypy clean. The SCI accept/reject matrix is now 27 cases (18 accept
 banner forms + 9 reject URI/path/prose forms), all verified.
 
+### Fixed (cycle-7 `/quality-gate` follow-up to PR #73 round 5, 2026-05-26)
+
+The gpt-5.4-pro gate's round-5 REQUEST_CHANGES caught two real bugs in
+the cycle-6 SCI work — one an asymmetry the cycle-6 fix itself
+introduced. Both fixed; GPT's round-5 non-blocking "extract the guards
+into named constants" suggestion also implemented.
+
+**Security (`security.py`)**:
+
+  - **First-branch path-continuation guard** (GPT round-5 B1): the
+    cycle-6 `(?!/(?!/))` terminal guard was applied only to the SECOND
+    SCI branch (`SCI//suffix` / `SCI/REL`), NOT the first
+    (`<level>//SCI`). So `/TS//SCI/readme`, `TS//SCI/index.html` wrongly
+    matched and forced offline. The first branch now carries
+    `_SCI_TAIL_GUARD = (?!/(?!/|REL\b))` — rejects a path continuation
+    (`/readme`) while ALLOWING valid banner tails (`//<compartment>`
+    chained, `/REL`) and terminals. `TS//SCI//NOFORN` and `TS//SCI/REL`
+    still match.
+  - **Field-delimiter openers** `: = , ; |` (GPT round-5 B2):
+    `_BANNER_OPENER` lacked field delimiters, so unquoted key/value
+    banner forms `classification:TS//SCI`, `label:S//SCI`,
+    `classification=SCI/REL` did not match — a TACTICAL false negative
+    (the bare `\bSCI\b` the cycle-2 fix replaced would have caught
+    them). The opener class now includes `: = , ; |`. Verified the
+    widening does NOT re-open the URL FP: `https://example.com:8080/
+    TS//SCI` still rejects (the `/TS` is preceded by a word char; the
+    `:` after `https`/port lands `/?` on the second `/` of `://`, not
+    a level token).
+  - **Named guard constants** (GPT round-5 non-blocking): extracted
+    `_SCI_TAIL_GUARD` and `_SCI_CONT_GUARD` as named `ClassVar`s so the
+    SCI regex's two distinct path-vs-banner discriminators stay
+    auditable rather than inlined twice.
+
+Regression tests (`tests/test_security_two_form_scan.py`): two new
+classes (19 methods) — `TestCycle7SciFirstBranchPathGuard` (4
+path-reject + 5 valid-tail-accept) and
+`TestCycle7SciFieldDelimiterOpeners` (6 field-delimiter accept + 4
+URL/path-still-reject incl. the `:8080` port case).
+
+Verification: `make ci` (CI parity) clean — full suite **1654 passed /
+35 skipped / 5 xfailed in 38.52 s** at coverage **91.73%**; ruff +
+mypy clean. The SCI matrix is now 30+ cases, all verified.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator

@@ -471,19 +471,44 @@ class SecurityScanner:
     _SCI_COMPARTMENT_SUFFIXES: ClassVar[str] = (
         r"(?:NOFORN|REL|FGI|IMCON|ORCON|PROPIN|RELIDO|RSEN|HUMINT|COMINT|SI|TK|HCS)"
     )
-    # Banner opener (cycle-6, GPT 5.4 Pro PR #73 round 4): start-of-input
-    # OR a clean opening delimiter (whitespace / open-bracket / quote /
-    # angle / paren), followed by an OPTIONAL single leading slash. The
-    # optional `/?` admits leading-slash banners `/TS//SCI`, ` /SCI/REL`
-    # (a list-marker or stray-slash banner at a clean boundary — a real
-    # classified marking that MUST flag, since a missed classified
-    # banner in TACTICAL mode is the dangerous false-NEGATIVE direction)
-    # while the clean-boundary requirement STILL rejects mid-URI/path
-    # forms (`https://example.com/TS//SCI`, `path/to/TS//SCI`,
-    # `/sci/readme`) where the slash is preceded by a word char or
-    # another path segment. The lookbehind is fixed-width (1 char), so
-    # it is a legal Python `re` lookbehind.
-    _BANNER_OPENER: ClassVar[str] = r"(?:^|(?<=[\s(\[{<\"']))/?"
+    # Banner opener (cycle-6, GPT 5.4 Pro PR #73 round 4; widened cycle-7
+    # round 5): start-of-input OR a clean opening delimiter, followed by
+    # an OPTIONAL single leading slash. The optional `/?` admits
+    # leading-slash banners `/TS//SCI`, ` /SCI/REL` (a list-marker or
+    # stray-slash banner at a clean boundary — a real classified marking
+    # that MUST flag, since a missed classified banner in TACTICAL mode
+    # is the dangerous false-NEGATIVE direction). The clean-boundary
+    # requirement STILL rejects mid-URI/path forms
+    # (`https://example.com/TS//SCI`, `path/to/TS//SCI`, `/sci/readme`)
+    # where the slash is preceded by a word char or another path segment.
+    #
+    # Opener char class (cycle-7 round 5): whitespace, brackets/braces,
+    # angle-open, quotes, AND field delimiters `: = , ; |`. The field
+    # delimiters close a TACTICAL false-negative on unquoted key/value
+    # banner forms `classification:TS//SCI`, `label:S//SCI`,
+    # `classification=SCI/REL`. CRITICALLY the class excludes `/` and
+    # word chars, so adding `:`/`=` does NOT re-open the URL FP
+    # (`https://...:8080/TS//SCI` still rejects — the `/TS` is preceded
+    # by a word char, and `https:` + `/?` lands on the second `/` of
+    # `://`, not a level token). The lookbehind is fixed-width (1 char),
+    # a legal Python `re` lookbehind.
+    _BANNER_OPENER: ClassVar[str] = r"(?:^|(?<=[\s(\[{<\"':=,;|]))/?"
+
+    # SCI tail guard for the `<level>//SCI` branch (cycle-7 round 5):
+    # after `SCI`, allow a valid banner tail (`//<compartment>`, `/REL`)
+    # or a terminal (whitespace / end / non-slash punctuation), but
+    # REJECT a path-style single-slash continuation (`/readme`,
+    # `/index.html`). `(?!/(?!/|REL\b))` = "not followed by [ a slash
+    # that is NOT followed by (another slash | REL) ]": a `//` (chained
+    # compartment) or `/REL` is allowed; a lone `/<path>` is rejected.
+    # This closes the cycle-6 asymmetry GPT flagged in round 5 — the
+    # terminal guard was on the second SCI branch but not the first, so
+    # `/TS//SCI/readme` wrongly matched.
+    _SCI_TAIL_GUARD: ClassVar[str] = r"(?!/(?!/|REL\b))"
+    # Compartment-continuation guard for the second SCI branch: after a
+    # consumed compartment suffix, allow `//` (further chaining) and
+    # terminal but reject a single-slash path (`SCI//NOFORN/path`).
+    _SCI_CONT_GUARD: ClassVar[str] = r"(?!/(?!/))"
 
     _CLASSIFIED_MARKER_PATTERNS: ClassVar[dict[str, str]] = {
         "TOP SECRET": r"\bTOP\s+SECRET\b",
@@ -543,11 +568,16 @@ class SecurityScanner:
             _BANNER_OPENER
             + _CLASSIFIED_LEVEL_PREFIXES
             + r"\s*/\s*/\s*SCI\b"
+            + _SCI_TAIL_GUARD
             + r"|"
             + _BANNER_OPENER
             + r"SCI(?:\s*/\s*/\s*"
             + _SCI_COMPARTMENT_SUFFIXES
-            + r"\b(?!/(?!/))|\s*/\s*REL\b(?!/(?!/)))"
+            + r"\b"
+            + _SCI_CONT_GUARD
+            + r"|\s*/\s*REL\b"
+            + _SCI_CONT_GUARD
+            + r")"
         ),
     }
 

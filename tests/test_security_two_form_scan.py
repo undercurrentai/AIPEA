@@ -986,3 +986,121 @@ class TestCycle6SciLeadingSlashBanners:
         # this test asserts only that the SCI-specific flag does not.)
         result = scanner.scan("file at SCI//NOFORN/path/x", context=tactical_ctx)
         assert "classified_marker:SCI" not in result.flags, result.flags
+
+
+# =============================================================================
+# CYCLE-7 follow-up — GPT 5.4 Pro PR #73 round-5 REQUEST_CHANGES
+# =============================================================================
+
+
+class TestCycle7SciFirstBranchPathGuard:
+    """CYCLE-7 B1 (GPT round 5): the cycle-6 `(?!/(?!/))` terminal guard
+    was applied only to the SECOND SCI branch (SCI//suffix / SCI/REL),
+    NOT the FIRST (`<level>//SCI`). So `/TS//SCI/readme` wrongly matched
+    and forced offline. The first branch now carries `_SCI_TAIL_GUARD`
+    `(?!/(?!/|REL\\b))`, which rejects a path continuation while still
+    allowing valid banner tails (`//compartment`, `/REL`).
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "/TS//SCI/readme",
+            "/TOP SECRET//SCI/docs",
+            "TS//SCI/index.html",
+            "S//SCI/path/to/file",
+        ],
+        ids=["ts_readme", "top_secret_docs", "ts_index", "s_path"],
+    )
+    def test_first_branch_path_continuation_rejects(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, (
+            f"first-branch path continuation wrongly flagged: {payload!r}; flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "TS//SCI//NOFORN",  # chained compartment after first-branch SCI
+            "TS//SCI/REL",  # /REL banner tail
+            "TS//SCI",  # terminal
+            "TS//SCI material follows",  # whitespace terminal
+            "[TOP SECRET//SCI//NOFORN]",
+        ],
+        ids=["chained", "rel_tail", "terminal", "ws_terminal", "bracket_full"],
+    )
+    def test_first_branch_valid_tails_still_accept(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"valid banner tail wrongly rejected: {payload!r}; flags={result.flags}"
+        )
+        assert result.force_offline is True
+
+
+class TestCycle7SciFieldDelimiterOpeners:
+    """CYCLE-7 B2 (GPT round 5): `_BANNER_OPENER` lacked `:`/`=` (and
+    other field delimiters), so unquoted key/value banner forms
+    `classification:TS//SCI`, `label:S//SCI`, `classification=SCI/REL`
+    did not match — a TACTICAL false negative (the bare `\\bSCI\\b` the
+    cycle-2 fix replaced would have caught them). The opener class now
+    includes `: = , ; |`.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "classification:TS//SCI",
+            "label:S//SCI",
+            "classification=SCI/REL",
+            "marking|TS//SCI",
+            "field;TS//SCI",
+            "tags,TS//SCI",
+        ],
+        ids=["colon", "colon_s", "equals", "pipe", "semicolon", "comma"],
+    )
+    def test_field_delimiter_banner_accepts(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"field-delimiter banner not flagged: {payload!r}; flags={result.flags}"
+        )
+        assert result.force_offline is True
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "https://example.com/TS//SCI",
+            "https://example.com:8080/TS//SCI",  # port colon must NOT enable the URL FP
+            "https://sci-fi.example",
+            "/sci/readme",
+        ],
+        ids=["url", "url_port", "url_sci_fi", "path"],
+    )
+    def test_field_delimiter_widening_does_not_reopen_url_fp(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, (
+            f"`:`/`=` opener widening re-opened a URL/path FP: {payload!r}; flags={result.flags}"
+        )
