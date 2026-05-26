@@ -164,8 +164,18 @@ class RedTeamReporter:
             "",
             f"- Total valid payloads: {total}",
             f"- Detected by SecurityScanner: {detected} ({catch_rate:.1f}%)",
-            f"- Undetected payloads: {len(undetected)} "
-            f"(top-{len(novel)} by novelty score shown below)",
+            # Cycle-3 A2: only show the "(top-N shown below)" parenthetical
+            # when undetected count exceeds the displayed top-N — otherwise
+            # the parenthetical is redundant (e.g. when undetected = 5 and
+            # the full 5 are listed below, or when undetected = 0 and the
+            # `_None — every undetected payload had a near-corpus match._`
+            # placeholder appears).
+            f"- Undetected payloads: {len(undetected)}"
+            + (
+                f" (top-{len(novel)} by novelty score shown below)"
+                if len(undetected) > len(novel)
+                else ""
+            ),
             f"- Provider-error rows (skipped): {len(errored)}",
             f"- Total estimated cost: ${cost_total:.4f}",
             "",

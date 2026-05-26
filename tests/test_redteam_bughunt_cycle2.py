@@ -294,3 +294,81 @@ class TestReporterTrueUndetectedCount:
         _, md_path = rep.write(results, provider="x", run_date="2026-05-25")
         text = md_path.read_text()
         assert "Undetected payloads: 0" in text
+
+
+# =============================================================================
+# CYCLE-3 A2 follow-up — conditional top-N parenthetical (cosmetic, LOW)
+# =============================================================================
+
+
+class TestCycle3ReporterConditionalParenthetical:
+    """CYCLE-3 A2 (LOW C2): the cycle-2 F7 fix unconditionally appended
+    `(top-N by novelty score shown below)` to the undetected-count
+    summary line. When `len(undetected) <= len(novel)` the parenthetical
+    is redundant — the full undetected set IS the shown list. The
+    cosmetic fix conditions the suffix on `len(undetected) > len(novel)`.
+    """
+
+    def test_no_parenthetical_when_undetected_below_top_n(self, tmp_path: Path) -> None:
+        # 3 undetected, top-10 slice → all 3 shown → no parenthetical
+        rep = RedTeamReporter(json_dir=tmp_path / "j", md_dir=tmp_path / "m")
+        results = [
+            RedTeamResult(
+                payload=f"payload_{i}",
+                technique=Technique.PARAPHRASE,
+                intent="t",
+                detected=False,
+                flags=(),
+                generated_by="x/y",
+                generated_at=RedTeamResult.now_iso(),
+                novelty_score=0.5 + i * 0.01,
+            )
+            for i in range(3)
+        ]
+        _, md_path = rep.write(results, provider="x", run_date="2026-05-26")
+        text = md_path.read_text()
+        assert "Undetected payloads: 3" in text
+        # The redundant parenthetical must NOT appear when undetected ≤ top-N
+        assert "top-3" not in text
+        assert "top-0" not in text
+
+    def test_parenthetical_present_when_undetected_above_top_n(self, tmp_path: Path) -> None:
+        # 15 undetected → top-10 sliced → parenthetical needed
+        rep = RedTeamReporter(json_dir=tmp_path / "j", md_dir=tmp_path / "m")
+        results = [
+            RedTeamResult(
+                payload=f"payload_{i}",
+                technique=Technique.PARAPHRASE,
+                intent="t",
+                detected=False,
+                flags=(),
+                generated_by="x/y",
+                generated_at=RedTeamResult.now_iso(),
+                novelty_score=0.5 + i * 0.01,
+            )
+            for i in range(15)
+        ]
+        _, md_path = rep.write(results, provider="x", run_date="2026-05-26")
+        text = md_path.read_text()
+        assert "Undetected payloads: 15" in text
+        assert "(top-10 by novelty score shown below)" in text
+
+    def test_no_parenthetical_when_all_detected(self, tmp_path: Path) -> None:
+        # 0 undetected → no parenthetical (placeholder line appears below)
+        rep = RedTeamReporter(json_dir=tmp_path / "j", md_dir=tmp_path / "m")
+        results = [
+            RedTeamResult(
+                payload="caught",
+                technique=Technique.PARAPHRASE,
+                intent="t",
+                detected=True,
+                flags=("injection_attempt",),
+                generated_by="x/y",
+                generated_at=RedTeamResult.now_iso(),
+            )
+        ]
+        _, md_path = rep.write(results, provider="x", run_date="2026-05-26")
+        text = md_path.read_text()
+        assert "Undetected payloads: 0" in text
+        assert "top-0" not in text  # no nonsense parenthetical
+        assert "_None — every undetected payload had a near-corpus match._" in text
