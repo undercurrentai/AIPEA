@@ -35,6 +35,9 @@ Thumbs.db
 # Quality-gate skill state (per-run ephemera)
 .quality-gate/
 
+# Claude Code scheduler runtime lock (session id + PID; machine-local, never commit)
+.claude/scheduled_tasks.lock
+
 # Playwright MCP logs
 .playwright-mcp/
 
