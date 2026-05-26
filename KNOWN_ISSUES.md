@@ -372,6 +372,40 @@ These behaviors were flagged by bug-hunt waves but, after verification
 against upstream documentation or architectural intent, are recorded here
 as intentional rather than deferred or fixed.
 
+### #F12. Conversation-separator regex line-anchoring (vs mid-line)
+- **File**: `src/aipea/security.py:505` (the
+  `(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:` entry in
+  `INJECTION_PATTERNS`); design comment immediately preceding it at
+  lines 492–504.
+- **Source**: Cycle-2 Lane-B bug-hunt sweep (Phase-2 of `/quality-gate`,
+  2026-05-26) flagged this as LOW C1; routed through `/claude-gpt-
+  dialogue` for the security design review.
+- **Verification**: SafePrompt regex-only F1 ~0.43 (2026 published
+  cross-language injection corpus); TokenMix PromptBench classifier-
+  only +18% accuracy delta vs regex-only. The empirical research is
+  consistent: closing the mid-line role-mention class at the regex
+  tier requires accepting a false-positive budget on benign English
+  prose ("Ask the assistant: it knows", "Try System: reboot first").
+- **Why line-anchoring is correct (at the regex tier)**: this is a
+  documented **regex-tier ceiling** consistent with ADR-008's
+  bright-line / adversarial-tier partitioning and ADR-010's deferral
+  of cross-language and ambiguous semantic disambiguation to the
+  LLM-as-judge tier. The bracket-style role-tag pattern
+  (`\[/?(system|user|assistant|human)\]`) and the XML role-tag pattern
+  (`</?(system|user|assistant)>`) already cover the unambiguous
+  inline-mid-line forms; what F12 declines to add is the **bare-colon
+  mid-line form** which is structurally indistinguishable from benign
+  natural language.
+- **Pinned by**: `tests/test_security_two_form_scan.py::
+  TestF12ConversationSeparatorLineAnchoredDesign::
+  test_mid_line_role_documented_not_blocked` (asserts the current
+  intentional non-detection so a future regex broadening cannot
+  silently introduce mid-line FPs). Recorded as `wontfix` in
+  `.quality-gate/accepted-findings.jsonl` with full rationale.
+- **Re-evaluate**: when the ADR-010 semantic scanner tier ships
+  (target v2.0.0). At that point this test should flip to assert
+  `is_blocked` and the entry should move to a "Fixed" log.
+
 ### #79. Exa API score clamping (vs normalization)
 - **File**: `src/aipea/search.py:583-597` + `SearchResult.__post_init__`
   clamp at `search.py:212-214`

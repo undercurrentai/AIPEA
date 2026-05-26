@@ -7,6 +7,142 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (cycle-2 `/quality-gate` bug-hunt sweep, 2026-05-26)
+
+Six commits on `fix/quality-gate-bug-sweep` closing 12 findings from
+the Phase-2 Lane-B sweep (parallel Claude debugger agents) plus a
+follow-up GPT 5.4 Pro adversarial critique that widened the security-
+finding scope. Lane A (Codex) was unavailable for this run (`codex
+exec` hung on stdin-read after 9 h zero-CPU; skill-sanctioned fallback
+to Lane-B per `bug-hunt §Error Handling`). All fixes ship with
+regression tests (47 new test cases across 4 test files); zero
+existing tests regressed.
+
+**Security (`security.py`) — HIGH × 1 + LOW × 2** (commit `6272ffb`):
+
+- **F3 (HIGH C3)** — Multi-word PHI and classified-marker patterns
+  were bypassable via zero-width inter-word splits, double-space,
+  tab, and three NFKC-stable invisibles plus the Unicode TAG block.
+  Four-component fix: `_ALL_INVISIBLE_RE` now covers CGJ (U+034F),
+  ALM (U+061C), MVS (U+180E), and the TAG block (U+E0020–U+E007F);
+  literal-space tokens in `PHI_PATTERNS` and the new
+  `_CLASSIFIED_MARKER_PATTERNS` use `\s+` (no more double-space /
+  tab evasion); PII/PHI/classified now scan BOTH normalization
+  forms (stripped + spaced) with `dict.fromkeys` flag dedup;
+  `force_offline` is the OR of the two TACTICAL scans.
+- **F11 (LOW C3)** — Bare `\bSCI\b` false-matched `sci-fi`, `the
+  SCI department`, `scientific`. Naive `(?<![\w-])SCI(?![\w-])`
+  alternative ALSO failed (spaces are neither word nor hyphen).
+  SCI now requires IC-banner compartment-delimiter context:
+  `(?<=//)SCI\b|\bSCI(?=//|/[A-Z])`. Matches `TS//SCI`,
+  `TOP SECRET//SCI//NOFORN`, `SCI//REL TO USA`; rejects the
+  common-English subword false-positive class.
+- **F12 (LOW C1, wontfix)** — Mid-line conversation-separator
+  regex is intentionally line-anchored at the regex tier per
+  ADR-010 semantic-scanner deferral. Documented in code
+  comments and `.quality-gate/accepted-findings.jsonl`; pinned
+  by `test_mid_line_role_documented_not_blocked` so a future
+  regex broadening cannot silently introduce mid-line false
+  positives.
+
+**Learning (`learning.py`) — MEDIUM × 1** (commit `a6357e8`):
+
+- **F4 (MEDIUM C3)** — `prune_events(max_age_days=N)` had a
+  calendar-day data-loss bug: cutoff used Python `isoformat()`
+  (T-separated, microseconds, "+00:00") while `created_at`
+  used SQLite's `datetime('now')` format (space-separated,
+  second precision). Position 10 of the comparison had `' '`
+  (0x20) on the stored side vs `'T'` (0x54) on the cutoff
+  side, making ANY row created on the cutoff's calendar date
+  at any time of day compare less-than the cutoff and get
+  wrongly deleted. Fixed by formatting the cutoff with
+  `strftime("%Y-%m-%d %H:%M:%S")`.
+
+**Analyzer (`analyzer.py`) — LOW × 3** (commit `59b302b`):
+
+- **F8/F9/F10 (LOW C3 × 3)** — Three term-matching sites
+  (`calculate_confidence`, `_calculate_ambiguity`,
+  `_determine_search_strategy`) used substring `str.in` /
+  `str.find` matching, producing false hits: `"mighty"`
+  matched `"might"` (compound confidence + ambiguity
+  penalties on clean queries), `"asbestos"` / `"bestselling"`
+  matched `"best"`, `"construe"` matched `"true"` (misrouted
+  search strategy). Fixed via four module-level compiled
+  regexes anchored at `\b` boundaries (`_AMBIGUITY_RE`,
+  `_AMBIGUITY_CONFIDENCE_RE`, `_COMPARATIVE_RE`,
+  `_VERIFICATION_RE`).
+
+**Red-team (`redteam/`) — HIGH × 2 + LOW × 3 + cycle-1 recovery**
+(commits `3bb503a` + `d5eae2b`):
+
+- **Cycle-1 recovery (`3bb503a`)** — 11 production fixes plus a
+  test-infrastructure HIGH bug from an earlier Phase-2 attempt
+  that never reached `main`. Production fixes: per-poll TLS-
+  handshake reuse on `OpenAIResponsesProvider` (single sync
+  client across all poll iterations); 4xx retrieve-error
+  fail-fast classification (no more 25-min spin on 401/404);
+  `asyncio.to_thread` off-load for the sync polling loop (so
+  it doesn't block the event loop for 25 min); generator round-
+  label off-by-one fix and loop-variable shadowing repair;
+  evaluator smoothed-IDF (n_docs==1 degenerate-case fix
+  mirroring sklearn's `smooth_idf` default) and empty-payload
+  `empty_response` tagging; `_polling` None-status log-spam
+  coercion; reporter atomic-write (tmp-file + `os.replace`)
+  and Markdown-injection sanitization (backtick neutralization
+  via U+200B wraps + control-char strip); Anthropic SSE
+  `error` event handling. The test-infrastructure fix repaired
+  a 25-minute CI hang in the cycle-1 regression test file —
+  stub `httpx.Response` objects lacked `request=`, which made
+  `r.raise_for_status()` raise `RuntimeError` (caught + retried
+  by `poll_until_terminal` → infinite busy-loop to the 1500s
+  default). Fix attaches `request=httpx.Request(...)` to all
+  stubs and pins an explicit short `poll_timeout_seconds` on
+  the worker-thread test.
+- **F1/F2 (HIGH C3 × 2, commit `d5eae2b`)** —
+  `OpenAIResponsesProvider._one_generation` left the create-
+  response parse unguarded: `create_resp.json()` could raise
+  `json.JSONDecodeError` (a `ValueError` subclass, NOT
+  `httpx.HTTPError`), and `created.get("id")` could raise
+  `AttributeError` on a non-dict body (list / null / number).
+  Both escaped the documented "providers never raise" contract
+  and crashed the whole batch. Fixed via a new
+  `_parse_create_response` static helper. Also drops
+  `_one_generation`'s cyclomatic complexity back under the
+  project's `max-complexity = 15` ceiling. Fix covers
+  `OpenAICodexProvider` too via inheritance.
+- **F5/F6 (LOW C3 + LOW C2, commit `d5eae2b`)** — `_polling.py`:
+  deadline `>` → `>=` (closes the test-seam infinite-loop
+  reachable via a frozen injected `monotonic` +
+  `poll_timeout_seconds=0`); `_extract_status` coerces non-
+  string non-enum status values to `None` instead of
+  stringifying `0` → `"0"` / `True` → `"True"` (which never
+  match `TERMINAL_STATES` but produce misleading operator
+  log lines).
+- **F7 (LOW C3, commit `d5eae2b`)** — `reporter.py` summary
+  reported `len(novel)`, silently capped at 10 by the top-10
+  display slice. Now reports the true undetected count with a
+  `(top-N by novelty score shown below)` qualifier — material
+  for a security audit artifact committed to git.
+
+**Repo hygiene** (commit `401919b`):
+
+- `.gitignore` now ignores `.claude/scheduled_tasks.lock` (a
+  machine-local Claude Code scheduler runtime lock that
+  surfaced as an untracked file; mirrors the existing
+  `.quality-gate/` ephemera ignore).
+
+Verification: `ruff check` + `ruff format --check` clean (57 files);
+`mypy --strict src/aipea/` clean (28 source files); full suite **1515
+passed, 35 skipped, 5 xfailed** in 25.44 s at coverage **91.60%**
+(baseline pre-cycle-2 was 1456 passed / 91.63%). The 5 `xfails` are
+pre-existing architectural-ceiling docs (Wave-21 paraphrase tier known
+FP zone + the HIPAA `patient_name` ignore-case false-positive guards),
+unchanged by cycle-2.
+
+Phase-2 cycle-2 ledger at `.quality-gate/cycle2-findings.md`; GPT 5.4
+Pro security design dialogue transcript at
+`.quality-gate/cycle2-security-dialogue.md`.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator
