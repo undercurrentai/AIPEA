@@ -521,7 +521,20 @@ class SecurityScanner:
     # preceded by `m`), `path/to//SCI//TK` (preceded by `o`). `/*` is a
     # simple star on a single char anchored at a clean boundary — no
     # ReDoS (verified ~1.4 ms on a 20 K-slash adversarial input).
-    _BANNER_OPENER: ClassVar[str] = r"(?:(?:^|(?<=[\s(\[{<\"']))/*|(?<=[:=,;|]))"
+    #
+    # Case B (cycle-10, GPT 5.4 Pro PR #73 round 8): a field delimiter
+    # `[:=,;|]` followed by an OPTIONAL DOUBLE-slash-or-more `(?:/{2,})?`.
+    # This admits structured key/value portion markings
+    # `classification=//SCI//TK`, `label://SCI/REL` (a TACTICAL false
+    # negative before) while a SINGLE slash after the delimiter still
+    # rejects — that is the URI-scheme / drive-letter pattern
+    # `scheme:/SCI/REL`, `C:/TS//SCI`, which `(?:/{2,})?` cannot match
+    # (it requires two-or-more slashes, never exactly one). A full URL
+    # `https://example.com//SCI/REL` still rejects because the `//SCI`
+    # there follows the host (`.com`), not the `:`; only `://SCI…`
+    # (compartment immediately after the scheme colon) matches — the
+    # same shape GPT classes as a banner.
+    _BANNER_OPENER: ClassVar[str] = r"(?:(?:^|(?<=[\s(\[{<\"']))/*|(?<=[:=,;|])(?:/{2,})?)"
 
     # SCI tail guard for the `<level>//SCI` branch (cycle-7 round 5):
     # after `SCI`, allow a valid banner tail (`//<compartment>`, `/REL`)

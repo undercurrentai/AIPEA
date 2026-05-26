@@ -491,6 +491,36 @@ Verification: `make ci` (CI parity) clean — full suite **1736 passed /
 35 skipped / 5 xfailed in 35.86 s** at coverage **91.74%**; ruff +
 mypy clean.
 
+### Fixed (cycle-10 `/quality-gate` follow-up to PR #73 round 8, 2026-05-26)
+
+GPT 5.4 Pro's round-8 REQUEST_CHANGES: a field delimiter `[:=,;|]`
+FOLLOWED BY a double-slash compartment marking — `classification=//SCI//TK`,
+`label://SCI/REL` — was a TACTICAL false negative, because the cycle-8
+`_BANNER_OPENER` case B (field delimiter) was strictly no-slash.
+
+**Security (`security.py`)**:
+
+  - **Field-value double-slash banners** (GPT round 8): case B now
+    admits an optional `(?:/{2,})?` after the field delimiter — a
+    DOUBLE-slash (or more) compartment marking accepts
+    (`classification=//SCI//TK`, `label://SCI/REL`), while a SINGLE
+    slash after the delimiter still rejects — that single-slash form is
+    exactly the URI-scheme / drive-letter pattern (`scheme:/SCI/REL`,
+    `C:/TS//SCI`) the round-6 fix established must reject, and
+    `(?:/{2,})?` requires two-or-more slashes so it can never match a
+    lone `/`. A full URL `https://example.com//SCI/REL` still rejects
+    (the `//SCI` follows the host `.com`, not the scheme colon); only
+    `://SCI…` — a compartment immediately after the delimiter — matches,
+    the same shape GPT classifies as a banner.
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle10SciFieldValueDoubleSlash` (5 field-value-double-slash accept
++ 6 single-slash URI/path reject + 1 ReDoS-latency).
+
+Verification: `make ci` (CI parity) clean — full suite **1748 passed /
+35 skipped / 5 xfailed in 50.66 s** at coverage **91.96%**; ruff +
+mypy clean.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator

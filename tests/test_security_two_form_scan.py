@@ -1437,3 +1437,75 @@ class TestCycle9PiiPhiLogDedup:
             r for r in caplog.records if "PHI detected in HIPAA mode: mrn" in r.getMessage()
         ]
         assert len(mrn_warnings) == 1, f"expected one PHI warning for mrn, got {len(mrn_warnings)}"
+
+
+class TestCycle10SciFieldValueDoubleSlash:
+    """CYCLE-10 (GPT round 8): a field delimiter `[:=,;|]` followed by a
+    DOUBLE-slash compartment marking — `classification=//SCI//TK`,
+    `label://SCI/REL` — was a TACTICAL false negative (cycle-8 case B was
+    strictly no-slash). Case B now allows an optional `(?:/{2,})?` after
+    the delimiter: a double-slash (compartment) accepts; a SINGLE slash
+    (URI scheme / drive path: `scheme:/`, `C:/`) still rejects.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "classification=//SCI//TK",
+            "label://SCI/REL",
+            "marking=//SCI//NOFORN",
+            "x|//SCI/REL",
+            "field;//SCI//ORCON",
+        ],
+        ids=["eq_dbl", "colon_dbl", "eq_noforn", "pipe", "semicolon"],
+    )
+    def test_field_value_double_slash_banner_accepts(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"field-value double-slash banner not flagged: {payload!r}; flags={result.flags}"
+        )
+        assert result.force_offline is True
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "scheme:/SCI/REL",  # single slash after ':' → URI scheme → reject
+            "C:/TS//SCI",  # single slash after ':' → Windows drive → reject
+            "file:/TS//SCI",
+            "https://example.com:8080/TS//SCI",  # port colon + single slash
+            "https://example.com//SCI/REL",  # //SCI after host, not after ':'
+            "https://example.com/TS//SCI",
+        ],
+        ids=["scheme", "winpath", "file", "port", "url_host_dbl", "url_path"],
+    )
+    def test_single_slash_after_delimiter_still_rejects(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, (
+            f"single-slash URI/path FP: {payload!r}; flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    def test_field_value_slash_run_no_redos(
+        self, scanner: SecurityScanner, tactical_ctx: SecurityContext
+    ) -> None:
+        import time
+
+        payload = "x=" + "/" * 20000 + "X"
+        t0 = time.perf_counter()
+        scanner.scan(payload, context=tactical_ctx)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        assert elapsed_ms < 1000, (
+            f"field-delim slash-run scan took {elapsed_ms:.1f} ms — possible ReDoS"
+        )
