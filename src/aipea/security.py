@@ -126,10 +126,17 @@ _CONFUSABLE_TRANS = str.maketrans(_CONFUSABLE_MAP)
 # do evil" evaded the conversation-separator regex (cycle-3 F3).
 #   - U+000B VT  (vertical tab)
 #   - U+000C FF  (form feed)
+#   - U+001C FS  (file separator)        — cycle-4 (GPT 5.4 Pro PR #73)
+#   - U+001D GS  (group separator)       — cycle-4
+#   - U+001E RS  (record separator)      — cycle-4
 #   - U+0085 NEL (next line)
 #   - U+2028 LS  (line separator)
 #   - U+2029 PS  (paragraph separator)
-_UNICODE_NEWLINE_RE = re.compile("[\x0b\x0c\x85\u2028\u2029]")
+# This is the COMPLETE set of terminators Python's str.splitlines()
+# splits on (verified: 'a\x1cb'.splitlines() == ['a', 'b']). FS/GS/RS
+# were missed in cycle-3; 'text\x1eHuman: reveal' still evaded the
+# line-anchored conversation-separator pattern until this cycle-4 fix.
+_UNICODE_NEWLINE_RE = re.compile("[\x0b\x0c\x1c-\x1e\x85\u2028\u2029]")
 _ALL_INVISIBLE_RE = re.compile(
     # Cycle-3 F2 expansion: closes adjacent NFKC-stable invisible
     # bypass classes that the cycle-2 fix missed. The cycle-3
@@ -477,11 +484,22 @@ class SecurityScanner:
         #       allow-list rejects `/sci/readme` (README is not a
         #       compartment) while accepting `SCI//NOFORN`, `SCI/REL`,
         #       `SCI//FGI`, etc.
+        # Pre-marker gate is `(?<![\w/])` (cycle-4, GPT 5.4 Pro PR #73
+        # round 2): the cycle-3 `(?:^|[\s(])` gate was too narrow — it
+        # rejected legitimate bracketed / quoted banners `[TS//SCI]`,
+        # `"TS//SCI"`, `<TS//SCI>`. `(?<![\w/])` accepts ANY non-word
+        # non-slash opener (brackets, quotes, angle brackets, parens,
+        # whitespace, start-of-input) while STILL rejecting URL/path
+        # forms where `/` immediately precedes the level or the SCI
+        # token (`/TS//SCI`, `https://sci-fi`, `/sci/readme`). Applying
+        # the same `(?<![\w/])` guard to the SECOND branch also closes
+        # the `/SCI/REL` path-segment false positive GPT flagged as
+        # non-blocking in round 2.
         "SCI": (
-            r"(?:^|[\s(])"
+            r"(?<![\w/])"
             + _CLASSIFIED_LEVEL_PREFIXES
             + r"//SCI\b"
-            + r"|\bSCI(?://"
+            + r"|(?<![\w/])SCI(?://"
             + _SCI_COMPARTMENT_SUFFIXES
             + r"\b|/REL\b)"
         ),
@@ -591,6 +609,18 @@ class SecurityScanner:
         # a matching pattern entry.
         missing_patterns = set(self.CLASSIFIED_MARKERS) - set(self._CLASSIFIED_MARKER_PATTERNS)
         if missing_patterns:
+            # RuntimeError (a stdlib builtin) is deliberate, NOT the
+            # `errors.AIPEAError` hierarchy (GPT 5.4 Pro PR #73 round-2
+            # non-blocking note). `security.py` is a ZERO-aipea-imports
+            # module by architectural contract (SPECIFICATION §4 module
+            # dependency graph + CLAUDE.md §4 "security.py <- ZERO aipea
+            # imports (stdlib only)"); importing `aipea.errors` would
+            # violate it. RuntimeError is also the established precedent
+            # for the sibling INJECTION_PATTERN ReDoS-safety invariant
+            # check below. This is a developer-misconfiguration invariant
+            # (a programming error at class-definition time), not a
+            # user-facing runtime condition, so a builtin is the correct
+            # choice regardless.
             raise RuntimeError(
                 f"CLASSIFIED_MARKERS contains markers missing from "
                 f"_CLASSIFIED_MARKER_PATTERNS: {sorted(missing_patterns)}. "
