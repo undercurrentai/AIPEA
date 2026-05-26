@@ -138,22 +138,27 @@ _CONFUSABLE_TRANS = str.maketrans(_CONFUSABLE_MAP)
 # line-anchored conversation-separator pattern until this cycle-4 fix.
 _UNICODE_NEWLINE_RE = re.compile("[\x0b\x0c\x1c-\x1e\x85\u2028\u2029]")
 _ALL_INVISIBLE_RE = re.compile(
-    # Cycle-3 F2 expansion: closes adjacent NFKC-stable invisible
-    # bypass classes that the cycle-2 fix missed. The cycle-3
-    # Lane-B re-audit confirmed inter-word splits via VS-16
-    # (U+FE0F emoji selector), Mongol VS-1..3 (U+180B-D), Egyptian
-    # Hieroglyph Format Controls (U+13430-13438), Brahmi Number
-    # Joiner (U+1107F), LANGUAGE TAG (U+E0001), and the Variation
-    # Selectors Supplement (U+E0100-E01EF) all evaded the cycle-2
-    # _ALL_INVISIBLE_RE. This expansion covers every NFKC-stable
-    # invisible documented in the Unicode database as format (Cf),
-    # control (Cc), or non-visible mark (Mn) used as an invisible
-    # joiner. Tested in tests/test_security_two_form_scan.py +
-    # cycle-3 verification.
-    "[\u034f\u061c\u00ad\u115f\u1160\u180b-\u180e\u200b-\u200f\u2028-\u202f"
-    "\u3164\u2060-\u206f\ufe00-\ufe0f\uffa0\ufeff\ufff9-\ufffb"
-    "\U0001107f\U00013430-\U00013438"
-    "\U000e0001\U000e0020-\U000e007f\U000e0100-\U000e01ef]"
+    # Cycle-8 (GPT 5.4 Pro PR #73 round 6 + root-cause generalization):
+    # the COMPLETE Unicode Default_Ignorable_Code_Point set (the
+    # canonical "invisible for rendering" property, Unicode 15.1
+    # DerivedCoreProperties) UNION the non-DI format/control chars
+    # earlier cycles added (Brahmi Number Joiner U+1107F, Egyptian
+    # Hieroglyph Format Controls U+13430-13438, narrow-NBSP / line-sep
+    # tail of U+2028-202F). Covering the whole DI property — including
+    # its RESERVED ranges (e.g. U+E0000-E0FFF), which exist precisely
+    # so future-assigned invisibles are ignorable — future-proofs
+    # against the per-char reactive patching that drove cycles 3-8
+    # (CGJ, ALM, MVS, VS-1..16, Mongol VS, TAG block, VSS, LANGUAGE
+    # TAG, and the Hangul fillers U+115F/1160/3164/FFA0 that GPT
+    # flagged in round 6). All are stripped (primary form) or space-
+    # substituted (secondary form) by the two-form scan. Verified a
+    # strict SUPERSET of every prior cycle's class; matches no visible
+    # character.
+    "[\u00ad\u034f\u061c\u115f-\u1160\u17b4-\u17b5\u180b-\u180f"
+    "\u200b-\u200f\u2028-\u202f\u2060-\u206f\u3164\ufe00-\ufe0f"
+    "\ufeff\uffa0\ufff0-\ufffb\U0001107f\U00013430-\U00013438"
+    "\U0001bca0-\U0001bca3\U0001d173-\U0001d17a"
+    "\U000e0000-\U000e0fff]"
 )
 
 

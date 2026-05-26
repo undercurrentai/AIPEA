@@ -1241,3 +1241,81 @@ class TestCycle8SciRegexLatency:
         scanner.scan(payload, context=tactical_ctx)
         elapsed_ms = (time.perf_counter() - t0) * 1000
         assert elapsed_ms < 1000, f"SCI scan took {elapsed_ms:.1f} ms — possible ReDoS"
+
+
+# Representative Default_Ignorable codepoints spanning every DI range
+# (one+ per range, incl. the obscure ones beyond what any single GPT
+# round flagged: Khmer vowel-inherent, Mongolian FVS4, shorthand format,
+# musical format, and the plane-14 reserved DI tail). Module-level
+# (not a class attribute) to avoid ruff RUF012.
+_DI_SAMPLE_CODEPOINTS = [
+    0x00AD,
+    0x034F,
+    0x061C,
+    0x115F,
+    0x1160,
+    0x17B4,
+    0x17B5,
+    0x180B,
+    0x180E,
+    0x180F,
+    0x200B,
+    0x200F,
+    0x202A,
+    0x202E,
+    0x2060,
+    0x2064,
+    0x2066,
+    0x206F,
+    0x3164,
+    0xFE00,
+    0xFE0F,
+    0xFEFF,
+    0xFFA0,
+    0xFFF0,
+    0xFFF8,
+    0x1BCA0,
+    0x1BCA3,
+    0x1D173,
+    0x1D17A,
+    0xE0000,
+    0xE0001,
+    0xE0020,
+    0xE007F,
+    0xE0100,
+    0xE01EF,
+    0xE0FFF,
+]
+
+
+class TestCycle8InvisibleClassIsDefaultIgnorableComplete:
+    """CYCLE-8 root-cause generalization: `_ALL_INVISIBLE_RE` now covers
+    the COMPLETE Unicode Default_Ignorable_Code_Point set (plus the few
+    non-DI format chars earlier cycles added). This property test pins
+    that completeness so a future edit can't silently shrink the class
+    below the DI baseline — ending the per-invisible-char reactive
+    patching that drove cycles 3-8.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("cp", _DI_SAMPLE_CODEPOINTS)
+    def test_default_ignorable_codepoint_is_stripped(self, cp: int) -> None:
+        from aipea.security import _ALL_INVISIBLE_RE
+
+        assert _ALL_INVISIBLE_RE.search(chr(cp)) is not None, (
+            f"Default_Ignorable U+{cp:04X} not in _ALL_INVISIBLE_RE — the class "
+            "regressed below the DI baseline"
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "ch",
+        ["a", "Z", "0", " ", ".", "/", ":", "=", "-", "T", "S", "한", "ㄱ"],
+    )
+    def test_visible_characters_not_stripped(self, ch: str) -> None:
+        # Guard the other direction: the comprehensive class must NOT
+        # match ordinary visible characters (incl. real Hangul syllables
+        # like 한 / jamo ㄱ, which are NOT fillers).
+        from aipea.security import _ALL_INVISIBLE_RE
+
+        assert _ALL_INVISIBLE_RE.search(ch) is None, f"{ch!r} wrongly classified invisible"
