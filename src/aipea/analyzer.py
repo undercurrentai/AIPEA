@@ -41,6 +41,36 @@ from aipea.security import SecurityContext, SecurityScanner
 logger = logging.getLogger(__name__)
 
 
+# Word-boundary-anchored regexes for the term-matching sites below. Plain
+# `str.in` / `str.find` substring matching produced false hits:
+#   - "might" inside "mighty" → +0.15 false ambiguity AND -0.1 false
+#     confidence drop (both fire, compounding into a tier-routing flip)
+#   - "best" inside "asbestos" or "bestselling" → search strategy misrouted
+#     to MULTI_SOURCE (a non-comparative query interpreted as comparative)
+#   - "true" inside "construe", "vs" inside "versus" / "obverse"
+# Ordering inside the alternations is longest-first so multi-word terms
+# like "it depends" match as a whole rather than just "depends".
+_AMBIGUITY_RE = re.compile(
+    r"\b("
+    r"it depends|not sure|kind of|sort of|possibly|uncertain|depends|"
+    r"perhaps|might|maybe|could"
+    r")\b",
+    re.IGNORECASE,
+)
+_AMBIGUITY_CONFIDENCE_RE = re.compile(
+    r"\b(could be|not sure|might|maybe|possibly)\b",
+    re.IGNORECASE,
+)
+_COMPARATIVE_RE = re.compile(
+    r"\b(compare|versus|vs|difference|better|best)\b",
+    re.IGNORECASE,
+)
+_VERIFICATION_RE = re.compile(
+    r"\b(verify|confirm|fact-check|true|accurate)\b",
+    re.IGNORECASE,
+)
+
+
 # =============================================================================
 # QUERY ROUTER
 # =============================================================================
@@ -362,12 +392,10 @@ class QueryRouter:
         if word_count < 5:
             confidence -= 0.2
 
-        # Reduce for ambiguous wording
-        ambiguous_terms = ["might", "maybe", "possibly", "could be", "not sure"]
-        for term in ambiguous_terms:
-            if term in query.lower():
-                confidence -= 0.1
-                break
+        # Reduce for ambiguous wording (word-boundary anchored — see
+        # `_AMBIGUITY_CONFIDENCE_RE` for the full term list and rationale).
+        if _AMBIGUITY_CONFIDENCE_RE.search(query):
+            confidence -= 0.1
 
         return max(0.0, min(1.0, confidence))
 
@@ -584,36 +612,15 @@ class QueryAnalyzer:
         """
         ambiguity = 0.0
 
-        # Ambiguous terms increase score
-        # Ordered longest-first so "it depends" is matched before "depends",
-        # preventing double-counting on overlapping substrings.
-        ambiguous_terms = [
-            "it depends",
-            "not sure",
-            "kind of",
-            "sort of",
-            "possibly",
-            "uncertain",
-            "depends",
-            "perhaps",
-            "might",
-            "maybe",
-            "could",
-        ]
-        query_lower = query.lower()
-        matched_spans: list[tuple[int, int]] = []
-        for term in ambiguous_terms:
-            start = 0
-            while True:
-                idx = query_lower.find(term, start)
-                if idx == -1:
-                    break
-                end = idx + len(term)
-                # Only count if this span doesn't overlap with an already-matched span
-                if not any(s < end and e > idx for s, e in matched_spans):
-                    ambiguity += 0.15
-                    matched_spans.append((idx, end))
-                start = end
+        # Ambiguous terms increase score. Word-boundary anchored via
+        # `_AMBIGUITY_RE` (longest-first alternation handles overlapping
+        # multi-word terms like "it depends" naturally, and `\b` prevents
+        # the prior false hits: "might" inside "mighty",
+        # "could" inside "couldn't" requires no boundary at the apostrophe
+        # so that already fails — but the substring loop matched it).
+        # `re.findall` returns non-overlapping matches in scan order,
+        # subsuming the old span-tracking entirely.
+        ambiguity += 0.15 * len(_AMBIGUITY_RE.findall(query))
 
         # Very short queries are ambiguous
         word_count = len(query.split())
@@ -622,7 +629,11 @@ class QueryAnalyzer:
         elif word_count < 5:
             ambiguity += 0.1
 
-        # Queries without question marks or clear intent
+        # Queries without question marks or clear intent. (Keyword check
+        # here intentionally stays substring-matched — out of scope for the
+        # ambiguity word-boundary fix; substring is the more generous form
+        # for interrogative recognition and not the reported defect.)
+        query_lower = query.lower()
         if "?" not in query and not any(
             kw in query_lower for kw in ["how", "what", "why", "when", "where", "who", "explain"]
         ):
@@ -674,15 +685,16 @@ class QueryAnalyzer:
         Returns:
             Recommended SearchStrategy
         """
-        # Multi-source for comparative queries
-        comparative_terms = ["compare", "versus", "vs", "difference", "better", "best"]
-        query_lower = analysis.query.lower()
-        if any(term in query_lower for term in comparative_terms):
+        # Multi-source for comparative queries (word-boundary anchored —
+        # see `_COMPARATIVE_RE`. Plain substring matched "best" inside
+        # "asbestos" / "bestselling", "true" inside "construe", etc.,
+        # misrouting non-comparative queries to MULTI_SOURCE.)
+        query = analysis.query
+        if _COMPARATIVE_RE.search(query):
             return SearchStrategy.MULTI_SOURCE
 
-        # Multi-source for verification queries
-        verification_terms = ["verify", "confirm", "fact-check", "true", "accurate"]
-        if any(term in query_lower for term in verification_terms):
+        # Multi-source for verification queries (see `_VERIFICATION_RE`).
+        if _VERIFICATION_RE.search(query):
             return SearchStrategy.MULTI_SOURCE
 
         # Deep research for complex research queries
