@@ -684,8 +684,7 @@ class SecurityScanner:
         # alternation exceeds; applying it here would be a category
         # error.
         self._compiled_classified: dict[str, re.Pattern[str]] = {
-            name: re.compile(pattern)
-            for name, pattern in self._CLASSIFIED_MARKER_PATTERNS.items()
+            name: re.compile(pattern) for name, pattern in self._CLASSIFIED_MARKER_PATTERNS.items()
         }
         logger.debug("SecurityScanner initialized with %d PII patterns", len(self.PII_PATTERNS))
 
