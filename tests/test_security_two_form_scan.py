@@ -755,3 +755,131 @@ class TestCycle4SciBracketedQuotedBanners:
         assert "classified_marker:SCI" not in result.flags, (
             f"SCI false-positive on URL/path: {payload!r}; flags={result.flags}"
         )
+
+
+# =============================================================================
+# CYCLE-5 follow-up — GPT 5.4 Pro PR #73 round-3 REQUEST_CHANGES
+# =============================================================================
+
+
+class TestCycle5DobValueWhitespaceTolerance:
+    """CYCLE-5 B1 (GPT 5.4 Pro round 3): the cycle-2 DOB fix widened the
+    LABEL (`date\\s+of\\s+birth`) but left the date VALUE separators
+    rigid (`\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}`). `DOB: 01 / 02 / 1990`
+    (spaces around the slashes) evaded the HIPAA sweep. Now
+    `\\d{1,2}\\s*[/-]\\s*\\d{1,2}\\s*[/-]\\s*\\d{2,4}`.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "DOB: 01/02/1990",
+            "DOB: 01 / 02 / 1990",
+            "date of birth 01 - 02 - 1990",
+            "date of birth: 1/2/90",
+            "DOB 12 - 31 - 2000",
+        ],
+        ids=["compact", "spaced_slash", "spaced_hyphen", "short_year", "spaced_hyphen2"],
+    )
+    def test_dob_value_whitespace_variants(
+        self,
+        scanner: SecurityScanner,
+        hipaa_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=hipaa_ctx)
+        assert any("phi_detected:dob" in f for f in result.flags), (
+            f"DOB not detected: {payload!r}; flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    def test_dob_negative_control_not_a_date(
+        self, scanner: SecurityScanner, hipaa_ctx: SecurityContext
+    ) -> None:
+        # "the dober pinscher" must NOT trip the dob pattern.
+        result = scanner.scan("the dober pinscher is a dog breed", context=hipaa_ctx)
+        assert not any("phi_detected:dob" in f for f in result.flags)
+
+
+class TestCycle5SciDelimiterWhitespaceTolerance:
+    """CYCLE-5 B2 (GPT 5.4 Pro round 3): the cycle-4 SCI pattern only
+    accepted EXACT `//` and `/REL`. Transcribed/dictated banner
+    variants `TS // SCI`, `S // SCI`, `SCI / REL` (spaces around the
+    delimiters) evaded — and TS/S/REL are not standalone markers, so
+    TACTICAL force_offline was bypassed. Now `\\s*/\\s*/\\s*` and
+    `\\s*/\\s*REL`.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "TS // SCI",
+            "S // SCI",
+            "SCI / REL",
+            "TS / / SCI",
+            "SCI // NOFORN",
+            "SCI / / NOFORN",
+            "TOP SECRET // SCI // NOFORN",
+        ],
+        ids=[
+            "ts_spaced",
+            "s_spaced",
+            "sci_rel_spaced",
+            "ts_double_spaced",
+            "sci_noforn_spaced",
+            "sci_noforn_double_spaced",
+            "full_spaced",
+        ],
+    )
+    def test_sci_delimiter_whitespace_variants_accepted(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"whitespace-padded SCI banner not detected: {payload!r}; flags={result.flags}"
+        )
+        assert result.force_offline is True
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "https://sci-fi.example",
+            "/sci/readme",
+            "/sci / rel",  # leading slash before SCI → still rejected
+            "the sci department",
+            "a scientific paper",
+        ],
+        ids=["url", "path", "path_spaced_rel", "prose", "subword"],
+    )
+    def test_sci_still_rejects_false_positives_with_whitespace_delims(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, (
+            f"SCI false-positive after whitespace-delim widening: {payload!r}; flags={result.flags}"
+        )
+
+
+class TestCycle5ClassifiedPatternsPrecompiled:
+    """CYCLE-5 (GPT 5.4 Pro round-3 non-blocking): classified marker
+    patterns are now precompiled in __init__ (`_compiled_classified`)
+    rather than re.compile'd per scan. Catches typos at construction.
+    """
+
+    @pytest.mark.unit
+    def test_compiled_classified_table_populated(self) -> None:
+        scanner = SecurityScanner()
+        assert set(scanner._compiled_classified) == set(scanner.CLASSIFIED_MARKERS)
+        import re as _re
+
+        for name, compiled in scanner._compiled_classified.items():
+            assert isinstance(compiled, _re.Pattern), f"{name} not precompiled"

@@ -407,9 +407,14 @@ class SecurityScanner:
     # invisible-char rewrite, because once the invisible was replaced with
     # `\s` the multi-space gap still didn't match the single literal space.
     # (Cycle-2 F3.)
+    # Cycle-5 (GPT 5.4 Pro PR #73 round 3): the DOB date VALUE separators
+    # are also whitespace-tolerant (`\s*[/-]\s*`), not just the label.
+    # Without it, "DOB: 01 / 02 / 1990" and "date of birth 01 - 02 - 1990"
+    # (spaces around the slashes/hyphens) evaded the HIPAA sweep even
+    # after the cycle-2 label fix.
     PHI_PATTERNS: ClassVar[dict[str, str]] = {
         "mrn": r"\b(MRN|medical\s+record)\s*[:=]?\s*\d+\b",
-        "dob": r"\b(DOB|date\s+of\s+birth)\s*[:=]?\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",
+        "dob": r"\b(DOB|date\s+of\s+birth)\s*[:=]?\s*\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*\d{2,4}\b",
         "patient_name": r"\b(?i:patient)\s*[:=]?\s*[A-Z][a-z]+\s+[A-Z][a-z]+\b",
     }
 
@@ -495,13 +500,23 @@ class SecurityScanner:
         # the same `(?<![\w/])` guard to the SECOND branch also closes
         # the `/SCI/REL` path-segment false positive GPT flagged as
         # non-blocking in round 2.
+        #
+        # Cycle-5 (GPT 5.4 Pro PR #73 round 3): the `//` and `/`
+        # compartment delimiters are now whitespace-tolerant
+        # (`\s*/\s*/\s*` and `\s*/\s*`). Without it, transcribed /
+        # dictated banner variants `TS // SCI`, `S // SCI`, `SCI / REL`
+        # evaded — and since `TS`/`S`/`REL` are NOT standalone entries
+        # in CLASSIFIED_MARKERS, there was no fallback marker to catch
+        # them, so TACTICAL `force_offline` was bypassed. Each `\s*` is
+        # bounded by a mandatory literal `/`, so there is no ReDoS
+        # ambiguity (no adjacent unbounded quantifiers).
         "SCI": (
             r"(?<![\w/])"
             + _CLASSIFIED_LEVEL_PREFIXES
-            + r"//SCI\b"
-            + r"|(?<![\w/])SCI(?://"
+            + r"\s*/\s*/\s*SCI\b"
+            + r"|(?<![\w/])SCI(?:\s*/\s*/\s*"
             + _SCI_COMPARTMENT_SUFFIXES
-            + r"\b|/REL\b)"
+            + r"\b|\s*/\s*REL\b)"
         ),
     }
 
@@ -649,6 +664,29 @@ class SecurityScanner:
                     f"Hardcoded INJECTION_PATTERN failed ReDoS safety check: {pattern!r}"
                 )
             self._compiled_injection.append(re.compile(pattern, re.IGNORECASE))
+        # Precompile classified-marker patterns once at init (cycle-5,
+        # GPT 5.4 Pro PR #73 round-3 non-blocking note): catches regex
+        # typos at construction time (re.compile raises re.error on a
+        # malformed pattern) rather than on first TACTICAL scan, and
+        # avoids per-call `re.compile` recompilation in
+        # `_check_classified_markers`. Matched against `query.upper()`
+        # (no re.IGNORECASE) — same convention as the raw-string version.
+        #
+        # NB: these are NOT run through `_is_regex_safe`. That validator
+        # exists to bound the ReDoS risk of UNTRUSTED, user-supplied
+        # `SecurityContext.blocked_patterns` (incl. a conservative 200-
+        # char length cap). The classified patterns are hardcoded,
+        # code-reviewed, and ReDoS-safe by construction (the SCI
+        # pattern's `\s*` groups are each bounded by a mandatory literal
+        # `/`, so there is no adjacent-unbounded-quantifier ambiguity —
+        # see the SCI pattern comment). The length cap in particular is
+        # a user-input heuristic that the legitimately-long SCI
+        # alternation exceeds; applying it here would be a category
+        # error.
+        self._compiled_classified: dict[str, re.Pattern[str]] = {
+            name: re.compile(pattern)
+            for name, pattern in self._CLASSIFIED_MARKER_PATTERNS.items()
+        }
         logger.debug("SecurityScanner initialized with %d PII patterns", len(self.PII_PATTERNS))
 
     # Maximum pattern length to prevent ReDoS attacks
@@ -796,14 +834,19 @@ class SecurityScanner:
         force_offline = False
         query_upper = query.upper()
         for name in self.CLASSIFIED_MARKERS:
-            pattern = self._CLASSIFIED_MARKER_PATTERNS.get(name)
-            if pattern is None:
-                # Defensive: any marker added to the list but missing
-                # from the pattern table falls back to the standard
-                # \b<marker>\b boundary so detection is never silently
-                # dropped on a future marker-list addition.
-                pattern = rf"\b{re.escape(name)}\b"
-            if re.search(pattern, query_upper):
+            compiled = self._compiled_classified.get(name)
+            if compiled is None:
+                # Defensive: a marker added to CLASSIFIED_MARKERS at
+                # runtime (e.g. via instance-level monkeypatch) after
+                # __init__ would not be in the precompiled table. The
+                # init-time contract check (see __init__) prevents the
+                # class-definition-time case; this fallback covers the
+                # runtime-mutation case so detection is never silently
+                # dropped. Falls back to the standard `\b<marker>\b`
+                # boundary (the F11-prone shape — acceptable only as a
+                # last-resort belt-and-suspenders).
+                compiled = re.compile(rf"\b{re.escape(name)}\b")
+            if compiled.search(query_upper):
                 flags.append(f"classified_marker:{name}")
                 force_offline = True
         # NB: classified-marker WARNING logging is intentionally NOT
