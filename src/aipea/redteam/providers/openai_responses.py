@@ -21,6 +21,7 @@ Refs:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Any
@@ -162,27 +163,45 @@ class OpenAIResponsesProvider:
                 if not response_id:
                     error = "missing_field"
                 else:
+                    # Reuse ONE sync httpx.Client across all poll iterations
+                    # (was: per-iteration TLS+TCP handshake — up to 300/run
+                    # at the default 5s interval x 1500s deadline).
+                    sync_client = httpx.Client(timeout=self.timeout)
 
                     def _retrieve(rid: str) -> dict[str, Any]:
-                        # Sync inside the polling loop — poll_until_terminal
-                        # uses time.sleep, so we use a sync httpx client here.
-                        with httpx.Client(timeout=self.timeout) as sync:
-                            r = sync.get(
-                                f"{self.api_base}/responses/{rid}",
-                                headers=headers,
+                        r = sync_client.get(
+                            f"{self.api_base}/responses/{rid}",
+                            headers=headers,
+                        )
+                        # Classify retrieve errors:
+                        # - 4xx (except 429): permanent — synthesize a
+                        #   terminal "failed" status so poll_until_terminal
+                        #   exits the retry loop instead of spinning to the
+                        #   25-min deadline on a 401/404
+                        # - 5xx / 429 / network: transient — re-raise so the
+                        #   polling helper catches and retries with backoff
+                        if 400 <= r.status_code < 500 and r.status_code != 429:
+                            logger.warning(
+                                "OpenAI retrieve permanent error %s: %s",
+                                r.status_code,
+                                r.text[:500],
                             )
-                            r.raise_for_status()
-                            return r.json()  # type: ignore[no-any-return]
+                            return {"status": "failed", "_retrieve_http_status": r.status_code}
+                        r.raise_for_status()
+                        return r.json()  # type: ignore[no-any-return]
 
                     def _cancel(rid: str) -> None:
-                        with httpx.Client(timeout=self.timeout) as sync:
-                            sync.post(
-                                f"{self.api_base}/responses/{rid}/cancel",
-                                headers=headers,
-                            )
+                        sync_client.post(
+                            f"{self.api_base}/responses/{rid}/cancel",
+                            headers=headers,
+                        )
 
                     try:
-                        final = poll_until_terminal(
+                        # poll_until_terminal is sync (uses time.sleep);
+                        # off-load to a worker thread so we don't block
+                        # the asyncio event loop for up to 25 min.
+                        final = await asyncio.to_thread(
+                            poll_until_terminal,
                             response_id,
                             retrieve=_retrieve,
                             cancel=_cancel,
@@ -192,6 +211,8 @@ class OpenAIResponsesProvider:
                     except PollTimeoutError:
                         error = "timeout"
                         final = None
+                    finally:
+                        sync_client.close()
                     if final is not None:
                         status = final.get("status")
                         if status == "completed":

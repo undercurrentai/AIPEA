@@ -140,9 +140,13 @@ def poll_until_terminal(
             sleep(poll_interval_seconds)
             continue
         status = _extract_status(current)
-        if status != last_status:
-            logger.info("response status: %s -> %s", last_status, status)
-            last_status = status or "unknown"
+        # Coerce None → "unknown" BEFORE the inequality check so
+        # consecutive None statuses don't re-trigger the log every poll
+        # (was: 300 lines per stuck call at 5s x 1500s deadline).
+        coerced = status if status is not None else "unknown"
+        if coerced != last_status:
+            logger.info("response status: %s -> %s", last_status, coerced)
+            last_status = coerced
         if status in terminal_states:
             return current
         sleep(poll_interval_seconds)

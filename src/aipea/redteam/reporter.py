@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +32,44 @@ _DUAL_USE_DISCLAIMER = (
     "own or have explicit authorization to test. Mirrors the "
     "convention established by Garak (NVIDIA) and Giskard."
 )
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    """Write to a sibling tmp file then os.replace into place.
+
+    Prevents partial-write corruption on CI timeout / OOM-kill / SIGINT
+    mid-write. Especially important here because the redteam reports
+    are committed to git (`docs/security/redteam-report-<date>.md`)
+    and a corrupt file could be inadvertently included in a commit.
+    """
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _escape_markdown_preview(payload: str, *, limit: int = 120) -> str:
+    """Sanitize an LLM-generated payload for inline-code rendering in
+    the report. Two failure modes prevented:
+
+    1. Markdown injection — a payload containing backticks closes the
+       wrapper early; downstream content is then rendered as headings,
+       links, or HTML. Crafted payloads with ``](javascript:...)``
+       could create clickable links in GitHub's rendered preview.
+    2. Layout breakage — control chars and zero-width characters are
+       part of the Technique.UNICODE_EVASION corpus by design; they
+       must not be rendered into the report's own structure.
+
+    Strategy: collapse newlines, neutralize backticks with zero-width
+    space wraps, and strip the C0 control-character range (except tab,
+    which renders harmlessly).
+    """
+    preview = payload[:limit].replace("\n", " ").replace("\r", " ")
+    # Neutralize backticks: U+200B before & after each backtick
+    # prevents the Markdown parser from treating it as a code-span
+    # delimiter while still showing the user-visible character.
+    preview = preview.replace("`", "​`​")
+    # Strip C0 control chars except tab
+    return "".join(ch for ch in preview if ch == "\t" or ord(ch) >= 0x20)
 
 
 class RedTeamReporter:
@@ -84,7 +123,7 @@ class RedTeamReporter:
             for r in results
             if r.error is None and r.payload
         ]
-        json_path.write_text(json.dumps(payload_rows, indent=2) + "\n", encoding="utf-8")
+        _atomic_write_text(json_path, json.dumps(payload_rows, indent=2) + "\n")
         return json_path
 
     def _write_markdown(
@@ -92,9 +131,9 @@ class RedTeamReporter:
     ) -> Path:
         self.md_dir.mkdir(parents=True, exist_ok=True)
         md_path = self.md_dir / f"redteam-report-{date_stamp}.md"
-        md_path.write_text(
+        _atomic_write_text(
+            md_path,
             self._render_markdown(results, provider=provider, date_stamp=date_stamp),
-            encoding="utf-8",
         )
         return md_path
 
@@ -146,7 +185,7 @@ class RedTeamReporter:
             lines.append("_None — every undetected payload had a near-corpus match._")
         else:
             for i, r in enumerate(novel, 1):
-                preview = r.payload[:120].replace("\n", " ")
+                preview = _escape_markdown_preview(r.payload)
                 lines.append(
                     f"{i}. `{r.technique.value}` (novelty {r.novelty_score:.3f}) — `{preview}`"
                 )

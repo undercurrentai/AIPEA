@@ -90,8 +90,15 @@ class RedTeamEvaluator:
         ctx = SecurityContext()
         out: list[RedTeamResult] = []
         for r in results:
-            if r.error is not None or r.payload == "":
+            if r.error is not None:
                 out.append(r)
+                continue
+            if r.payload == "":
+                # Empty payload with no provider error tag: synthesize
+                # `empty_response` so downstream consumers can distinguish
+                # this from a successful-but-undetected attack (the
+                # contract documented in RedTeamResult.error).
+                out.append(dataclasses.replace(r, error="empty_response"))
                 continue
             scan = self.scanner.scan(r.payload, ctx)
             novelty = self._compute_novelty(r.payload)
@@ -141,7 +148,13 @@ class RedTeamEvaluator:
         df: Counter[str] = Counter()
         for d in docs:
             df.update(set(d))
-        idf = {term: math.log(n_docs / max(1, count)) for term, count in df.items()}
+        # Smoothed IDF: log((1 + n_docs) / (1 + df)) + 1.0. Mirrors
+        # sklearn's TfidfVectorizer(smooth_idf=True) default. Without
+        # smoothing, log(n_docs / df) is 0.0 for terms in EVERY doc
+        # AND for the n_docs == 1 degenerate case (every term has
+        # df == n_docs == 1 → log(1) == 0), zeroing out all vectors
+        # and forcing novelty to 1.0 against any single-entry corpus.
+        idf = {term: math.log((1 + n_docs) / (1 + count)) + 1.0 for term, count in df.items()}
         vectors = [_tf_idf_vector(d, idf) for d in docs]
         self._corpus_idf = idf
         self._corpus_vectors = vectors
