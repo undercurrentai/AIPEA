@@ -319,6 +319,54 @@ Verification: full suite **1620 passed / 35 skipped / 5 xfailed in
 25.26 s** at coverage **91.65%**; ruff + mypy clean. DOB + SCI
 whitespace matrices verified (all accept/reject cases correct).
 
+### Fixed (cycle-6 `/quality-gate` follow-up to PR #73 round 4, 2026-05-26)
+
+The gpt-5.4-pro gate's round-4 REQUEST_CHANGES identified a SCI
+leading-slash FALSE NEGATIVE — the security-conservative direction
+(a missed classified banner in TACTICAL mode leaks classified content
+to an external model). Fixed in commit (this commit); GPT's round-4
+non-blocking subclassing-contract note also documented.
+
+**Security (`security.py`)**:
+
+  - **SCI leading-slash banner admission** (GPT round-4 blocker): the
+    cycle-4 `(?<![\w/])` guard rejected leading-slash banners
+    `/TS//SCI`, ` /SCI/REL` (list-marker / stray-slash markings at a
+    clean boundary) — real classified markings that MUST flag. New
+    `_BANNER_OPENER = (?:^|(?<=[\s(\[{<"']))/?` admits an OPTIONAL
+    leading slash at a CLEAN boundary (start-of-input or after
+    whitespace / open-bracket / quote / angle / paren), while STILL
+    rejecting mid-URI/path slashes (`https://example.com/TS//SCI`,
+    `path/to/TS//SCI`) where the slash is preceded by a word char.
+  - **Compartment-vs-path terminal guard** `(?!/(?!/))` (cycle-6): the
+    leading-slash admission would otherwise re-accept the cycle-1
+    `/sci/rel/index.html` path FP. The terminal guard rejects a marker
+    followed by a SINGLE `/` (path continuation) while ALLOWING `//`
+    (a compartment delimiter — so multi-compartment banners
+    `SCI//NOFORN//ORCON` still flag) and the terminal/whitespace case.
+    This is the precise discriminator that lets the leading-slash
+    banner admission coexist with the path rejection: the test moved
+    from "is there a leading slash" to "is the marker followed by a
+    path-style single-slash continuation".
+  - **Subclassing-contract note** (GPT round-4 non-blocking): extending
+    `CLASSIFIED_MARKERS` (e.g. via subclass) without a matching
+    `_CLASSIFIED_MARKER_PATTERNS` entry now raises `RuntimeError` at
+    `__init__` (cycle-3 F7 invariant). This is an intentional
+    fail-closed contract — documented here for any consumer subclassing
+    `SecurityScanner`. The runtime fallback in `_check_classified_
+    markers` still covers instance-level monkeypatch mutations.
+
+Regression tests (`tests/test_security_two_form_scan.py`): a new
+`TestCycle6SciLeadingSlashBanners` class (8 leading-slash-accept + 5
+mid-URI/path-reject + 1 multi-compartment-accept + 1 compartment-path-
+reject) plus a reconciliation of the cycle-5 `path_spaced_rel` case
+(`/sci / rel` with spaces is now correctly a banner, not a path).
+
+Verification: `make ci` (CI parity) clean — full suite **1635 passed /
+35 skipped / 5 xfailed in 38.09 s** at coverage **91.73%**; ruff +
+mypy clean. The SCI accept/reject matrix is now 27 cases (18 accept
+banner forms + 9 reject URI/path/prose forms), all verified.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator

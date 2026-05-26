@@ -851,11 +851,18 @@ class TestCycle5SciDelimiterWhitespaceTolerance:
         [
             "https://sci-fi.example",
             "/sci/readme",
-            "/sci / rel",  # leading slash before SCI → still rejected
+            # NB: a bare `/sci / rel` (spaces around the slashes, no
+            # trailing path segment) is now ACCEPTED as a banner under
+            # cycle-6 — spaces-around-slashes is banner-like, not
+            # path-like, and flagging is the security-conservative
+            # choice. The path-style rejection is preserved by the
+            # `(?!/(?!/))` terminal guard, exercised here with a clear
+            # path continuation (`/sci/rel/index.html`).
+            "/sci/rel/index.html",  # REL followed by a path segment → path, reject
             "the sci department",
             "a scientific paper",
         ],
-        ids=["url", "path", "path_spaced_rel", "prose", "subword"],
+        ids=["url", "path", "path_rel_continuation", "prose", "subword"],
     )
     def test_sci_still_rejects_false_positives_with_whitespace_delims(
         self,
@@ -883,3 +890,99 @@ class TestCycle5ClassifiedPatternsPrecompiled:
 
         for name, compiled in scanner._compiled_classified.items():
             assert isinstance(compiled, _re.Pattern), f"{name} not precompiled"
+
+
+# =============================================================================
+# CYCLE-6 follow-up — GPT 5.4 Pro PR #73 round-4 REQUEST_CHANGES
+# =============================================================================
+
+
+class TestCycle6SciLeadingSlashBanners:
+    """CYCLE-6 (GPT 5.4 Pro round 4): the cycle-4 `(?<![\\w/])` guard
+    rejected leading-slash banners `/TS//SCI`, ` /SCI/REL` (list-marker
+    or stray-slash markings at a CLEAN boundary). These are real
+    classified markings that MUST flag — a missed banner in TACTICAL
+    mode is the dangerous false-NEGATIVE direction. The `_BANNER_OPENER`
+    (`(?:^|(?<=[\\s(\\[{<"']))/?`) admits an optional leading slash at a
+    clean boundary, while the `(?!/(?!/))` terminal guard keeps
+    rejecting path continuations.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "/TS//SCI",
+            " /TS//SCI",
+            "/SCI/REL",
+            " /SCI/REL",
+            " /TS // SCI",
+            "/SCI//NOFORN",
+            "Marking line:\n/TS//SCI",  # leading slash after newline
+            "- /TS//SCI",  # markdown list marker (space before slash)
+        ],
+        ids=[
+            "soi_ts",
+            "space_ts",
+            "soi_sci_rel",
+            "space_sci_rel",
+            "space_ts_spaced",
+            "soi_sci_noforn",
+            "after_newline",
+            "list_marker",
+        ],
+    )
+    def test_leading_slash_banner_at_clean_boundary_accepts(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"leading-slash banner not flagged: {payload!r}; flags={result.flags}"
+        )
+        assert result.force_offline is True
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "https://example.com/TS//SCI",  # mid-URI: 'm' before /TS
+            "path/to/TS//SCI",  # mid-path: 'o' before /TS
+            "/sci/rel/index.html",  # REL + single-slash path continuation
+            "/sci/readme",  # README not a compartment
+            "see/TS//SCI",  # mid-token: 'e' before /TS
+        ],
+        ids=["url_mid", "path_mid", "rel_path_cont", "readme", "mid_token"],
+    )
+    def test_mid_uri_path_slash_still_rejects(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, (
+            f"SCI false-positive on mid-URI/path slash: {payload!r}; flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    def test_multi_compartment_banner_accepts(
+        self, scanner: SecurityScanner, tactical_ctx: SecurityContext
+    ) -> None:
+        # SCI//NOFORN//ORCON — the `//` between compartments is a
+        # delimiter (allowed by `(?!/(?!/))`), NOT a path single-slash.
+        result = scanner.scan("Doc marked SCI//NOFORN//ORCON here", context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, result.flags
+        assert result.force_offline is True
+
+    @pytest.mark.unit
+    def test_sci_compartment_path_continuation_rejects(
+        self, scanner: SecurityScanner, tactical_ctx: SecurityContext
+    ) -> None:
+        # SCI//NOFORN/path/x — NOFORN followed by a SINGLE slash → path.
+        # (NB: the standalone NOFORN marker still fires + forces offline;
+        # this test asserts only that the SCI-specific flag does not.)
+        result = scanner.scan("file at SCI//NOFORN/path/x", context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, result.flags

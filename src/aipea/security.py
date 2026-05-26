@@ -471,6 +471,19 @@ class SecurityScanner:
     _SCI_COMPARTMENT_SUFFIXES: ClassVar[str] = (
         r"(?:NOFORN|REL|FGI|IMCON|ORCON|PROPIN|RELIDO|RSEN|HUMINT|COMINT|SI|TK|HCS)"
     )
+    # Banner opener (cycle-6, GPT 5.4 Pro PR #73 round 4): start-of-input
+    # OR a clean opening delimiter (whitespace / open-bracket / quote /
+    # angle / paren), followed by an OPTIONAL single leading slash. The
+    # optional `/?` admits leading-slash banners `/TS//SCI`, ` /SCI/REL`
+    # (a list-marker or stray-slash banner at a clean boundary — a real
+    # classified marking that MUST flag, since a missed classified
+    # banner in TACTICAL mode is the dangerous false-NEGATIVE direction)
+    # while the clean-boundary requirement STILL rejects mid-URI/path
+    # forms (`https://example.com/TS//SCI`, `path/to/TS//SCI`,
+    # `/sci/readme`) where the slash is preceded by a word char or
+    # another path segment. The lookbehind is fixed-width (1 char), so
+    # it is a legal Python `re` lookbehind.
+    _BANNER_OPENER: ClassVar[str] = r"(?:^|(?<=[\s(\[{<\"']))/?"
 
     _CLASSIFIED_MARKER_PATTERNS: ClassVar[dict[str, str]] = {
         "TOP SECRET": r"\bTOP\s+SECRET\b",
@@ -489,34 +502,52 @@ class SecurityScanner:
         #       allow-list rejects `/sci/readme` (README is not a
         #       compartment) while accepting `SCI//NOFORN`, `SCI/REL`,
         #       `SCI//FGI`, etc.
-        # Pre-marker gate is `(?<![\w/])` (cycle-4, GPT 5.4 Pro PR #73
-        # round 2): the cycle-3 `(?:^|[\s(])` gate was too narrow — it
-        # rejected legitimate bracketed / quoted banners `[TS//SCI]`,
-        # `"TS//SCI"`, `<TS//SCI>`. `(?<![\w/])` accepts ANY non-word
-        # non-slash opener (brackets, quotes, angle brackets, parens,
-        # whitespace, start-of-input) while STILL rejecting URL/path
-        # forms where `/` immediately precedes the level or the SCI
-        # token (`/TS//SCI`, `https://sci-fi`, `/sci/readme`). Applying
-        # the same `(?<![\w/])` guard to the SECOND branch also closes
-        # the `/SCI/REL` path-segment false positive GPT flagged as
-        # non-blocking in round 2.
+        # Pre-marker gate evolution (the SCI boundary has been the
+        # single hardest part of this module to get right; documented
+        # here in full so the next maintainer doesn't re-litigate it):
+        #   cycle-2 `(?<=//)SCI\b|\bSCI(?=//|/[A-Z])` — matched
+        #     `https://sci-fi`, `/sci/readme` (URL/path FALSE POSITIVES).
+        #   cycle-4 `(?<![\w/])` — fixed the URL FPs but rejected
+        #     legitimate bracketed/quoted banners `[TS//SCI]` (FALSE
+        #     NEGATIVE).
+        #   cycle-5 — made the `//` and `/` delimiters whitespace-
+        #     tolerant (`\s*/\s*/\s*`, `\s*/\s*`) for `TS // SCI`,
+        #     `SCI / REL`.
+        #   cycle-6 (this) `_BANNER_OPENER` — admits an OPTIONAL leading
+        #     slash at a CLEAN boundary so `/TS//SCI`, ` /SCI/REL`
+        #     (list-marker / stray-slash banners — real markings that
+        #     MUST flag) are caught, while STILL rejecting mid-URI/path
+        #     slashes (`https://example.com/TS//SCI`, `path/to/TS//SCI`).
+        #     In a classified-content gate, a missed banner (false
+        #     negative) leaks classified content to an external model —
+        #     the dangerous direction — so the leading-slash admission
+        #     is the security-conservative choice.
+        # Two valid forms: (a) <level>//SCI, (b) SCI//<compartment> or
+        # SCI/REL. The compartment allow-list rejects `/sci/readme`
+        # (README is not a compartment). Each `\s*` is bounded by a
+        # mandatory literal `/` — no ReDoS ambiguity.
         #
-        # Cycle-5 (GPT 5.4 Pro PR #73 round 3): the `//` and `/`
-        # compartment delimiters are now whitespace-tolerant
-        # (`\s*/\s*/\s*` and `\s*/\s*`). Without it, transcribed /
-        # dictated banner variants `TS // SCI`, `S // SCI`, `SCI / REL`
-        # evaded — and since `TS`/`S`/`REL` are NOT standalone entries
-        # in CLASSIFIED_MARKERS, there was no fallback marker to catch
-        # them, so TACTICAL `force_offline` was bypassed. Each `\s*` is
-        # bounded by a mandatory literal `/`, so there is no ReDoS
-        # ambiguity (no adjacent unbounded quantifiers).
+        # The `_NOT_PATH_CONT = (?!/(?!/))` terminal guard (cycle-6)
+        # distinguishes a banner-terminal compartment from a path
+        # segment: it rejects a marker followed by a SINGLE `/`
+        # (path continuation, e.g. `/sci/rel/index.html` →
+        # `REL/index`) while ALLOWING `//` (a compartment delimiter,
+        # e.g. multi-compartment `SCI//NOFORN//ORCON`) and the
+        # terminal/whitespace case (`SCI//NOFORN`, `SCI/REL TO USA`).
+        # This is what lets the cycle-6 leading-slash admission
+        # (`/SCI/REL` banner) coexist with the cycle-1 path rejection
+        # (`/sci/rel/index.html`): the discriminator moved from "is
+        # there a leading slash" to "is the marker followed by a
+        # path-style single-slash continuation".
         "SCI": (
-            r"(?<![\w/])"
+            _BANNER_OPENER
             + _CLASSIFIED_LEVEL_PREFIXES
             + r"\s*/\s*/\s*SCI\b"
-            + r"|(?<![\w/])SCI(?:\s*/\s*/\s*"
+            + r"|"
+            + _BANNER_OPENER
+            + r"SCI(?:\s*/\s*/\s*"
             + _SCI_COMPARTMENT_SUFFIXES
-            + r"\b|\s*/\s*REL\b)"
+            + r"\b(?!/(?!/))|\s*/\s*REL\b(?!/(?!/)))"
         ),
     }
 
