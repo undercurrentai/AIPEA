@@ -118,10 +118,35 @@ _CONFUSABLE_TRANS = str.maketrans(_CONFUSABLE_MAP)
 # These characters are NEVER expected in a legitimate LLM-bound query;
 # stripping them on the primary form (and replacing them with spaces on
 # the secondary form) is the conservative right call.
-_UNICODE_NEWLINE_RE = re.compile("[\u2028\u2029]")
+# Unicode line terminators that Python's `str.splitlines()` recognizes
+# but `[\r\n]` in the conversation-separator INJECTION_PATTERN does not.
+# All are normalized to `\n` before pattern matching so the line-anchored
+# injection separator fires regardless of which terminator the attacker
+# used. Without normalizing NEL/VT/FF, a payload like "text<NEL>Human:
+# do evil" evaded the conversation-separator regex (cycle-3 F3).
+#   - U+000B VT  (vertical tab)
+#   - U+000C FF  (form feed)
+#   - U+0085 NEL (next line)
+#   - U+2028 LS  (line separator)
+#   - U+2029 PS  (paragraph separator)
+_UNICODE_NEWLINE_RE = re.compile("[\x0b\x0c\x85\u2028\u2029]")
 _ALL_INVISIBLE_RE = re.compile(
-    "[\u034f\u061c\u00ad\u180e\u200b-\u200f\u2028-\u202f"
-    "\u2060-\u206f\ufeff\ufff9-\ufffb\U000e0020-\U000e007f]"
+    # Cycle-3 F2 expansion: closes adjacent NFKC-stable invisible
+    # bypass classes that the cycle-2 fix missed. The cycle-3
+    # Lane-B re-audit confirmed inter-word splits via VS-16
+    # (U+FE0F emoji selector), Mongol VS-1..3 (U+180B-D), Egyptian
+    # Hieroglyph Format Controls (U+13430-13438), Brahmi Number
+    # Joiner (U+1107F), LANGUAGE TAG (U+E0001), and the Variation
+    # Selectors Supplement (U+E0100-E01EF) all evaded the cycle-2
+    # _ALL_INVISIBLE_RE. This expansion covers every NFKC-stable
+    # invisible documented in the Unicode database as format (Cf),
+    # control (Cc), or non-visible mark (Mn) used as an invisible
+    # joiner. Tested in tests/test_security_two_form_scan.py +
+    # cycle-3 verification.
+    "[\u034f\u061c\u00ad\u180b-\u180e\u200b-\u200f\u2028-\u202f"
+    "\u2060-\u206f\ufe00-\ufe0f\ufeff\ufff9-\ufffb"
+    "\U0001107f\U00013430-\U00013438"
+    "\U000e0001\U000e0020-\U000e007f\U000e0100-\U000e01ef]"
 )
 
 
@@ -340,9 +365,16 @@ class SecurityScanner:
     """
 
     # PII patterns - always checked
+    # Cycle-3 F5/F6 whitespace tolerance: SSN and CCN structural
+    # separators now accept zero-or-more whitespace around the hyphens
+    # (SSN) and zero-or-more whitespace-or-hyphen between groups (CCN).
+    # The pre-fix patterns rejected tab/double-space variants between
+    # digit groups even though the two-form invisible-char scan
+    # couldn't help (digits can't span an inserted whitespace). Same
+    # `\s+`-as-canonical-separator principle as the cycle-2 F3 PHI fix.
     PII_PATTERNS: ClassVar[dict[str, str]] = {
-        "ssn": r"\b\d{3}-\d{2}-\d{4}\b",
-        "credit_card": r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b",
+        "ssn": r"\b\d{3}\s*-\s*\d{2}\s*-\s*\d{4}\b",
+        "credit_card": r"\b\d{4}[\s-]*\d{4}[\s-]*\d{4}[\s-]*\d{4}\b",
         "api_key": r"\b(api[_-]?key)\s*[:=]\s*\S{20,}",
         "sk_key": r"\bsk-[a-zA-Z0-9_-]{20,}\b",
         "bearer_token": r"\bbearer\s+[a-zA-Z0-9._-]{20,}\b",
@@ -411,12 +443,48 @@ class SecurityScanner:
     #     or followed by `//` / `/<UPPER>` (as in `SCI//NOFORN` /
     #     `SCI/REL`). This matches established IC tradecraft and
     #     rejects the common-English false-positive class.
+    # Known IC banner classification level prefixes. Used to anchor
+    # the SCI compartment marker to real banner context (cycle-3 PR #73
+    # GPT 5.4 Pro REQUEST_CHANGES + cycle-3 verification F4): the
+    # cycle-2 fix `(?<=//)SCI\b|\bSCI(?=//|/[A-Z])` still matched
+    # benign URLs like `https://sci-fi.example` and `/sci/readme`
+    # (`HTTPS://SCI-FI` upper-cased, `//` precedes SCI; `SCI/R` of
+    # `/sci/readme` matches the lookahead). The fix requires SCI to be
+    # adjacent to a recognized banner LEVEL (TS, S, C, U + full forms)
+    # via the IC compartment delimiter `//`, OR followed by a
+    # constrained banner CONTINUATION (NOFORN, REL, FGI, IMCON, etc.).
+    _CLASSIFIED_LEVEL_PREFIXES: ClassVar[str] = (
+        r"(?:TS|S|C|U|TOP\s+SECRET|SECRET|CONFIDENTIAL|UNCLASSIFIED)"
+    )
+    _SCI_COMPARTMENT_SUFFIXES: ClassVar[str] = (
+        r"(?:NOFORN|REL|FGI|IMCON|ORCON|PROPIN|RELIDO|RSEN|HUMINT|COMINT|SI|TK|HCS)"
+    )
+
     _CLASSIFIED_MARKER_PATTERNS: ClassVar[dict[str, str]] = {
         "TOP SECRET": r"\bTOP\s+SECRET\b",
         "SECRET": r"\bSECRET\b",
         "CONFIDENTIAL": r"\bCONFIDENTIAL\b",
         "NOFORN": r"\bNOFORN\b",
-        "SCI": r"(?<=//)SCI\b|\bSCI(?=//|/[A-Z])",
+        # SCI must appear in REAL IC banner context. Two valid forms:
+        #   (a) preceded by a classification level + `//`, with the
+        #       level itself preceded by start-of-input, whitespace,
+        #       or an opening paren — so a URL path like
+        #       `https://sci-fi.example` (no level word in front of `//`)
+        #       and `https://example.com/TS//SCI` (`/` not `(`/`\s`/`^`
+        #       before TS) both correctly reject;
+        #   (b) followed by a known compartment / control-marking
+        #       continuation via `//<KEYWORD>` or `/REL`. The keyword
+        #       allow-list rejects `/sci/readme` (README is not a
+        #       compartment) while accepting `SCI//NOFORN`, `SCI/REL`,
+        #       `SCI//FGI`, etc.
+        "SCI": (
+            r"(?:^|[\s(])"
+            + _CLASSIFIED_LEVEL_PREFIXES
+            + r"//SCI\b"
+            + r"|\bSCI(?://"
+            + _SCI_COMPARTMENT_SUFFIXES
+            + r"\b|/REL\b)"
+        ),
     }
 
     # Injection patterns - always checked and always blocked
@@ -511,6 +579,25 @@ class SecurityScanner:
 
     def __init__(self) -> None:
         """Initialize the security scanner with compiled regex patterns."""
+        # Cycle-3 F7 contract: every marker in CLASSIFIED_MARKERS MUST
+        # have an explicit _CLASSIFIED_MARKER_PATTERNS entry. The fall-
+        # back `\b<marker>\b` (still used by `_check_classified_markers`
+        # as a defensive belt-and-suspenders for marker-list mutations
+        # at runtime) is the exact shape that the cycle-2 F11 fix
+        # documented as broken for the SCI marker — common-English-
+        # subword false positives. Catch the contract violation at
+        # init time so a future maintainer can't silently re-introduce
+        # the F11 false-positive class by adding a marker name without
+        # a matching pattern entry.
+        missing_patterns = set(self.CLASSIFIED_MARKERS) - set(self._CLASSIFIED_MARKER_PATTERNS)
+        if missing_patterns:
+            raise RuntimeError(
+                f"CLASSIFIED_MARKERS contains markers missing from "
+                f"_CLASSIFIED_MARKER_PATTERNS: {sorted(missing_patterns)}. "
+                "Every marker MUST have an explicit pattern entry to avoid "
+                "the cycle-2 F11 false-positive class (bare `\\b<marker>\\b` "
+                "matching common English subwords)."
+            )
         self._compiled_pii: dict[str, re.Pattern[str]] = {
             name: re.compile(pattern, re.IGNORECASE) for name, pattern in self.PII_PATTERNS.items()
         }
@@ -689,7 +776,15 @@ class SecurityScanner:
             if re.search(pattern, query_upper):
                 flags.append(f"classified_marker:{name}")
                 force_offline = True
-                logger.warning("Classified marker detected, forcing offline: %s", name)
+        # NB: classified-marker WARNING logging is intentionally NOT
+        # emitted here. `scan()` calls this method TWICE in TACTICAL
+        # mode (once on the normalized form, once on the spaced form)
+        # and the two flag sets are then deduped — so logging at the
+        # per-call site would double-emit warnings for the
+        # most-common case (where both forms produce the same flags).
+        # `scan()` emits a single deduped WARNING per unique
+        # classified marker AFTER the two-form merge. (GPT 5.4 Pro
+        # non-blocking observation on PR #73; cycle-3 follow-up.)
         return flags, force_offline
 
     def _check_injection(self, query: str) -> tuple[list[str], bool]:
@@ -809,6 +904,14 @@ class SecurityScanner:
             classified_flags = list(dict.fromkeys(norm_classified + spaced_classified))
             flags.extend(classified_flags)
             force_offline = norm_fo or spaced_fo
+            # Emit ONE WARNING per unique classified-marker flag after
+            # the two-form dedupe (so the common "both forms match"
+            # case doesn't double-log). GPT 5.4 Pro non-blocking
+            # observation on PR #73; cycle-3 follow-up.
+            for flag in classified_flags:
+                # flag is of the form "classified_marker:<NAME>"
+                _, _, name = flag.partition(":")
+                logger.warning("Classified marker detected, forcing offline: %s", name)
 
         # Check injection against BOTH forms — stripped catches intra-word
         # bypass (i\u200bgnore → ignore), spaced catches inter-word bypass
@@ -819,12 +922,22 @@ class SecurityScanner:
         flags.extend(injection_flags)
         is_blocked = is_blocked or injection_blocked
 
-        # Check custom blocked patterns from context
-        custom_flags, custom_blocked = self._check_custom_patterns(
+        # Cycle-3 F1: custom blocked patterns now scan BOTH forms
+        # (parallel to PII/PHI/classified/injection). A consumer-
+        # configured multi-token pattern like `proprietary\s+formula`
+        # was previously evadable via inter-word ZWSP (stripped form
+        # fuses to "proprietaryformula" → no `\s+` match; spaced form
+        # would catch but was never checked). Dedup flags via
+        # insertion-order dict; OR the two `is_blocked` results.
+        custom_flags_n, custom_blocked_n = self._check_custom_patterns(
             normalized_query, context.blocked_patterns
         )
+        custom_flags_s, custom_blocked_s = self._check_custom_patterns(
+            spaced_query, context.blocked_patterns
+        )
+        custom_flags = list(dict.fromkeys(custom_flags_n + custom_flags_s))
         flags.extend(custom_flags)
-        is_blocked = is_blocked or custom_blocked
+        is_blocked = is_blocked or custom_blocked_n or custom_blocked_s
 
         result = ScanResult(flags=flags, is_blocked=is_blocked, force_offline=force_offline)
 
