@@ -143,6 +143,103 @@ Phase-2 cycle-2 ledger at `.quality-gate/cycle2-findings.md`; GPT 5.4
 Pro security design dialogue transcript at
 `.quality-gate/cycle2-security-dialogue.md`.
 
+### Fixed (cycle-3 `/quality-gate` follow-up to PR #73, 2026-05-26)
+
+GPT 5.4 Pro's REQUEST_CHANGES verdict on PR #73 (cycle-2) blocked
+merge with a primary concern (SCI false positives on URL/path
+forms) plus a non-blocking duplicate-warning observation. In parallel,
+a cycle-3 Lane-B verification sweep against the cycle-2 fixes
+identified eight related gaps — incomplete-closure issues where the
+cycle-2 fix addressed a documented bypass class but missed adjacent
+variants of the same class. Four atomic commits close all 11
+findings.
+
+**Security (`security.py`)** — commit `3e20b59`:
+
+  - **SCI IC-banner-context-anchored** (GPT BLOCKER + cycle-3 F4):
+    cycle-2's `(?<=//)SCI\b|\bSCI(?=//|/[A-Z])` matched
+    `https://sci-fi.example` and `/sci/readme`. Now requires real IC
+    banner context: SCI preceded by a known classification level
+    (TS / S / C / U / TOP SECRET / SECRET / CONFIDENTIAL /
+    UNCLASSIFIED) + `//`, or followed by a known compartment suffix
+    (`//(NOFORN|REL|FGI|IMCON|ORCON|PROPIN|RELIDO|RSEN|HUMINT|COMINT|
+    SI|TK|HCS)\b` or `/REL\b`).
+  - **`_ALL_INVISIBLE_RE` expansion** (cycle-3 F2, HIGH C3): added
+    VS-1..16 (U+FE00-FE0F), Mongol VS-1..3 (U+180B-D), Egyptian
+    Hieroglyph Format Controls (U+13430-13438), Brahmi Number Joiner
+    (U+1107F), LANGUAGE TAG (U+E0001), and the Variation Selectors
+    Supplement (U+E0100-E01EF). Cycle-2's expansion missed these
+    NFKC-stable invisibles, leaving inter-word PHI/classified/
+    injection bypasses open.
+  - **`_UNICODE_NEWLINE_RE` expansion** (cycle-3 F3, MEDIUM C3):
+    NEL (U+0085), VT (U+000B), FF (U+000C) are `str.splitlines()`-
+    recognized line terminators that bypassed the line-anchored
+    conversation-separator injection pattern. Now normalized to `\n`.
+  - **Custom blocked patterns two-form scan** (cycle-3 F1, MEDIUM C3):
+    cycle-2's two-form scan covered PII/PHI/classified/injection but
+    NOT custom patterns. Now mirrors PII/PHI/classified.
+  - **SSN/CCN whitespace tolerance** (cycle-3 F5/F6, LOW C2):
+    `\b\d{3}\s*-\s*\d{2}\s*-\s*\d{4}\b` (SSN) and
+    `\b\d{4}[\s-]*\d{4}[\s-]*\d{4}[\s-]*\d{4}\b` (CCN) now accept
+    double-space / tab variants.
+  - **Init-time contract for `CLASSIFIED_MARKERS`** (cycle-3 F7,
+    LOW C1): every marker in `CLASSIFIED_MARKERS` MUST have a
+    matching entry in `_CLASSIFIED_MARKER_PATTERNS`. Catches the
+    F11-class false-positive risk at scanner instantiation time.
+  - **Log-after-dedup for classified-marker warnings** (GPT
+    non-blocking observation): the two-form classified scan no
+    longer double-emits warnings; `scan()` emits one WARNING per
+    unique marker after the two-form dedupe.
+
+**Analyzer (`analyzer.py`)** — commit `ec5fa55`:
+
+  - **Inflection regression fix** (cycle-3 A1, MEDIUM C3): cycle-2's
+    bare `\b(compare|versus|...)\b` alternations dropped inflected
+    forms ("compared", "comparing", "comparison", "comparisons",
+    "differences", "verifying", "verifies", "verified",
+    "verification", "confirmed", "confirms", "confirming",
+    "confirmation", "accurately") that the pre-fix substring code
+    correctly caught. All 14 inflected queries now correctly route
+    to MULTI_SOURCE again. False-positive guards from cycle-2
+    preserved ("best" inside "asbestos" still rejected).
+
+**Learning (`learning.py`)** — commit `31f5d0c`:
+
+  - **`ts` format alignment with SQLite schema** (cycle-3 A3, LOW
+    C2): `record_feedback`'s `ts = datetime.now(UTC).isoformat()`
+    populated `timestamp` + `last_updated` upserts in mixed format
+    with the schema's `datetime('now')` DEFAULT. Latent
+    cycle-2-F4-class data-loss bug. Now uses
+    `strftime("%Y-%m-%d %H:%M:%S")`.
+
+**Reporter (`redteam/reporter.py`)** — commit `0c24ed3`:
+
+  - **Conditional summary parenthetical** (cycle-3 A2, LOW C2):
+    `(top-N by novelty score shown below)` only appears when
+    `len(undetected) > len(novel)`. Previously read
+    `"Undetected payloads: 0 (top-0 by novelty score shown below)"`
+    in the all-detected case.
+
+**Regression-test additions** (~70 new test methods across 4 files):
+
+  - `tests/test_security_two_form_scan.py`: 52 new cycle-3 cases
+    (custom blocked two-form, 11 expanded invisibles × {PHI,
+    injection}, 5 newline-class cases, 18 SCI banner-context cases,
+    8 PII whitespace cases, init-contract assertion, log-dedup
+    assertion)
+  - `tests/test_analyzer_word_boundary.py`: 16 new cycle-3 cases
+    (14 inflection positives + 2 cycle-2-FP-still-rejected negative
+    controls)
+  - `tests/test_learning_prune_datetime_format.py`: 2 new cycle-3
+    cases (timestamp + last_updated format consistency)
+  - `tests/test_redteam_bughunt_cycle2.py`: 3 new cycle-3 cases
+    (conditional parenthetical present / absent / placeholder)
+
+Verification: `ruff check` + `ruff format --check` clean (58 files);
+`mypy --strict src/aipea/` clean (28 source files); full suite
+**1588 passed / 35 skipped / 5 xfailed in 26.43 s** at coverage
+**91.92%** (was 1515 / 91.60% pre-cycle-3). The 5 `xfails` unchanged.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator
