@@ -273,7 +273,19 @@ class AdaptiveLearningEngine:
         clamped = max(-1.0, min(1.0, score))
         qtype = query_type.value
         qhash = hashlib.sha256(qtype.encode()).hexdigest()[:16]
-        ts = datetime.now(UTC).isoformat()
+        # Cycle-3 A3: match the schema's `datetime('now')` SQLite format
+        # so the `timestamp` and `last_updated` columns share ONE
+        # canonical text format across the INSERT (Python-provided
+        # `ts`) and ON-CONFLICT-UPDATE paths (also Python-provided via
+        # `ts`). Pre-fix, `last_updated`'s schema DEFAULT used SQLite
+        # format ("YYYY-MM-DD HH:MM:SS") for new rows but the upsert
+        # overwrote with isoformat ("YYYY-MM-DDTHH:MM:SS.ffffff+00:00"),
+        # leaving the column in mixed formats across rows — the same
+        # latent class as the cycle-2 F4 prune_events bug. No live
+        # consumer does lex comparisons on these columns today, but
+        # aligning the format now prevents future re-introduction of
+        # the F4 data-loss bug class on any future age-based pruning.
+        ts = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         taint_json = json.dumps(list(taint)) if taint else None
 
         try:

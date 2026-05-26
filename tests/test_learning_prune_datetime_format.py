@@ -129,3 +129,59 @@ class TestPruneDatetimeFormatBoundary:
             assert eng.get_stats()["total_events"] == 1
         finally:
             eng.close()
+
+
+# =============================================================================
+# CYCLE-3 A3 follow-up — `ts` (used for timestamp + last_updated) now
+# aligned with the schema's SQLite-default format
+# =============================================================================
+
+
+class TestCycle3TimestampFormatConsistency:
+    """CYCLE-3 A3 (LOW C2): the cycle-2 F4 fix aligned `prune_events`
+    cutoff with the schema's SQLite datetime format, but
+    `record_feedback`'s `ts` still used isoformat for `timestamp` +
+    `last_updated`. Latent format mismatch class (no live consumer
+    does lex comparisons, but any future age-based pruning on those
+    columns would re-introduce the cycle-2 F4 data-loss bug).
+    """
+
+    def test_record_feedback_writes_sqlite_format_for_timestamp(self, tmp_path: Path) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+
+        eng = AdaptiveLearningEngine(db_path=tmp_path / "ts_fmt.db")
+        try:
+            eng.record_feedback(QueryType.TECHNICAL, "deep_research", 0.5)
+            assert eng._conn is not None
+            row = eng._conn.execute("SELECT timestamp FROM learning_events").fetchone()
+            ts = row["timestamp"]
+            # SQLite format: "YYYY-MM-DD HH:MM:SS" — space-separated,
+            # second precision, NO timezone offset, NO microseconds, NO 'T'.
+            assert len(ts) == 19, f"expected len 19, got {len(ts)}: {ts!r}"
+            assert ts[10] == " ", f"expected space at position 10, got {ts[10]!r}: {ts!r}"
+            assert "T" not in ts, f"isoformat T separator present: {ts!r}"
+            assert "+" not in ts, f"timezone offset present: {ts!r}"
+            assert "." not in ts, f"microseconds fragment present: {ts!r}"
+        finally:
+            eng.close()
+
+    def test_last_updated_format_stable_across_initial_insert_and_upsert(
+        self, tmp_path: Path
+    ) -> None:
+        from aipea.learning import AdaptiveLearningEngine
+
+        eng = AdaptiveLearningEngine(db_path=tmp_path / "lu_fmt.db")
+        try:
+            eng.record_feedback(QueryType.TECHNICAL, "deep_research", 0.5)
+            eng.record_feedback(QueryType.TECHNICAL, "deep_research", 0.7)  # upsert
+            assert eng._conn is not None
+            row = eng._conn.execute(
+                "SELECT last_updated FROM strategy_performance "
+                "WHERE query_type='technical' AND strategy='deep_research'"
+            ).fetchone()
+            ts = row["last_updated"]
+            # Same canonical format end-to-end.
+            assert ts[10] == " ", f"expected space at position 10, got {ts[10]!r}: {ts!r}"
+            assert "T" not in ts, f"isoformat T separator present: {ts!r}"
+        finally:
+            eng.close()
