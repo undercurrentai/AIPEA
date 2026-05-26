@@ -22,6 +22,7 @@ Refs:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from typing import Any
@@ -119,6 +120,52 @@ class OpenAIResponsesProvider:
                     )
         return results
 
+    @staticmethod
+    def _parse_create_response(
+        create_resp: httpx.Response,
+    ) -> tuple[str | None, str | None]:
+        """Parse a 2xx create-response body into ``(response_id, error)``.
+
+        Returns:
+            ``(response_id, None)`` on the happy path — a valid JSON object
+            carrying an ``"id"`` field.
+            ``(None, "non_json")`` if the body is not valid JSON OR is
+            valid JSON whose top level is not a dict (a top-level list,
+            null, number, or string).
+            ``(None, "missing_field")`` if the body is a valid dict but
+            lacks an ``"id"`` key.
+
+        Providers MUST NOT raise on any of these failure modes — the
+        documented contract is that failures are tagged via
+        ``RedTeamResult.error`` (see its docstring; ``"non_json"`` is
+        listed as a canonical tag) so the batch keeps going and the
+        budget ledger sees the failure. Without this helper, the
+        previous inline ``created = create_resp.json()`` allowed
+        ``json.JSONDecodeError`` (a ``ValueError`` subclass, NOT an
+        ``httpx.HTTPError``) to escape ``_one_generation`` and crash the
+        whole batch, and ``created.get("id")`` raised ``AttributeError``
+        on a top-level list/null body.
+        """
+        try:
+            created = create_resp.json()
+        except (json.JSONDecodeError, ValueError):
+            logger.warning(
+                "OpenAI Responses create: non-JSON body (status=%s, len=%d)",
+                create_resp.status_code,
+                len(create_resp.text),
+            )
+            return None, "non_json"
+        if not isinstance(created, dict):
+            logger.warning(
+                "OpenAI Responses create: non-dict JSON (type=%s)",
+                type(created).__name__,
+            )
+            return None, "non_json"
+        rid = created.get("id")
+        if not rid or not isinstance(rid, str):
+            return None, "missing_field"
+        return rid, None
+
     async def _one_generation(
         self,
         *,
@@ -158,10 +205,14 @@ class OpenAIResponsesProvider:
                 )
                 error = "http_error"
             else:
-                created = create_resp.json()
-                response_id = created.get("id")
-                if not response_id:
-                    error = "missing_field"
+                response_id, parse_error = self._parse_create_response(create_resp)
+                if response_id is None:
+                    # Helper contract: response_id is None iff parse_error
+                    # is set (one of "non_json" / "missing_field"). The
+                    # `response_id is None` narrowing (vs `parse_error is
+                    # not None`) is what lets mypy strict see `response_id`
+                    # as `str` in the else-branch below.
+                    error = parse_error
                 else:
                     # Reuse ONE sync httpx.Client across all poll iterations
                     # (was: per-iteration TLS+TCP handshake — up to 300/run

@@ -148,11 +148,12 @@ class RedTeamReporter:
         per_tech = Counter(r.technique.value for r in valid)
         per_tech_caught = Counter(r.technique.value for r in valid if r.detected)
         cost_total = sum(r.cost_usd for r in results)
-        novel = sorted(
-            (r for r in valid if not r.detected),
-            key=lambda r: r.novelty_score,
-            reverse=True,
-        )[:10]
+        # Track the full undetected set separately from the top-10 display
+        # slice — the summary line below must report the TRUE undetected
+        # count, not the capped `len(novel)` (which silently saturates at
+        # 10 in a security audit artifact committed to git).
+        undetected = [r for r in valid if not r.detected]
+        novel = sorted(undetected, key=lambda r: r.novelty_score, reverse=True)[:10]
 
         lines: list[str] = [
             f"# Red-Team Report — {date_stamp} ({provider})",
@@ -163,7 +164,8 @@ class RedTeamReporter:
             "",
             f"- Total valid payloads: {total}",
             f"- Detected by SecurityScanner: {detected} ({catch_rate:.1f}%)",
-            f"- Novel bypasses (top-10 by novelty score): {len(novel)}",
+            f"- Undetected payloads: {len(undetected)} "
+            f"(top-{len(novel)} by novelty score shown below)",
             f"- Provider-error rows (skipped): {len(errored)}",
             f"- Total estimated cost: ${cost_total:.4f}",
             "",
