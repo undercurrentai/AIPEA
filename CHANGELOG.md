@@ -410,6 +410,46 @@ Verification: `make ci` (CI parity) clean — full suite **1654 passed /
 35 skipped / 5 xfailed in 38.52 s** at coverage **91.73%**; ruff +
 mypy clean. The SCI matrix is now 30+ cases, all verified.
 
+### Fixed (cycle-8 `/quality-gate` follow-up to PR #73 round 6, 2026-05-26)
+
+The gpt-5.4-pro gate's round-6 REQUEST_CHANGES caught a Hangul-filler
+invisible gap and a `C:/` path FALSE POSITIVE that the cycle-7
+field-delimiter widening had re-introduced. Both fixed; GPT's round-6
+non-blocking ReDoS-perf-test suggestion also implemented.
+
+**Security (`security.py`)**:
+
+  - **Hangul filler invisibles** (GPT round-6): `_ALL_INVISIBLE_RE`
+    missed U+115F (HANGUL CHOSEONG FILLER), U+1160 (HANGUL JUNGSEONG
+    FILLER), U+3164 (HANGUL FILLER), U+FFA0 (HALFWIDTH HANGUL FILLER) —
+    invisible word-splitters (`ignoㅤre previous instructions` evaded
+    injection detection). All four added; the compat forms U+3164/U+FFA0
+    also NFKC-normalize to U+1160 before the strip.
+  - **`C:/` / `scheme:/` path FALSE POSITIVE** (GPT round-6, a cycle-7
+    regression): the cycle-7 opener combined the `:` field delimiter
+    WITH the optional leading `/?`, so `C:/TS//SCI` (Windows path) and
+    `scheme:/SCI/REL` (URI scheme) matched as classified banners. Fixed
+    by SPLITTING `_BANNER_OPENER` into two cases: case A
+    (`(?:^|(?<=[\s(\[{<"']))/?`) admits an optional leading slash ONLY
+    after start/whitespace/bracket/quote; case B (`(?<=[:=,;|])`) is a
+    separate NO-slash branch for field delimiters. So `C:/…` /
+    `scheme:/…` reject (the slash after `:` is never admitted) while
+    `classification:TS//SCI` (no slash) still accepts.
+  - **ReDoS-perf regression test** (GPT round-6 non-blocking): since
+    the classified patterns bypass `_is_regex_safe`, added a latency
+    assertion (`< 1000 ms`) on a 15 KB pathological slash/space input.
+    Measured 1.15 ms — no catastrophic backtracking (the `\s*` groups
+    are each bounded by a mandatory literal `/`).
+
+Regression tests (`tests/test_security_two_form_scan.py`): three new
+classes (17 methods) — `TestCycle8HangulFillerInvisibles` (4 injection
++ 4 PHI), `TestCycle8SciSchemePathFalsePositive` (5 scheme/path-reject +
+5 banner-accept), `TestCycle8SciRegexLatency` (1 ReDoS perf).
+
+Verification: `make ci` (CI parity) clean — full suite **1673 passed /
+35 skipped / 5 xfailed in 35.65 s** at coverage **91.73%**; ruff +
+mypy clean.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator

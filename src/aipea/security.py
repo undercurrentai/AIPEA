@@ -150,8 +150,8 @@ _ALL_INVISIBLE_RE = re.compile(
     # control (Cc), or non-visible mark (Mn) used as an invisible
     # joiner. Tested in tests/test_security_two_form_scan.py +
     # cycle-3 verification.
-    "[\u034f\u061c\u00ad\u180b-\u180e\u200b-\u200f\u2028-\u202f"
-    "\u2060-\u206f\ufe00-\ufe0f\ufeff\ufff9-\ufffb"
+    "[\u034f\u061c\u00ad\u115f\u1160\u180b-\u180e\u200b-\u200f\u2028-\u202f"
+    "\u3164\u2060-\u206f\ufe00-\ufe0f\uffa0\ufeff\ufff9-\ufffb"
     "\U0001107f\U00013430-\U00013438"
     "\U000e0001\U000e0020-\U000e007f\U000e0100-\U000e01ef]"
 )
@@ -492,7 +492,20 @@ class SecurityScanner:
     # by a word char, and `https:` + `/?` lands on the second `/` of
     # `://`, not a level token). The lookbehind is fixed-width (1 char),
     # a legal Python `re` lookbehind.
-    _BANNER_OPENER: ClassVar[str] = r"(?:^|(?<=[\s(\[{<\"':=,;|]))/?"
+    # SPLIT into two cases (cycle-8, GPT 5.4 Pro PR #73 round 6):
+    #   CASE A — start-of-input OR whitespace/bracket/quote/angle/paren,
+    #     THEN an OPTIONAL leading slash `/?` (admits leading-slash
+    #     banners `/TS//SCI`, ` /SCI/REL`).
+    #   CASE B — after a FIELD delimiter (`: = , ; |`), with NO optional
+    #     slash (admits `classification:TS//SCI`, `label:S//SCI`).
+    # The cycle-7 single-class form combined `:` WITH the optional `/?`,
+    # which re-opened a path FP: `C:/TS//SCI` (Windows path) and
+    # `scheme:/SCI/REL` (URI scheme) matched because `:` was a clean
+    # opener AND the `/` after it was consumed by `/?`. Separating the
+    # cases means a slash is admitted ONLY after start/whitespace/
+    # bracket (never after a field delimiter), so `C:/…` and `scheme:/…`
+    # reject while the no-slash field-delimiter banners still match.
+    _BANNER_OPENER: ClassVar[str] = r"(?:(?:^|(?<=[\s(\[{<\"']))/?|(?<=[:=,;|]))"
 
     # SCI tail guard for the `<level>//SCI` branch (cycle-7 round 5):
     # after `SCI`, allow a valid banner tail (`//<compartment>`, `/REL`)
