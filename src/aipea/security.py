@@ -473,9 +473,20 @@ class SecurityScanner:
     _CLASSIFIED_LEVEL_PREFIXES: ClassVar[str] = (
         r"(?:TS|S|C|U|TOP\s+SECRET|SECRET|CONFIDENTIAL|UNCLASSIFIED)"
     )
-    _SCI_COMPARTMENT_SUFFIXES: ClassVar[str] = (
-        r"(?:NOFORN|REL|FGI|IMCON|ORCON|PROPIN|RELIDO|RSEN|HUMINT|COMINT|SI|TK|HCS)"
-    )
+    # Generic compartment / control-marking token after `SCI//` (cycle-11,
+    # GPT 5.4 Pro PR #73 round 9): the prior closed allow-list
+    # (NOFORN|REL|FGI|...) was a TACTICAL false negative for valid but
+    # UNLISTED compartments / codewords (GAMMA, ECI, FVEY, special-access
+    # program names, etc.) — IC compartment names are open-ended. The
+    # DOUBLE-slash branch now accepts any all-caps banner token
+    # `[A-Z][A-Z0-9-]{1,40}` (length-bounded; no ReDoS — verified ~3 ms on
+    # a 50 K-char token). The SINGLE-slash branch stays restricted to
+    # `/REL` (the only single-slash continuation that is unambiguously a
+    # banner and not a path segment), so `/sci/readme` etc. still reject.
+    # Subword false positives stay closed by the `_BANNER_OPENER`
+    # clean-boundary requirement (e.g. `ASCII//CODE` rejects — the SCI is
+    # preceded by `A`).
+    _SCI_COMPARTMENT_PATTERN: ClassVar[str] = r"[A-Z][A-Z0-9-]{1,40}"
     # Banner opener (cycle-6, GPT 5.4 Pro PR #73 round 4; widened cycle-7
     # round 5): start-of-input OR a clean opening delimiter, followed by
     # an OPTIONAL single leading slash. The optional `/?` admits
@@ -614,7 +625,7 @@ class SecurityScanner:
             + r"|"
             + _BANNER_OPENER
             + r"SCI(?:\s*/\s*/\s*"
-            + _SCI_COMPARTMENT_SUFFIXES
+            + _SCI_COMPARTMENT_PATTERN
             + r"\b"
             + _SCI_CONT_GUARD
             + r"|\s*/\s*REL\b"

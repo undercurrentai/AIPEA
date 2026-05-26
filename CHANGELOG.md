@@ -521,6 +521,37 @@ Verification: `make ci` (CI parity) clean — full suite **1748 passed /
 35 skipped / 5 xfailed in 50.66 s** at coverage **91.96%**; ruff +
 mypy clean.
 
+### Fixed (cycle-11 `/quality-gate` follow-up to PR #73 round 9, 2026-05-26)
+
+GPT 5.4 Pro's round-9 REQUEST_CHANGES: the SCI compartment allow-list
+(`NOFORN|REL|FGI|...`) was a CLOSED set, a TACTICAL false negative for
+valid but UNLISTED compartments / codewords (GAMMA, ECI, FVEY,
+special-access program names — IC compartment names are open-ended).
+
+**Security (`security.py`)**:
+
+  - **Generic compartment token** (GPT round 9): the DOUBLE-slash branch
+    `SCI//<compartment>` now accepts any all-caps banner token
+    `[A-Z][A-Z0-9-]{1,40}` (`_SCI_COMPARTMENT_PATTERN`) instead of the
+    hardcoded closed list. The SINGLE-slash branch stays restricted to
+    `/REL` (the only single-slash continuation unambiguously a banner,
+    not a path), so `/sci/readme`, `/sci/rel/index.html`, `scheme:/SCI`
+    still reject. Subword false positives stay closed by the
+    `_BANNER_OPENER` clean-boundary requirement (`ASCII//CODE` rejects —
+    the SCI is preceded by `A`). Length-bounded (≤41 chars); no ReDoS
+    (verified ~3 ms on a 50 K-char token). This removes the closed-list
+    false-negative class entirely — the SCI grammar's four FN dimensions
+    (invisibles, leading-slash runs, field delimiters, compartments) are
+    now all generalized rather than enumerated.
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle11SciGenericCompartment` (7 unlisted/listed-compartment accept
++ 5 path/subword reject + 1 ReDoS-latency).
+
+Verification: `make ci` (CI parity) clean — full suite **1761 passed /
+35 skipped / 5 xfailed in 38.07 s** at coverage **91.74%**; ruff +
+mypy clean.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator

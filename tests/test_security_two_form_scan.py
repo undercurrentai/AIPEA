@@ -1509,3 +1509,76 @@ class TestCycle10SciFieldValueDoubleSlash:
         assert elapsed_ms < 1000, (
             f"field-delim slash-run scan took {elapsed_ms:.1f} ms — possible ReDoS"
         )
+
+
+class TestCycle11SciGenericCompartment:
+    """CYCLE-11 (GPT round 9): the SCI compartment allow-list was a CLOSED
+    set (NOFORN|REL|FGI|...), a TACTICAL false negative for valid but
+    unlisted compartments/codewords (GAMMA, ECI, FVEY, special-access
+    program names — IC compartments are open-ended). The DOUBLE-slash
+    branch now accepts any all-caps banner token `[A-Z][A-Z0-9-]{1,40}`;
+    the SINGLE-slash branch stays restricted to `/REL`.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "//SCI//GAMMA",
+            "classification=//SCI//XYZ",
+            "SCI//ECI",
+            "TS//SCI//FVEY",
+            "SCI//SPECIAL-ACCESS",
+            "SCI//NOFORN",  # listed compartment still works
+            "SCI//NOFORN//ORCON",  # chained
+        ],
+        ids=["gamma", "field_xyz", "eci", "fvey", "special_access", "noforn", "chained"],
+    )
+    def test_unlisted_compartment_double_slash_accepts(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"generic compartment not flagged: {payload!r}; flags={result.flags}"
+        )
+        assert result.force_offline is True
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "/sci/readme",  # single-slash non-REL → path → reject
+            "/sci/rel/index.html",  # /REL + path continuation → reject
+            "scheme:/SCI/REL",  # single slash after field delim → reject
+            "ascii//code reference",  # SCI inside ASCII (preceded by 'A') → reject
+            "https://example.com//SCI/REL",  # //SCI after host → reject
+        ],
+        ids=["path_readme", "rel_path", "scheme", "ascii_subword", "url_host"],
+    )
+    def test_generic_compartment_does_not_overmatch_paths(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, (
+            f"generic compartment over-matched: {payload!r}; flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    def test_generic_compartment_no_redos(
+        self, scanner: SecurityScanner, tactical_ctx: SecurityContext
+    ) -> None:
+        import time
+
+        payload = "//SCI//" + "A" * 50000
+        t0 = time.perf_counter()
+        scanner.scan(payload, context=tactical_ctx)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        assert elapsed_ms < 1000, (
+            f"generic-compartment scan took {elapsed_ms:.1f} ms — possible ReDoS"
+        )
