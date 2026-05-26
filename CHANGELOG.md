@@ -450,6 +450,47 @@ Verification: `make ci` (CI parity) clean — full suite **1673 passed /
 35 skipped / 5 xfailed in 35.65 s** at coverage **91.73%**; ruff +
 mypy clean.
 
+### Fixed (cycle-9 `/quality-gate` follow-up to PR #73 round 7, 2026-05-26)
+
+GPT 5.4 Pro's round-7 REQUEST_CHANGES (a leading-double-slash SCI false
+negative) plus Claude Opus 4.6's round-7 APPROVE-with-consistency-note
+(PII/PHI duplicate logging).
+
+**Security (`security.py`)**:
+
+  - **Leading double-slash SCI portion markings** (GPT round 7): the
+    cycle-8 `_BANNER_OPENER` admitted only `/?` (zero-or-one leading
+    slash), so canonical IC portion markings with a leading DOUBLE
+    slash — `//SCI//TK`, `//SCI/REL` — at a clean boundary did not
+    match (a TACTICAL false negative; `TS`/`REL`/`TK` are not
+    standalone markers, so nothing else caught them). Case A now uses
+    `/*` (a leading slash-RUN of any length), so 0/1/2/N leading
+    slashes match WHEN the run starts at a clean boundary
+    (start-of-input / whitespace / bracket). Mid-URI/path slash runs
+    still reject: `https://example.com//SCI/REL` (the `//` is preceded
+    by `.com`), `path/to//SCI//TK` (preceded by `o`), `//SCI/readme`
+    (single-slash path continuation after SCI). `/*` is a simple star
+    on one char anchored at a clean boundary — no ReDoS (verified ~1.4
+    ms on a 20 K-slash adversarial input; a regression test pins this).
+  - **PII/PHI duplicate WARNING logs** (Claude round-7 consistency
+    note): `_check_pii` / `_check_phi` logged per-match, and the
+    two-form scan calls them twice, so a clean `SSN: 123-45-6789`
+    (matching in both normalized + spaced forms) emitted the WARNING
+    twice before the flag-level dedup. Logging moved to `scan()`
+    post-dedup — one WARNING per unique flag — matching the
+    classified-marker dedup-then-log pattern established earlier in
+    this PR. Cosmetic (no security/correctness impact); closes the
+    last log-consistency gap.
+
+Regression tests (`tests/test_security_two_form_scan.py`): two new
+classes (12 methods) — `TestCycle9SciLeadingDoubleSlashBanners` (6
+double-slash-accept + 5 URI/path-reject + 1 ReDoS-latency) and
+`TestCycle9PiiPhiLogDedup` (1 PII + 1 PHI single-log-per-unique-flag).
+
+Verification: `make ci` (CI parity) clean — full suite **1736 passed /
+35 skipped / 5 xfailed in 35.86 s** at coverage **91.74%**; ruff +
+mypy clean.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator

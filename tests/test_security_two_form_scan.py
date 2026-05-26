@@ -1319,3 +1319,121 @@ class TestCycle8InvisibleClassIsDefaultIgnorableComplete:
         from aipea.security import _ALL_INVISIBLE_RE
 
         assert _ALL_INVISIBLE_RE.search(ch) is None, f"{ch!r} wrongly classified invisible"
+
+
+# =============================================================================
+# CYCLE-9 follow-up — GPT 5.4 Pro round-7 (//SCI) + Claude round-7 (PII/PHI logs)
+# =============================================================================
+
+
+class TestCycle9SciLeadingDoubleSlashBanners:
+    """CYCLE-9 (GPT round 7): canonical IC portion markings carry a
+    LEADING DOUBLE slash — `//SCI//TK`, `//SCI/REL` — which the cycle-8
+    `/?` (zero-or-one) opener could not match (a TACTICAL false
+    negative). `_BANNER_OPENER` case A now uses `/*` (a leading
+    slash-RUN at a clean boundary), so 0/1/2/N leading slashes all match
+    when the run starts at start-of-input / whitespace / bracket, while
+    mid-URI/path slash runs (preceded by a word char or `:`) still
+    reject.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "//SCI/REL",
+            "//SCI//TK",
+            " //SCI//NOFORN",
+            "[//SCI//NOFORN]",
+            "//SCI//TK//ORCON",
+            "Portion marking: //SCI/REL",
+        ],
+        ids=["dbl_rel", "dbl_tk", "space_dbl", "bracket_dbl", "triple_compartment", "after_label"],
+    )
+    def test_leading_double_slash_banner_accepts(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"leading-double-slash portion marking not flagged: {payload!r}; flags={result.flags}"
+        )
+        assert result.force_offline is True
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "https://example.com//SCI/REL",  # // preceded by '.com' word char
+            "http://x//SCI//TK",  # // preceded by 'x'
+            "path/to//SCI//TK",  # mid-path
+            "//SCI/readme",  # //SCI but /readme single-slash path continuation
+            "C:/TS//SCI",  # field-delim + slash (Windows path)
+        ],
+        ids=["url_dbl", "url_x", "path_mid", "sci_readme_path", "win_path"],
+    )
+    def test_mid_uri_path_slash_run_still_rejects(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, (
+            f"slash-run FP on URI/path: {payload!r}; flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    def test_leading_slash_run_no_redos(
+        self, scanner: SecurityScanner, tactical_ctx: SecurityContext
+    ) -> None:
+        # The `/*` leading-slash run is a simple star on one char anchored
+        # at a clean boundary — assert no catastrophic backtracking on a
+        # 20K-slash adversarial input.
+        import time
+
+        payload = " " + "/" * 20000 + "X"
+        t0 = time.perf_counter()
+        scanner.scan(payload, context=tactical_ctx)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        assert elapsed_ms < 1000, f"slash-run scan took {elapsed_ms:.1f} ms — possible ReDoS"
+
+
+class TestCycle9PiiPhiLogDedup:
+    """CYCLE-9 (Claude Opus 4.6 round-7 consistency note): `_check_pii`
+    and `_check_phi` logged per-match, and the two-form scan calls them
+    twice, so a clean `SSN: 123-45-6789` (matches in both forms) emitted
+    the WARNING twice. Logging moved to `scan()` post-dedup — one WARNING
+    per unique flag — matching the classified-marker dedup-then-log
+    pattern.
+    """
+
+    @pytest.mark.unit
+    def test_pii_warning_emitted_once_when_both_forms_match(
+        self,
+        scanner: SecurityScanner,
+        general_ctx: SecurityContext,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        with caplog.at_level("WARNING", logger="aipea.security"):
+            result = scanner.scan("SSN: 123-45-6789", context=general_ctx)
+        assert any(f == "pii_detected:ssn" for f in result.flags)
+        ssn_warnings = [r for r in caplog.records if "PII detected in query: ssn" in r.getMessage()]
+        assert len(ssn_warnings) == 1, f"expected one PII warning for ssn, got {len(ssn_warnings)}"
+
+    @pytest.mark.unit
+    def test_phi_warning_emitted_once_when_both_forms_match(
+        self,
+        scanner: SecurityScanner,
+        hipaa_ctx: SecurityContext,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        with caplog.at_level("WARNING", logger="aipea.security"):
+            result = scanner.scan("medical record: 12345", context=hipaa_ctx)
+        assert any(f == "phi_detected:mrn" for f in result.flags)
+        mrn_warnings = [
+            r for r in caplog.records if "PHI detected in HIPAA mode: mrn" in r.getMessage()
+        ]
+        assert len(mrn_warnings) == 1, f"expected one PHI warning for mrn, got {len(mrn_warnings)}"

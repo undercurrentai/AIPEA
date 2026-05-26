@@ -510,7 +510,18 @@ class SecurityScanner:
     # cases means a slash is admitted ONLY after start/whitespace/
     # bracket (never after a field delimiter), so `C:/…` and `scheme:/…`
     # reject while the no-slash field-delimiter banners still match.
-    _BANNER_OPENER: ClassVar[str] = r"(?:(?:^|(?<=[\s(\[{<\"']))/?|(?<=[:=,;|]))"
+    #
+    # Case A leading-slash is `/*` (a slash-RUN), not `/?` (cycle-9, GPT
+    # 5.4 Pro PR #73 round 7): canonical IC portion markings carry a
+    # leading double slash — `//SCI//TK`, `//SCI/REL` — which `/?`
+    # (zero-or-one) could not match, a TACTICAL false negative. `/*`
+    # admits a leading slash-run of ANY length, but ONLY at a clean
+    # boundary (start / whitespace / bracket), so mid-URI/path slash
+    # runs still reject: `https://example.com//SCI/REL` (the `//SCI` is
+    # preceded by `m`), `path/to//SCI//TK` (preceded by `o`). `/*` is a
+    # simple star on a single char anchored at a clean boundary — no
+    # ReDoS (verified ~1.4 ms on a 20 K-slash adversarial input).
+    _BANNER_OPENER: ClassVar[str] = r"(?:(?:^|(?<=[\s(\[{<\"']))/*|(?<=[:=,;|]))"
 
     # SCI tail guard for the `<level>//SCI` branch (cycle-7 round 5):
     # after `SCI`, allow a valid banner tail (`//<compartment>`, `/REL`)
@@ -864,11 +875,16 @@ class SecurityScanner:
         Returns:
             List of PII flags detected
         """
+        # NB: no per-match WARNING logging here. `scan()` calls this
+        # method TWICE (normalized + spaced form) and dedups the flags,
+        # so logging at the per-call site would double-emit for the
+        # common case. `scan()` logs once per unique flag after the
+        # two-form dedup — same treatment as classified markers (Claude
+        # Opus 4.6 PR #73 round-7 consistency note).
         flags: list[str] = []
         for name, pattern in self._compiled_pii.items():
             if pattern.search(query):
                 flags.append(f"pii_detected:{name}")
-                logger.warning("PII detected in query: %s", name)
         return flags
 
     def _check_phi(self, query: str) -> list[str]:
@@ -880,11 +896,12 @@ class SecurityScanner:
         Returns:
             List of PHI flags detected
         """
+        # NB: no per-match WARNING logging here — see `_check_pii` note.
+        # `scan()` logs once per unique PHI flag after the two-form dedup.
         flags: list[str] = []
         for name, pattern in self._compiled_phi.items():
             if pattern.search(query):
                 flags.append(f"phi_detected:{name}")
-                logger.warning("PHI detected in HIPAA mode: %s", name)
         return flags
 
     def _check_classified_markers(self, query: str) -> tuple[list[str], bool]:
@@ -1029,6 +1046,12 @@ class SecurityScanner:
             dict.fromkeys(self._check_pii(normalized_query) + self._check_pii(spaced_query))
         )
         flags.extend(pii_flags)
+        # Log once per unique PII flag AFTER the two-form dedup (Claude
+        # Opus 4.6 PR #73 round-7 consistency note — mirrors the
+        # classified-marker dedup-then-log pattern below).
+        for flag in pii_flags:
+            _, _, name = flag.partition(":")
+            logger.warning("PII detected in query: %s", name)
 
         # Check PHI patterns only in HIPAA mode — also two-form,
         # because the multi-word labels (`medical record`,
@@ -1040,6 +1063,10 @@ class SecurityScanner:
                 dict.fromkeys(self._check_phi(normalized_query) + self._check_phi(spaced_query))
             )
             flags.extend(phi_flags)
+            # Log once per unique PHI flag after the two-form dedup.
+            for flag in phi_flags:
+                _, _, name = flag.partition(":")
+                logger.warning("PHI detected in HIPAA mode: %s", name)
 
         # Check classified markers only in TACTICAL mode — also two-
         # form. The "TOP SECRET" multi-word marker has the same
