@@ -184,3 +184,92 @@ class TestDetermineSearchStrategyWordBoundary:
             _make_analysis("Verify the claim that the 2026 election results are accurate")
         )
         assert result == SearchStrategy.MULTI_SOURCE
+
+
+# =============================================================================
+# CYCLE-3 A1 regression — restored inflected forms (cycle-2 word-boundary
+# fix had dropped "compared"/"comparing"/"verifying"/"confirmed"/etc.)
+# =============================================================================
+
+
+class TestCycle3InflectedFormsRestored:
+    """CYCLE-3 A1 (MEDIUM C3): cycle-2 word-boundary alternations were
+    bare ("compare|versus|...") and lost coverage of common English
+    inflections that the pre-fix substring code happened to catch.
+    Restored via explicit inflection alternations while preserving the
+    cycle-2 false-positive guard ("best" still doesn't match
+    "asbestos").
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "How are Python and JavaScript compared in performance?",
+            "Comparing PostgreSQL and MySQL throughput",
+            "Comparison of PostgreSQL and MySQL benchmarks",
+            "Multiple comparisons of database systems",
+            "What are the differences between Rust and Go?",
+        ],
+        ids=["compared", "comparing", "comparison", "comparisons", "differences"],
+    )
+    def test_comparative_inflections_route_to_multi_source(self, payload: str) -> None:
+        analyzer = QueryAnalyzer()
+        result = analyzer._determine_search_strategy(_make_analysis(payload))
+        assert result == SearchStrategy.MULTI_SOURCE, (
+            f"inflected comparative form not detected: {payload!r}; got {result!r}"
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "Is the answer verifying the source?",
+            "Verifies the claim about the experiment",
+            "Verified reports of the incident",
+            "Verification of the 2026 election results",
+            "Are the reports of the incident confirmed?",
+            "The data confirms the hypothesis",
+            "Confirming the analysis pipeline output",
+            "Confirmation of the medical diagnosis",
+            "Describe the event accurately and completely",
+        ],
+        ids=[
+            "verifying",
+            "verifies",
+            "verified",
+            "verification",
+            "confirmed",
+            "confirms",
+            "confirming",
+            "confirmation",
+            "accurately",
+        ],
+    )
+    def test_verification_inflections_route_to_multi_source(self, payload: str) -> None:
+        analyzer = QueryAnalyzer()
+        result = analyzer._determine_search_strategy(_make_analysis(payload))
+        assert result == SearchStrategy.MULTI_SOURCE, (
+            f"inflected verification form not detected: {payload!r}; got {result!r}"
+        )
+
+    @pytest.mark.unit
+    def test_asbestos_still_rejected_after_inflection_expansion(self) -> None:
+        # Negative control: the cycle-2 FP fix MUST still hold.
+        # "best" inside "asbestos" should not match the new alternation
+        # (the new pattern has explicit "best" with `\b` boundaries, so
+        # substring leakage remains prevented).
+        analyzer = QueryAnalyzer()
+        result = analyzer._determine_search_strategy(
+            _make_analysis("Research the health effects of asbestos exposure in older buildings")
+        )
+        assert result != SearchStrategy.MULTI_SOURCE
+
+    @pytest.mark.unit
+    def test_construe_still_rejected_after_inflection_expansion(self) -> None:
+        # Negative control: "true" inside "construe" still rejected.
+        analyzer = QueryAnalyzer()
+        result = analyzer._determine_search_strategy(
+            _make_analysis("Discuss how some critics construe this passage")
+        )
+        assert result != SearchStrategy.MULTI_SOURCE

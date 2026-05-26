@@ -62,11 +62,22 @@ _AMBIGUITY_CONFIDENCE_RE = re.compile(
     re.IGNORECASE,
 )
 _COMPARATIVE_RE = re.compile(
-    r"\b(compare|versus|vs|difference|better|best)\b",
+    # Cycle-3 A1 (MEDIUM C3) — the cycle-2 word-boundary fix
+    # dropped derivational coverage that the pre-fix substring code
+    # correctly handled: "compared", "comparing", "comparison",
+    # "differences" (plural) all routed to QUICK_FACTS instead of
+    # MULTI_SOURCE. Alternations are non-capturing and explicit so
+    # the SAME false-positive guard from cycle-2 holds (the bug was
+    # "best" inside "asbestos" — `\b...\b` still prevents that).
+    r"\b(?:compar(?:e|es|ed|ing|ison|isons)|versus|vs|differenc(?:e|es)|better|best)\b",
     re.IGNORECASE,
 )
 _VERIFICATION_RE = re.compile(
-    r"\b(verify|confirm|fact-check|true|accurate)\b",
+    # Cycle-3 A1 (MEDIUM C3) — same regression class as above:
+    # "verifying", "confirmed", "confirms", "confirmation",
+    # "accurately" were dropped by the cycle-2 word-boundary fix.
+    # Restored via explicit inflection alternations.
+    r"\b(?:verif(?:y|ies|ied|ying|ication)|confirm(?:s|ed|ing|ation)?|fact-check|true|accurate(?:ly)?)\b",
     re.IGNORECASE,
 )
 

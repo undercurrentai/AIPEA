@@ -463,8 +463,8 @@ class TestCycle3F3ExpandedNewlineClass:
             ("\x85", "NEL"),
             ("\x0b", "VT"),
             ("\x0c", "FF"),
-            (" ", "LS"),
-            (" ", "PS"),
+            (chr(0x2028), "LS"),  # U+2028 LINE SEPARATOR
+            (chr(0x2029), "PS"),  # U+2029 PARAGRAPH SEPARATOR
         ],
     )
     def test_conversation_separator_via_unicode_newline(
