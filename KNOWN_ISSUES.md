@@ -486,8 +486,15 @@ as intentional rather than deferred or fixed.
   `TS//SCI//readme`, `TS//SCI/REL/index.html`, `SCI//NOFORN//readme` flag on
   the `TS//SCI` / `TS//SCI/REL` / `SCI//NOFORN` prefix. GPT proposed consuming
   and validating the ENTIRE compartment chain before a match can succeed.
-- **Decision: DECLINED as a deliberate design choice (NOT a deferral).** The
-  proposed change is **security-regressive** for a TACTICAL classified gate:
+- **Decision: DECLINED — and the decline was RATIFIED BY REVIEWER CONSENSUS.**
+  After a round-2 Claude↔GPT `/claude-gpt-dialogue`, **GPT 5.4 Pro WITHDREW the
+  round-16 concern** (2026-05-27): it agreed all three cited cases are true
+  positives, could not produce a genuinely-benign false-positive its fix would
+  correct without suppressing true positives, and concluded "this code is a
+  containment detector for a high-consequence force-offline gate ... matching a
+  complete valid banner prefix at a clean boundary is security-correct." So all
+  three reviewers (Codex, Claude, GPT) now concur. The proposed change is
+  **security-regressive** for a TACTICAL classified gate:
   - Each cited string CONTAINS a complete, valid IC banner at a clean boundary
     (`TS//SCI`, `TS//SCI/REL`, `SCI//NOFORN`). Flagging them is a **true
     positive**, not a false positive — `TS//SCI/REL` is a textbook SCI+REL
@@ -500,8 +507,9 @@ as intentional rather than deferred or fixed.
   - The asymmetry is decisive: a false positive (forcing offline on a
     banner-prefixed path) costs a local-model route; a false negative leaks a
     real banner. The conservative prefix-match is the security-correct default.
-  - Two of three frontier reviewers (Codex, Claude Opus 4.6) PASS the current
-    behavior across all four review rounds (13–16).
+  - All three frontier reviewers concur: Codex + Claude Opus 4.6 PASSED the
+    current behavior across all four rounds (13–16), and GPT 5.4 Pro withdrew
+    its round-16 objection in the resolution dialogue (above).
   - This satisfies the ratified tier-ceiling stopping rule
     (`.quality-gate/cycle17-findings.md`): the change does not fix a real FP
     (the cited cases are TPs) and would reopen the false-NEGATIVE class — so it
