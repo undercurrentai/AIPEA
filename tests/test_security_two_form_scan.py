@@ -1582,3 +1582,87 @@ class TestCycle11SciGenericCompartment:
         assert elapsed_ms < 1000, (
             f"generic-compartment scan took {elapsed_ms:.1f} ms — possible ReDoS"
         )
+
+
+class TestCycle12ApiKeyWhitespace:
+    """CYCLE-12 (GPT round 10): the `api_key` PII pattern matched
+    `api_key` / `api-key` / `apikey` but NOT the whitespace form
+    `api key:` / `api\tkey:` / `api\xa0key:` (NBSP) / `api​key:`
+    (ZWSP). The two-form scan could not close it because the label
+    `api[_-]?key` never accepted a space. Now `api(?:[_-]|\\s+)?key` —
+    the last rigid PII/PHI separator, now whitespace-tolerant.
+    """
+
+    _SECRET = "x" * 25
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "label",
+        ["api_key", "api-key", "apikey", "api key", "api\tkey", "API KEY"],
+        ids=["underscore", "hyphen", "joined", "space", "tab", "caps_space"],
+    )
+    def test_api_key_label_variants_detected(
+        self,
+        scanner: SecurityScanner,
+        general_ctx: SecurityContext,
+        label: str,
+    ) -> None:
+        result = scanner.scan(f"{label}: {'x' * 25}", context=general_ctx)
+        assert any("pii_detected:api_key" in f for f in result.flags), (
+            f"api_key label {label!r} not detected: flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "sep",
+        [chr(0x00A0), chr(0x200B), chr(0x2007)],  # NBSP, ZWSP, FIGURE SPACE
+        ids=["NBSP", "ZWSP", "FIGURE_SPACE"],
+    )
+    def test_api_key_invisible_separator_detected(
+        self,
+        scanner: SecurityScanner,
+        general_ctx: SecurityContext,
+        sep: str,
+    ) -> None:
+        # NBSP/figure-space NFKC-normalize to space; ZWSP is caught by the
+        # two-form spaced scan. All reach `api(?:...|\s+)?key`.
+        result = scanner.scan(f"api{sep}key: {'x' * 25}", context=general_ctx)
+        assert any("pii_detected:api_key" in f for f in result.flags), (
+            f"api_key with invisible separator not detected: flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    def test_benign_api_key_prose_not_flagged(
+        self, scanner: SecurityScanner, general_ctx: SecurityContext
+    ) -> None:
+        # "api key" without a `:`/`=` + 20-char secret must NOT flag.
+        result = scanner.scan("please rotate the api key next week", context=general_ctx)
+        assert not any("pii_detected:api_key" in f for f in result.flags)
+
+
+class TestCycle12SciReadmeBehaviorPinned:
+    """CYCLE-12 (GPT round-10 non-blocking): pin the generic-compartment
+    behavior for `SCI//README`-style tokens so the regex doesn't
+    silently calcify. `SCI//README` at a clean boundary with a `//`
+    compartment delimiter is FLAGGED (conservative — in TACTICAL mode a
+    false positive merely forces offline, while a missed banner leaks
+    classified content). The path form `/sci/readme` (single slash,
+    lowercase) still REJECTS.
+    """
+
+    @pytest.mark.unit
+    def test_sci_double_slash_readme_flags_conservatively(
+        self, scanner: SecurityScanner, tactical_ctx: SecurityContext
+    ) -> None:
+        # `SCI//README` — double-slash compartment shape → flag (the
+        # conservative TACTICAL choice). Documented intentional behavior.
+        result = scanner.scan("marked SCI//README here", context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, result.flags
+
+    @pytest.mark.unit
+    def test_single_slash_path_readme_still_rejects(
+        self, scanner: SecurityScanner, tactical_ctx: SecurityContext
+    ) -> None:
+        # `/sci/readme` — single-slash path → reject (not a banner).
+        result = scanner.scan("see /sci/readme for docs", context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, result.flags

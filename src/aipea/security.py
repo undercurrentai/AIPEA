@@ -387,7 +387,13 @@ class SecurityScanner:
     PII_PATTERNS: ClassVar[dict[str, str]] = {
         "ssn": r"\b\d{3}\s*-\s*\d{2}\s*-\s*\d{4}\b",
         "credit_card": r"\b\d{4}[\s-]*\d{4}[\s-]*\d{4}[\s-]*\d{4}\b",
-        "api_key": r"\b(api[_-]?key)\s*[:=]\s*\S{20,}",
+        # `api(?:[_-]|\s+)?key` accepts the WHITESPACE form `api key:`
+        # (and tab / NBSP-after-NFKC / ZWSP-after-two-form) in addition
+        # to `api_key` / `api-key` / `apikey` (cycle-12, GPT 5.4 Pro
+        # PR #73 round 10). The prior `api[_-]?key` rejected the space
+        # variant, so the two-form scan could NOT close the `api key:
+        # <secret>` bypass — the only remaining rigid PII/PHI separator.
+        "api_key": r"\b(api(?:[_-]|\s+)?key)\s*[:=]\s*\S{20,}",
         "sk_key": r"\bsk-[a-zA-Z0-9_-]{20,}\b",
         "bearer_token": r"\bbearer\s+[a-zA-Z0-9._-]{20,}\b",
         "password": r"(password|passwd|pwd)\s*[:=]\s*\S+",

@@ -552,6 +552,38 @@ Verification: `make ci` (CI parity) clean — full suite **1761 passed /
 35 skipped / 5 xfailed in 38.07 s** at coverage **91.74%**; ruff +
 mypy clean.
 
+### Fixed (cycle-12 `/quality-gate` follow-up to PR #73 round 10, 2026-05-26)
+
+GPT 5.4 Pro's round-10 REQUEST_CHANGES — a NEW-dimension PII finding
+(not SCI; cycle-11 satisfied GPT on SCI, which dropped to non-blocking
+notes): the `api_key` PII pattern's label `api[_-]?key` matched
+`api_key` / `api-key` / `apikey` but NOT the whitespace form
+`api key:` / `api\tkey:` / `api\xa0key:` (NBSP) / `api​key:` (ZWSP) —
+so an API-key secret with a space evaded PII detection even with the
+two-form scan (the label never accepted a space).
+
+**Security (`security.py`)**:
+
+  - **`api_key` whitespace tolerance** (GPT round 10): label widened to
+    `api(?:[_-]|\s+)?key` — accepts underscore, hyphen, OR whitespace
+    between `api` and `key`. This was the LAST rigid PII/PHI separator
+    (audit confirmed SSN/CCN/MRN/DOB/patient_name/TOP-SECRET are all
+    already whitespace-tolerant or single-word); the whitespace-
+    tolerance theme is now comprehensively closed across every pattern.
+  - **`SCI//README` behavior pinned** (GPT round-10 non-blocking): the
+    cycle-11 generic compartment token flags `SCI//README` (double-slash
+    compartment shape → conservative TACTICAL flag) while the path form
+    `/sci/readme` (single-slash, lowercase) rejects. Pinned with tests
+    so the regex doesn't silently calcify.
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle12ApiKeyWhitespace` (6 label-variant + 3 invisible-separator
++ 1 benign-prose) and `TestCycle12SciReadmeBehaviorPinned` (2).
+
+Verification: `make ci` (CI parity) clean — full suite **1773 passed /
+35 skipped / 5 xfailed in 156.55 s** at coverage **92.02%**; ruff +
+mypy clean.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator
