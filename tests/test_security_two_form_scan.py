@@ -2048,3 +2048,104 @@ class TestCycle16SciBannerTerminator:
         assert elapsed_ms < 1000, (
             f"banner-terminator hyphen-run scan took {elapsed_ms:.1f} ms — possible ReDoS"
         )
+
+
+class TestCycle17SciColonBacktickSentenceTerminators:
+    """CYCLE-17 (GPT round 15): the cycle-16 positive banner terminator set
+    `[\\s)\\]}>"',;]` was incomplete and introduced two false NEGATIVES plus
+    left a third uncovered:
+      - COLON-terminated banners (`TS//SCI:`, `Classification: TS//SCI:`) —
+        ubiquitous, and `:` is structurally identical to the `,`/`;` already
+        accepted (a cycle-16 omission).
+      - BACKTICK-wrapped banners (`` `TS//SCI` ``) — markdown inline code, a
+        real evasion vector; backtick was neither a clean opener nor terminator.
+      - SENTENCE-final banners (`TS//SCI.`) — a banner ending a sentence.
+
+    Resolution: added `:` and backtick to the opener clean-boundary class and
+    BOTH SCI terminator guards, plus a sentence-punctuation alternative
+    `[.!?](?=$|\\s)` — `. ! ?` terminate ONLY when immediately followed by
+    end-of-input or whitespace, so `TS//SCI.` flags while `//SCI//TK.bak` and
+    `//SCI//TK.tar.gz` (round-14 path/file suffixes) still REJECT.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "TS//SCI:",  # colon terminator
+            "SCI//TK:",
+            "Classification: TS//SCI: see body",  # colon as field-delim opener AND terminator
+            "`TS//SCI`",  # backtick code-span
+            "`SCI//TK`",
+            "see `TS//SCI` in the doc",
+            "TS//SCI.",  # sentence-final period
+            "SCI//TK.",
+            "Marked TS//SCI! Proceed",  # exclamation + whitespace
+            "Is this SCI//NOFORN?",  # question mark + EOI
+            "TS//SCI. Next sentence.",  # period + space
+        ],
+        ids=[
+            "colon",
+            "colon_tk",
+            "colon_field",
+            "backtick",
+            "backtick_tk",
+            "backtick_inline",
+            "period_eoi",
+            "period_tk",
+            "bang_ws",
+            "question_eoi",
+            "period_ws",
+        ],
+    )
+    def test_colon_backtick_sentence_terminators_flag(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"colon/backtick/sentence banner not flagged: {payload!r}; flags={result.flags}"
+        )
+        assert result.force_offline is True
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "log=//SCI//TK.bak",  # dotted file suffix — '.' NOT before EOI/ws → reject
+            "f=//SCI//TK.bak.old",  # multi-extension
+            "archive=//SCI//TK.tar.gz",
+            "x=//sci//gamma.tmp",
+            "note=//SCI//ZULU-test",  # hyphen suffix (round-14) still rejects
+            "path=//sci//gamma-ray",
+        ],
+        ids=["bak", "bak_old", "tar_gz", "gamma_tmp", "zulu_test", "gamma_ray"],
+    )
+    def test_dotted_hyphen_path_suffix_still_rejects(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, (
+            f"dotted/hyphen path-file suffix wrongly flagged (round-14 regression): "
+            f"{payload!r}; flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    def test_colon_backtick_sentence_no_redos(
+        self, scanner: SecurityScanner, tactical_ctx: SecurityContext
+    ) -> None:
+        import time
+
+        # Adversarial: long run of sentence-punctuation after a banner opener.
+        payload = "//SCI//TK" + "." * 50000
+        t0 = time.perf_counter()
+        scanner.scan(payload, context=tactical_ctx)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        assert elapsed_ms < 1000, (
+            f"sentence-punctuation run scan took {elapsed_ms:.1f} ms — possible ReDoS"
+        )

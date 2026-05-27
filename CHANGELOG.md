@@ -746,6 +746,54 @@ Verification: `make ci` (CI parity) clean — full suite **1826 passed /
 35 skipped / 5 xfailed in 83.02 s** at coverage **91.75%**; ruff +
 mypy clean.
 
+### Fixed (cycle-17 `/quality-gate` follow-up to PR #73 round 15, 2026-05-27)
+
+GPT 5.4 Pro's round-15 REQUEST_CHANGES: the cycle-16 positive banner
+terminator set was incomplete, producing two false NEGATIVES and leaving a
+third uncovered in the SCI scanner.
+
+**Security (`security.py`)**:
+
+  - **Colon terminator** (GPT round 15): `Classification: TS//SCI:` is a
+    ubiquitous banner form, but `:` was absent from the cycle-16 terminator
+    set `[\s)\]}>"',;]` even though it is structurally identical to the `,`
+    and `;` already accepted. Added `:` to both `_SCI_TAIL_GUARD` and
+    `_SCI_CONT_GUARD` (a cycle-16 omission, not a behavior change).
+  - **Backtick opener + terminator** (GPT round 15): markers are routinely
+    wrapped in markdown inline code (`` `TS//SCI` ``); backtick was neither a
+    clean opener nor a clean terminator, so code-span-wrapped banners evaded.
+    Added backtick to `_BANNER_OPENER`'s clean-boundary class and both SCI
+    guards (it joins the quote/bracket set it belongs with).
+  - **Sentence-final punctuation** (GPT round 15): a banner ending a sentence
+    (`TS//SCI.`, `Marked TS//SCI!`, `SCI//NOFORN?`) was missed. Added a nested
+    lookahead alternative `[.!?](?=$|\s)` — `. ! ?` terminate ONLY when
+    immediately followed by end-of-input or whitespace. This flags sentence-
+    final banners while the round-14 dotted path/file suffixes
+    (`//SCI//TK.bak`, `.tar.gz`, `.bak.old`) STILL reject, because the char
+    after the `.` there is not EOI/whitespace.
+  - **Comment correction** (GPT round 15 non-blocking): the per-marker-pattern
+    header comment still claimed matching against `query.upper()`; corrected
+    to reflect the cycle-13 original-case matching (the compile-loop CASE
+    HANDLING comment remains the authoritative source).
+
+ReDoS-safe (verified ~2.7-5 ms on 50 K-char slash/compartment/hyphen and a
+50 K sentence-punctuation adversarial run).
+
+This is the regex-tier completion of the SCI banner-boundary delimiter
+contract — the enumerated ASCII opener/terminator set. Edge cases OUTSIDE
+that set (exotic/non-ASCII delimiters; lowercase-unlisted compartments per
+KNOWN_ISSUES #F13) are the documented regex-tier ceiling deferred to the
+ADR-010 semantic-scan tier. See `.quality-gate/cycle17-findings.md` and the
+Claude↔GPT tier-boundary dialogue.
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle17SciColonBacktickSentenceTerminators` (11 colon/backtick/sentence
+accept + 6 dotted/hyphen-suffix reject + 1 ReDoS).
+
+Verification: `make ci` (CI parity) clean — full suite **1844 passed /
+35 skipped / 5 xfailed in 84.49 s** at coverage **91.75%**; ruff +
+mypy clean.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator

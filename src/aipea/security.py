@@ -454,8 +454,13 @@ class SecurityScanner:
         "SCI",
     ]
 
-    # Per-marker regex patterns (matched against `query.upper()` —
-    # all uppercase). Notes:
+    # Per-marker regex patterns. NB (cycle-13, GPT round 11; comment
+    # corrected cycle-17, GPT round 15): these are NO LONGER matched against
+    # `query.upper()`. `_check_classified_markers` matches the ORIGINAL-case
+    # query; the simple markers are compiled WITH `re.IGNORECASE` (so they
+    # stay case-insensitive) while the SCI pattern is compiled case-SENSITIVE
+    # and uses inline `(?i:...)` for its structural tokens — see the compile
+    # loop's CASE HANDLING comment for the authoritative explanation. Notes:
     #   - "TOP SECRET": uses `\s+` between TOP and SECRET so the
     #     multi-space / tab variants don't evade (mirror of the PHI
     #     pattern repair for cycle-2 F3).
@@ -594,7 +599,12 @@ class SecurityScanner:
     # follows the host (`.com`, a word char), not a field delimiter. `/*`
     # is a simple star on one char anchored by a fixed-width lookbehind —
     # no ReDoS (verified ~6 ms on a 50 K-slash run).
-    _BANNER_OPENER: ClassVar[str] = r"(?:(?:^|(?<=[\s(\[{<\"']))/*|(?<=[:=,;|])/*)"
+    #
+    # Backtick added to the clean-boundary class (cycle-17, GPT round 14→15):
+    # markers are routinely wrapped in markdown inline code (`` `TS//SCI` ``);
+    # backtick is a quote-like delimiter, so it joins the bracket/quote set as
+    # both a clean opener (here) and a clean terminator (the SCI guards below).
+    _BANNER_OPENER: ClassVar[str] = r"(?:(?:^|(?<=[\s(\[{<\"'`]))/*|(?<=[:=,;|])/*)"
 
     # SCI tail guard for the `<level>//SCI` branch. REWRITTEN cycle-16 (GPT
     # 5.4 Pro PR #73 round 14) from a negative-lookahead-on-slash to an
@@ -605,19 +615,33 @@ class SecurityScanner:
     # `//sci//gamma-ray`, `/sci/rel-team`) because `\b` succeeds before `-`.
     # The positive form requires that after `SCI` the input ends, or hits a
     # clean banner terminator (whitespace, closing bracket/brace/paren/angle,
-    # quote, comma, semicolon), OR continues as a valid banner tail — `//`
-    # (chained compartment) or `/REL` (case-insensitive, cycle-15 round 13).
-    # Anything else — `-`, `.`, a single `/<path>`, a word char — is rejected.
-    # This both preserves the round-5 fix (`/TS//SCI/readme` rejects) and
-    # closes the round-14 hyphen/dot path-suffix FP class.
-    _SCI_TAIL_GUARD: ClassVar[str] = r"(?=$|[\s)\]}>\"',;]|//|/(?i:REL)\b)"
+    # quote, comma, semicolon, COLON, BACKTICK), OR continues as a valid
+    # banner tail — `//` (chained compartment) or `/REL` (case-insensitive,
+    # cycle-15 round 13), OR ends a sentence (`. ! ?` IMMEDIATELY before
+    # end-of-input or whitespace). Anything else — a `-`, a `.`/`!`/`?` NOT
+    # at a sentence end, a single `/<path>`, a word char — is rejected.
+    #
+    # cycle-17 (GPT round 15) added three terminators to the cycle-16 set:
+    #   - COLON `:` — `Classification: TS//SCI:` is a ubiquitous banner form;
+    #     `:` is structurally identical to the `,`/`;` already accepted (a
+    #     cycle-16 omission, not a new behavior).
+    #   - BACKTICK — markdown inline-code wrapping (`` `TS//SCI` ``).
+    #   - SENTENCE `. ! ?` via the nested `(?=$|\s)` lookahead — a banner at a
+    #     sentence end (`TS//SCI.`) flags, while a dotted path/file suffix
+    #     (`//SCI//TK.bak`, `.tar.gz`) still REJECTS because the char after the
+    #     `.` is not EOI/whitespace. This threads round-14 (.bak rejects) and
+    #     round-15 (sentence-final flags).
+    # This preserves the round-5 fix (`/TS//SCI/readme` rejects) and the
+    # round-14 hyphen/dot path-suffix FP closure.
+    _SCI_TAIL_GUARD: ClassVar[str] = r"(?=$|[\s)\]}>\"',;:`]|//|/(?i:REL)\b|[.!?](?=$|\s))"
     # Compartment-continuation guard for the second SCI branch (after a
-    # consumed compartment or `/REL`). Same cycle-16 rewrite: an explicit
-    # positive terminator — end, a clean banner terminator char, OR `//`
-    # (further compartment chaining, `SCI//NOFORN//ORCON`). Rejects a
-    # single-slash path (`SCI//NOFORN/path`) AND a `-`/`.` suffix
-    # (`//SCI//ZULU-test`, `//SCI//TK.bak`).
-    _SCI_CONT_GUARD: ClassVar[str] = r"(?=$|[\s)\]}>\"',;]|//)"
+    # consumed compartment or `/REL`). Same terminator set as the tail guard
+    # minus the `/REL` tail (a compartment is already consumed): end, a clean
+    # terminator char (incl. colon/backtick, cycle-17), `//` (further
+    # chaining, `SCI//NOFORN//ORCON`), or a sentence `. ! ?` before EOI/ws.
+    # Rejects a single-slash path (`SCI//NOFORN/path`), a `-` suffix
+    # (`//SCI//ZULU-test`), and a non-sentence `.` suffix (`//SCI//TK.bak`).
+    _SCI_CONT_GUARD: ClassVar[str] = r"(?=$|[\s)\]}>\"',;:`]|//|[.!?](?=$|\s))"
 
     _CLASSIFIED_MARKER_PATTERNS: ClassVar[dict[str, str]] = {
         "TOP SECRET": r"\bTOP\s+SECRET\b",
