@@ -4,10 +4,14 @@ Canonical tracker for all pending work. Replaces scattered items from ROADMAP.md
 NEXT_STEPS.md, KNOWN_ISSUES.md, SPECIFICATION.md, and discovery findings.
 
 Last updated: 2026-05-26 (v1.6.2 shipped to PyPI 2026-04-24;
-v1.7.0 Phase 4.a + 4.b + 4.c all merged to `main`; cycle-2
-`/quality-gate` bug-hunt sweep complete on `fix/quality-gate-
-bug-sweep` — 6 commits, HIGH×3 + MEDIUM×1 + LOW×8 — awaiting
-v1.7.0 release cut on 2026-06-15 target).
+v1.7.0 Phase 4.a + 4.b + 4.c all merged to `main`; `/quality-gate`
+bug-hunt + remediation sweep on `fix/quality-gate-bug-sweep` now at
+**cycle-16** — cycle-2 (6 commits, HIGH×3 + MEDIUM×1 + LOW×8) plus
+cycles 3-16 = PR #73 second-reviewer rounds 1-14, predominantly SCI
+classified-marker banner-boundary hardening + PII `api_key` +
+invisible-char/two-form-scan generalization; full suite 1,826 passed /
+35 skipped / 5 xfailed at 91.75% coverage; awaiting v1.7.0 release cut
+on 2026-06-15 target).
 
 > **Architect's release plan**: see `~/.claude/plans/you-are-the-senior-dynamic-micali.md`
 > for the approved v1.6.2 → v1.7.0 → v1.8.0 → v2.0.0rc1 → v2.0.0 roadmap.
@@ -140,7 +144,7 @@ Deferred:
 | Release | Target | State | Scope |
 |---|---|---|---|
 | **v1.6.2** | 2026-04-24 | **✅ shipped to PyPI 2026-04-24** (release tag `v1.6.2`, GitHub Release [v1.6.2](https://github.com/undercurrentai/AIPEA/releases/tag/v1.6.2)) | Doc sync + 3 code cleanups (HTTP_TIMEOUT DeprecationWarning, DRY URL resolver; rolling-avg was a false positive) + `benchmarks/` delete + P5e trio + PR #52 adversarial-review merge + v1.6.3-labeled telemetry dashboard. Shipped via PRs #51 + #52 + #53 + #55 + #56 + #57. |
-| **v1.7.0** | 2026-06-15 | **partial — 5 PRs + cycle-2 bug-sweep**; release-cut pending | **Shipped**: ADR-005 (PR #58); ADR-008 adversarial suite + Wave-21 paraphrase verbs (PRs #59/#60/#61); ADR-009 LLM red-team engine PR-B1 + Wave-22 follow-up (PRs #64/#65); Phase 4.b claims audit (PR #69); Phase 4.c adversarial corpus expansion + nightly CI (PR #70); **cycle-2 `/quality-gate` bug-hunt sweep (6 commits on `fix/quality-gate-bug-sweep`, HIGH×3 + MEDIUM×1 + LOW×8 + 47 new regression tests) — security.py two-form PII/PHI/classified scan + IC-anchored SCI + F12 line-anchored-separator design boundary, learning.py prune datetime format, analyzer.py word-boundary regex, redteam reliability cluster, cycle-1 recovery + test-hang repair; see CHANGELOG.md [Unreleased] + `.quality-gate/cycle2-findings.md`** (PR pending push, 2026-05-26). **Pending**: `AIPEAConfig.source_of()` + CLI migration; AEGIS adapter contract audit + AIPEA-side integration test; `DeprecationWarning` on `create_model_specific_prompt`; `MIGRATION.md` v0 draft; `tests/test_models.py`; governance-templates populate. |
+| **v1.7.0** | 2026-06-15 | **partial — 5 PRs + cycles 2-16 bug-sweep**; release-cut pending | **Shipped**: ADR-005 (PR #58); ADR-008 adversarial suite + Wave-21 paraphrase verbs (PRs #59/#60/#61); ADR-009 LLM red-team engine PR-B1 + Wave-22 follow-up (PRs #64/#65); Phase 4.b claims audit (PR #69); Phase 4.c adversarial corpus expansion + nightly CI (PR #70); **`/quality-gate` bug-hunt + remediation sweep on `fix/quality-gate-bug-sweep`, now at cycle-16 (PR #73): cycle-2 (6 commits, HIGH×3 + MEDIUM×1 + LOW×8 + 47 regression tests — two-form PII/PHI/classified scan, IC-anchored SCI, F12 separator boundary, learning prune datetime, analyzer word-boundary, redteam reliability, cycle-1 recovery) + cycles 3-16 = triple-AI second-reviewer rounds 1-14, predominantly SCI banner-boundary hardening (compartment grammar, single-slash field values, lowercase known-list, banner terminators — F13 regex ceiling) + PII `api_key` separator + complete Default_Ignorable invisible-char class; full suite 1,826 passed / 35 skipped / 5 xfailed @ 91.75%; see CHANGELOG.md [Unreleased] cycle-2..cycle-16 + `.quality-gate/cycle{2,15}-findings.md`** (round-15 gate in flight, 2026-05-26). **Pending**: `AIPEAConfig.source_of()` + CLI migration; AEGIS adapter contract audit + AIPEA-side integration test; `DeprecationWarning` on `create_model_specific_prompt`; `MIGRATION.md` v0 draft; `tests/test_models.py`; governance-templates populate. |
 | **v1.8.0** | 2026-08-01 | queued | AgoraIV migration PRs (AgoraIV adopts `source_of()`, drops deprecated imports). PII catalog expansion (tranche 1: phone, email, street-address, bank-account, IPv4-private). PHI catalog expansion (tranche 2: medication names, ICD-10, CPT, DEA) — **behind opt-in flag pending clinical-reviewer sign-off** (Plan B #20 deferred). `docs/MAINTAINERS.md`. `.github/CODEOWNERS` updated with second committer. Final minor pre-rc1. |
 | **v2.0.0rc1** | 2026-09-01 | queued | Remove `FEDRAMP`, `HTTP_TIMEOUT` alias, `create_model_specific_prompt`. Inline `TierProcessor` ABC. Remove `phi_redaction_enabled` if v1.7.0 claims audit finds it unused. Finalize `MIGRATION.md`. |
 | **v2.0.0** | 2026-10-22 | queued | GA (≥2 weeks rc1 soak, zero unresolved blockers, AgoraIV migrated off deprecated symbols). |

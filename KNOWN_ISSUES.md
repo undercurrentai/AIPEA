@@ -373,10 +373,11 @@ against upstream documentation or architectural intent, are recorded here
 as intentional rather than deferred or fixed.
 
 ### #F12. Conversation-separator regex line-anchoring (vs mid-line)
-- **File**: `src/aipea/security.py:505` (the
-  `(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:` entry in
-  `INJECTION_PATTERNS`); design comment immediately preceding it at
-  lines 492–504.
+- **File**: the `(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:` entry in
+  `INJECTION_PATTERNS` in `src/aipea/security.py` (with its design comment
+  immediately preceding). *(Symbolic reference, not a line number: PR #73's
+  ~16 hardening cycles have shifted this entry's line repeatedly; per
+  CLAUDE.md §11 a symbolic anchor is used so the cite doesn't rot.)*
 - **Source**: Cycle-2 Lane-B bug-hunt sweep (Phase-2 of `/quality-gate`,
   2026-05-26) flagged this as LOW C1; routed through `/claude-gpt-
   dialogue` for the security design review.
@@ -405,6 +406,37 @@ as intentional rather than deferred or fixed.
 - **Re-evaluate**: when the ADR-010 semantic scanner tier ships
   (target v2.0.0). At that point this test should flip to assert
   `is_blocked` and the entry should move to a "Fixed" log.
+
+### #F13. Lowercase UNLISTED SCI compartment (regex-tier ceiling)
+- **File**: `_SCI_COMPARTMENT_PATTERN` / `_SCI_KNOWN_COMPARTMENTS` in
+  `src/aipea/security.py` (the SCI entry of `_CLASSIFIED_MARKER_PATTERNS`).
+  *(Symbolic reference — see F12 note on line-number rot.)*
+- **Source**: PR #73 round 11→13 (cycle-13→15) reconciliation of the SCI
+  compartment-vs-path boundary; documented in the cycle-15 CHANGELOG entry
+  and `.quality-gate/cycle15-findings.md`.
+- **Behavior**: the SCI compartment token matches an **uppercase-generic**
+  codeword (`[A-Z](?:[A-Z0-9-]{0,38}[A-Z0-9])?`, catches any all-caps
+  compartment incl. unlisted ones) **OR** a **case-insensitive known-list**
+  (`NOFORN|REL|FGI|TK|GAMMA|…`, catches lowercase real compartments). A
+  lowercase rendering of an **unlisted** compartment (`//sci//someprogram`)
+  matches neither arm and does **not** flag.
+- **Why this is the correct regex-tier behavior**: rounds 11 and 13 pulled in
+  opposite directions — a lowercase UNKNOWN token after `//sci//` is almost
+  always a path segment (`//sci//readme`, round 11, must NOT flag), yet a
+  lowercase KNOWN compartment is a real banner (`//sci//tk`, round 13, MUST
+  flag). At the regex tier the only available discriminator is case + a
+  known-compartment list. Disambiguating an *arbitrary lowercase word* as
+  banner-vs-path is irreducible at this tier — it is exactly the semantic
+  judgment ADR-010 defers to the LLM-as-judge tier. Accepting this narrow
+  false-negative is the security-conservative trade against the alternative
+  (flagging every lowercase `//x//word`, which floods TACTICAL mode with
+  false positives on ordinary paths).
+- **Pinned by**: `tests/test_security_two_form_scan.py::
+  TestCycle15SciLowercaseKnownCompartment::test_lowercase_unknown_token_still_rejects`
+  (asserts lowercase-unlisted tokens reject — the live edge of this ceiling).
+- **Re-evaluate**: when the ADR-010 semantic scanner tier ships (target
+  v2.0.0); a semantic pass can resolve lowercase-unlisted-compartment
+  banner-vs-path that the regex tier cannot.
 
 ### #79. Exa API score clamping (vs normalization)
 - **File**: `src/aipea/search.py:583-597` + `SearchResult.__post_init__`

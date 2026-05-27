@@ -278,9 +278,25 @@ Key production learnings baked in:
   boundaries to prevent false positives (e.g., "SECRET" in "SECRETARY"). **SCI is
   the documented exception** (cycle-2 F11): bare `\bSCI\b` false-positively matched
   `sci-fi` (the hyphen is a `\b`), `the SCI department`, etc. SCI now requires IC
-  banner compartment-delimiter context via `_CLASSIFIED_MARKER_PATTERNS["SCI"] =
-  r"(?<=//)SCI\b|\bSCI(?=//|/[A-Z])"` — matches `TS//SCI`, `TOP SECRET//SCI`,
-  `SCI//NOFORN`, `SCI/REL TO USA`; rejects the common-English subword class.
+  banner compartment-delimiter context. The canonical pattern is constructed in code
+  from named components — see `_CLASSIFIED_MARKER_PATTERNS["SCI"]` in `security.py`
+  (the literal is intentionally NOT transcribed here: it has evolved across ~16
+  hardening cycles — PR #73 rounds 1–14 — and a quoted copy rots). As of cycle-16
+  (2026-05-26) it is two alternations: **(a)** `_BANNER_OPENER` + a classification
+  level (`_CLASSIFIED_LEVEL_PREFIXES`) + `//SCI`, tail-guarded by `_SCI_TAIL_GUARD`;
+  and **(b)** `_BANNER_OPENER` + `SCI` + a compartment (`_SCI_COMPARTMENT_PATTERN` =
+  an uppercase-generic token `[A-Z](?:[A-Z0-9-]{0,38}[A-Z0-9])?` **OR** a
+  case-insensitive known-compartment list `_SCI_KNOWN_COMPARTMENTS`) or `/REL`,
+  continuation-guarded by `_SCI_CONT_GUARD`. Both guards are **explicit positive
+  banner terminators** (cycle-16): after the marking token the input must end, hit a
+  clean boundary (whitespace, closing bracket/brace/paren/angle, quote, comma,
+  semicolon), or continue as `//`-chained compartment (or `/REL`) — a `-`, `.`,
+  single-`/` path, or word char rejects. It flags `TS//SCI`, `SCI//NOFORN`,
+  `//sci//tk`, `classification:/TS//SCI`, `SCI//SPECIAL-ACCESS`; rejects the
+  common-English subword class, lowercase path/URI segments (`/sci/readme`), and
+  hyphen/dot path-file suffixes (`//sci//gamma-ray`, `//SCI//TK.bak`). A lowercase
+  rendering of an *unlisted* compartment (`//sci//someprogram`) is the documented
+  regex-tier ceiling, deferred to the LLM-as-judge semantic-scan tier (ADR-010).
 - **Whitespace-tolerant multi-word labels** (cycle-2 F3): multi-word PHI labels
   (`medical record`, `date of birth`) and the `TOP SECRET` classified marker use
   `\s+` (not literal " ") between tokens so double-space, tab, and NFKC-equivalent
@@ -291,11 +307,14 @@ Key production learnings baked in:
   replaced with space; catches inter-word splits like `ignore​previous` →
   `ignore previous`). Both forms are passed to PII, PHI, classified, and injection
   scans (cycle-2 F3 extended the two-form coverage from injection-only to all four
-  categories). The `_ALL_INVISIBLE_RE` character class covers 21 NFKC-stable
-  invisibles: zero-width spaces, joiners, bidi controls, BOM, CGJ (U+034F), ALM
-  (U+061C), MVS (U+180E), the U+2060–U+206F format-control block, and the Unicode
-  TAG block (U+E0020–U+E007F) used in 2024 "ASCII smuggling" prompt-injection
-  attacks.
+  categories). The `_ALL_INVISIBLE_RE` character class covers the complete Unicode
+  Default_Ignorable_Code_Point set (~4,190 codepoints — cycles 3–8 generalized it
+  from the original cycle-2 inventory of 21) plus a small set of non-DI format
+  controls: zero-width spaces, joiners, bidi controls, BOM, CGJ (U+034F), ALM
+  (U+061C), variation selectors (incl. the U+E0100 block), Hangul fillers, the
+  U+2060–U+206F format-control block, and the Unicode TAG block (U+E0020–U+E007F)
+  used in 2024 "ASCII smuggling" prompt-injection attacks. See `_ALL_INVISIBLE_RE`
+  in `security.py` for the canonical, code-of-record set.
 - **Immutable input**: Scanner no longer mutates the input `SecurityContext` — it
   returns `force_offline` as a field on `ScanResult` instead.
 

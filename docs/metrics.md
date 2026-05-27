@@ -39,14 +39,14 @@ See the README badges for live rendering of these.
 
 ---
 
-## Engineering-quality signals (2026-05-26, post-cycle-2 `/quality-gate` sweep on `fix/quality-gate-bug-sweep`)
+## Engineering-quality signals (2026-05-26, post-cycle-16 `/quality-gate` sweep on `fix/quality-gate-bug-sweep`)
 
 | Metric | Value | Source of truth |
 |---|---|---|
 | Library version | 1.6.2 (PyPI); v1.7.0-RC on `main` | [`pyproject.toml`](../pyproject.toml), [PyPI](https://pypi.org/project/aipea/1.6.2/) |
-| Source LOC | ~13,105 | `wc -l src/aipea/**/*.py` |
-| Test count | 1,555 collected (1,515 passed, 35 skipped, 5 xfailed) | `pytest --collect-only` / `make test` |
-| Test coverage | 91.60% | Codecov, `make test` |
+| Source LOC | ~13,524 (11,428 top-level + 2,096 `redteam/`) | `find src/aipea -name '*.py' \| xargs wc -l` |
+| Test count | 1,866 collected (1,826 passed, 35 skipped, 5 xfailed) | `pytest --collect-only` / `make test` |
+| Test coverage | 91.75% | Codecov, `make test` |
 | Coverage floor (CI gate) | 75% | [`pyproject.toml`](../pyproject.toml) |
 | Public API surface | 60 symbols in `__all__` (Wave-22 extended from 50) | [`src/aipea/__init__.py`](../src/aipea/__init__.py) |
 | Core runtime dependencies | **1** (`httpx>=0.27.0`) | [`pyproject.toml:24-26`](../pyproject.toml) |
