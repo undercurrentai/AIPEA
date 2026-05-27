@@ -584,6 +584,45 @@ Verification: `make ci` (CI parity) clean — full suite **1773 passed /
 35 skipped / 5 xfailed in 156.55 s** at coverage **92.02%**; ruff +
 mypy clean.
 
+### Fixed (cycle-13 `/quality-gate` follow-up to PR #73 round 11, 2026-05-26)
+
+GPT 5.4 Pro's round-11 REQUEST_CHANGES: a regression the cycle-11
+generic-compartment widening introduced. Because the SCI pattern was
+matched against the UPPER-CASED query, the generic compartment token
+classified ordinary lowercase path/URI text as SCI —
+`path=//sci//readme`, `http://sci//index`, `/sci//readme` all matched
+(after upper-casing, `readme` → `README` looked "all-caps") and wrongly
+`force_offline`'d in TACTICAL mode.
+
+**Security (`security.py`)** — case-aware SCI matching:
+
+  - The SCI pattern is now matched against the **ORIGINAL-case** query
+    (not `query.upper()`), with a **case-SENSITIVE** bare-branch
+    compartment token (`[A-Z][A-Z0-9-]{1,40}`). Real IC compartments
+    (NOFORN, GAMMA, TK, FVEY) are UPPERCASE; path/URI segments (readme,
+    index, docs) are lowercase — so the case is the discriminator that
+    finally resolves the cycle-9↔11 FN/FP oscillation (closed-list FN
+    on unlisted compartments ↔ generic-token FP on lowercase paths).
+  - Implementation: the SCI pattern is compiled WITHOUT `re.IGNORECASE`
+    and uses inline `(?i:...)` for its structural tokens (level, `SCI`,
+    `REL`) so those stay case-insensitive, while the compartment stays
+    case-sensitive. The simple markers (TOP SECRET, SECRET,
+    CONFIDENTIAL, NOFORN) are compiled WITH `re.IGNORECASE` and remain
+    fully case-insensitive (preserving prior behavior). The level-
+    prefixed branch (`<level>//SCI`) still flags regardless of tail
+    case — a level establishes banner context — so only the BARE
+    `SCI//<token>` branch is compartment-case-sensitive.
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle13SciCompartmentCaseSensitivity` (7 lowercase-path reject +
+5 uppercase-banner accept + 1 level-prefixed-lowercase flag + 1
+simple-markers-stay-case-insensitive). Full security suite (464 tests)
+unchanged-green.
+
+Verification: `make ci` (CI parity) clean — full suite **1787 passed /
+35 skipped / 5 xfailed in 146.45 s** at coverage **91.97%**; ruff +
+mypy clean.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator

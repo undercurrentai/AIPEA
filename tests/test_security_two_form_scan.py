@@ -1666,3 +1666,89 @@ class TestCycle12SciReadmeBehaviorPinned:
         # `/sci/readme` — single-slash path → reject (not a banner).
         result = scanner.scan("see /sci/readme for docs", context=tactical_ctx)
         assert "classified_marker:SCI" not in result.flags, result.flags
+
+
+class TestCycle13SciCompartmentCaseSensitivity:
+    """CYCLE-13 (GPT round 11): the cycle-11 generic compartment token,
+    matched against the upper-cased query, classified ordinary
+    lowercase path/URI text as SCI (e.g. `path=//sci//readme`,
+    `http://sci//index` — after upper-casing `readme`→`README` looked
+    "all-caps"), wrongly forcing offline in TACTICAL mode. Fixed by
+    matching the SCI pattern against the ORIGINAL-case query with a
+    CASE-SENSITIVE bare-branch compartment (`[A-Z]...`): real IC
+    compartments (NOFORN, GAMMA) are uppercase, path segments
+    (readme, index) are lowercase.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "path=//sci//readme",
+            "http://sci//index",
+            "/sci//readme",
+            "sci//readme",
+            "SCI//readme",  # mixed: uppercase SCI, lowercase compartment → path
+            "see x=//sci//docs here",
+            "config: api//sci//cache",
+        ],
+        ids=["field_path", "url", "leading_slash", "bare", "mixed_case", "field_docs", "api_cache"],
+    )
+    def test_lowercase_bare_compartment_rejects(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, (
+            f"lowercase bare compartment (path) wrongly flagged: {payload!r}; flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "SCI//NOFORN",  # uppercase compartment → banner
+            "SCI//GAMMA",
+            "//SCI//TK",
+            "classification=//SCI//NOFORN",
+            "TS//SCI//GAMMA",  # level-prefixed
+        ],
+        ids=["noforn", "gamma", "leading_tk", "field_noforn", "level_gamma"],
+    )
+    def test_uppercase_compartment_still_accepts(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"uppercase banner not flagged: {payload!r}; flags={result.flags}"
+        )
+        assert result.force_offline is True
+
+    @pytest.mark.unit
+    def test_level_prefixed_lowercase_still_flags(
+        self, scanner: SecurityScanner, tactical_ctx: SecurityContext
+    ) -> None:
+        # A level prefix establishes banner context, so the level-prefixed
+        # branch flags even an all-lowercase banner (`ts//sci//noforn`) —
+        # only the BARE `sci//<token>` branch is case-sensitive on its
+        # compartment.
+        result = scanner.scan("marked ts//sci here", context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, result.flags
+
+    @pytest.mark.unit
+    def test_simple_markers_remain_case_insensitive(
+        self, scanner: SecurityScanner, tactical_ctx: SecurityContext
+    ) -> None:
+        # The non-SCI markers (TOP SECRET, SECRET, NOFORN, CONFIDENTIAL)
+        # stay case-insensitive (compiled with re.IGNORECASE) — the
+        # cycle-13 case-sensitivity is scoped to the SCI compartment only.
+        for text in ["top secret report", "Top Secret memo", "CONFIDENTIAL note"]:
+            result = scanner.scan(text, context=tactical_ctx)
+            assert any("classified_marker:" in f for f in result.flags), (
+                f"simple marker not detected case-insensitively: {text!r}; flags={result.flags}"
+            )

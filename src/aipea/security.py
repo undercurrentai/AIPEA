@@ -476,8 +476,13 @@ class SecurityScanner:
     # adjacent to a recognized banner LEVEL (TS, S, C, U + full forms)
     # via the IC compartment delimiter `//`, OR followed by a
     # constrained banner CONTINUATION (NOFORN, REL, FGI, IMCON, etc.).
+    # `(?i:...)` — the level prefix is case-INSENSITIVE (a banner level may
+    # be written `TS` or `ts`), while the SCI compartment token (below) is
+    # case-SENSITIVE. The SCI pattern is compiled WITHOUT re.IGNORECASE
+    # (cycle-13), so this inline flag is what makes the level match any
+    # case against the original-case query.
     _CLASSIFIED_LEVEL_PREFIXES: ClassVar[str] = (
-        r"(?:TS|S|C|U|TOP\s+SECRET|SECRET|CONFIDENTIAL|UNCLASSIFIED)"
+        r"(?i:TS|S|C|U|TOP\s+SECRET|SECRET|CONFIDENTIAL|UNCLASSIFIED)"
     )
     # Generic compartment / control-marking token after `SCI//` (cycle-11,
     # GPT 5.4 Pro PR #73 round 9): the prior closed allow-list
@@ -623,14 +628,21 @@ class SecurityScanner:
         # (`/sci/rel/index.html`): the discriminator moved from "is
         # there a leading slash" to "is the marker followed by a
         # path-style single-slash continuation".
+        # Compiled WITHOUT re.IGNORECASE (cycle-13): `(?i:SCI)` and the
+        # `(?i:...)` level make the structural tokens case-insensitive,
+        # while `_SCI_COMPARTMENT_PATTERN` ([A-Z]...) stays case-SENSITIVE
+        # so a lowercase bare compartment (a path segment like `readme`)
+        # does NOT match — only an uppercase one (a real IC compartment).
+        # `REL` in the tail/single-slash branches is likewise uppercase-
+        # only (real banners write `/REL` uppercase; `/rel` is a path).
         "SCI": (
             _BANNER_OPENER
             + _CLASSIFIED_LEVEL_PREFIXES
-            + r"\s*/\s*/\s*SCI\b"
+            + r"\s*/\s*/\s*(?i:SCI)\b"
             + _SCI_TAIL_GUARD
             + r"|"
             + _BANNER_OPENER
-            + r"SCI(?:\s*/\s*/\s*"
+            + r"(?i:SCI)(?:\s*/\s*/\s*"
             + _SCI_COMPARTMENT_PATTERN
             + r"\b"
             + _SCI_CONT_GUARD
@@ -789,23 +801,34 @@ class SecurityScanner:
         # typos at construction time (re.compile raises re.error on a
         # malformed pattern) rather than on first TACTICAL scan, and
         # avoids per-call `re.compile` recompilation in
-        # `_check_classified_markers`. Matched against `query.upper()`
-        # (no re.IGNORECASE) — same convention as the raw-string version.
+        # `_check_classified_markers`.
         #
-        # NB: these are NOT run through `_is_regex_safe`. That validator
-        # exists to bound the ReDoS risk of UNTRUSTED, user-supplied
-        # `SecurityContext.blocked_patterns` (incl. a conservative 200-
-        # char length cap). The classified patterns are hardcoded,
-        # code-reviewed, and ReDoS-safe by construction (the SCI
-        # pattern's `\s*` groups are each bounded by a mandatory literal
-        # `/`, so there is no adjacent-unbounded-quantifier ambiguity —
-        # see the SCI pattern comment). The length cap in particular is
-        # a user-input heuristic that the legitimately-long SCI
-        # alternation exceeds; applying it here would be a category
-        # error.
-        self._compiled_classified: dict[str, re.Pattern[str]] = {
-            name: re.compile(pattern) for name, pattern in self._CLASSIFIED_MARKER_PATTERNS.items()
-        }
+        # CASE HANDLING (cycle-13, GPT 5.4 Pro PR #73 round 11): matched
+        # against the ORIGINAL-case query (NOT `query.upper()`), because
+        # the SCI compartment token must be CASE-SENSITIVE — real IC
+        # compartments (NOFORN, TK, GAMMA) are UPPERCASE, while path /
+        # URI segments (readme, index) are lowercase. Upper-casing the
+        # query first destroyed that signal and made `path=//sci//readme`
+        # / `http://sci//index` match (a round-11 false positive). So:
+        #   - the simple markers (TOP SECRET, SECRET, CONFIDENTIAL,
+        #     NOFORN) are compiled with re.IGNORECASE (any case matches,
+        #     same as the old query.upper() behavior);
+        #   - the SCI pattern is compiled WITHOUT re.IGNORECASE — it uses
+        #     inline `(?i:...)` for its structural tokens (level, SCI,
+        #     REL) and a case-sensitive `[A-Z]...` for the bare-branch
+        #     compartment, so a lowercase compartment (path) does not
+        #     match while an uppercase one (banner) does.
+        #
+        # NB: NOT run through `_is_regex_safe` — that validator bounds
+        # the ReDoS risk of UNTRUSTED user-supplied `blocked_patterns`
+        # (incl. a 200-char cap the legitimately-long SCI alternation
+        # exceeds). The classified patterns are hardcoded, reviewed, and
+        # ReDoS-safe by construction (every `\s*` / bounded `{1,40}` is
+        # anchored by a mandatory literal).
+        self._compiled_classified: dict[str, re.Pattern[str]] = {}
+        for name, pattern in self._CLASSIFIED_MARKER_PATTERNS.items():
+            flags = 0 if name == "SCI" else re.IGNORECASE
+            self._compiled_classified[name] = re.compile(pattern, flags)
         logger.debug("SecurityScanner initialized with %d PII patterns", len(self.PII_PATTERNS))
 
     # Maximum pattern length to prevent ReDoS attacks
@@ -957,7 +980,13 @@ class SecurityScanner:
         """
         flags: list[str] = []
         force_offline = False
-        query_upper = query.upper()
+        # Match against the ORIGINAL-case query (cycle-13). The compiled
+        # patterns carry their own case handling: the simple markers were
+        # compiled with re.IGNORECASE, while SCI is case-sensitive on its
+        # bare-branch compartment token (uppercase = banner, lowercase =
+        # path). See __init__ for the rationale. Upper-casing here would
+        # destroy the SCI compartment case signal and re-open the
+        # `path=//sci//readme` false positive (GPT PR #73 round 11).
         for name in self.CLASSIFIED_MARKERS:
             compiled = self._compiled_classified.get(name)
             if compiled is None:
@@ -967,11 +996,10 @@ class SecurityScanner:
                 # init-time contract check (see __init__) prevents the
                 # class-definition-time case; this fallback covers the
                 # runtime-mutation case so detection is never silently
-                # dropped. Falls back to the standard `\b<marker>\b`
-                # boundary (the F11-prone shape — acceptable only as a
-                # last-resort belt-and-suspenders).
-                compiled = re.compile(rf"\b{re.escape(name)}\b")
-            if compiled.search(query_upper):
+                # dropped. IGNORECASE so the fallback matches any case
+                # (mirrors the simple-marker compilation).
+                compiled = re.compile(rf"\b{re.escape(name)}\b", re.IGNORECASE)
+            if compiled.search(query):
                 flags.append(f"classified_marker:{name}")
                 force_offline = True
         # NB: classified-marker WARNING logging is intentionally NOT
