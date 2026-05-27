@@ -477,6 +477,43 @@ as intentional rather than deferred or fixed.
   v2.0.0), or sooner via a pre-normalization extension if a specific exotic
   delimiter proves operationally frequent.
 
+### #F15. Conservative banner-PREFIX matching (vs strict full-chain validation)
+- **File**: `_SCI_TAIL_GUARD` / `_SCI_CONT_GUARD` (bare `//` and `/REL`
+  continuations) + `_check_classified_markers()` (`re.search`, not
+  `fullmatch`) in `src/aipea/security.py`. *(Symbolic reference — see #F12.)*
+- **Source**: PR #73 round 16 (GPT 5.4 Pro REQUEST_CHANGES). GPT observed that
+  a valid banner PREFIX followed by an invalid chained suffix still flags:
+  `TS//SCI//readme`, `TS//SCI/REL/index.html`, `SCI//NOFORN//readme` flag on
+  the `TS//SCI` / `TS//SCI/REL` / `SCI//NOFORN` prefix. GPT proposed consuming
+  and validating the ENTIRE compartment chain before a match can succeed.
+- **Decision: DECLINED as a deliberate design choice (NOT a deferral).** The
+  proposed change is **security-regressive** for a TACTICAL classified gate:
+  - Each cited string CONTAINS a complete, valid IC banner at a clean boundary
+    (`TS//SCI`, `TS//SCI/REL`, `SCI//NOFORN`). Flagging them is a **true
+    positive**, not a false positive — `TS//SCI/REL` is a textbook SCI+REL
+    marking.
+  - Requiring the *whole token* to validate would make
+    `TS//SCI/REL/index.html` **reject** — i.e. MISS content that literally
+    spells `TS//SCI/REL`. That is a **false negative**: the dangerous direction
+    that every prior round (5→15) explicitly guarded against ("a missed banner
+    leaks classified content to an external model").
+  - The asymmetry is decisive: a false positive (forcing offline on a
+    banner-prefixed path) costs a local-model route; a false negative leaks a
+    real banner. The conservative prefix-match is the security-correct default.
+  - Two of three frontier reviewers (Codex, Claude Opus 4.6) PASS the current
+    behavior across all four review rounds (13–16).
+  - This satisfies the ratified tier-ceiling stopping rule
+    (`.quality-gate/cycle17-findings.md`): the change does not fix a real FP
+    (the cited cases are TPs) and would reopen the false-NEGATIVE class — so it
+    is out of scope by the rule's own criteria.
+- **Pinned by**: the prefix-flag behavior is asserted throughout
+  `TestCycle1{5,6,7}…` (e.g. `SCI//NOFORN//ORCON` flags as a chained banner).
+- **Re-evaluate**: only if a concrete, high-frequency benign FP (a real input
+  that contains a valid banner prefix yet is genuinely non-classified) is
+  observed in production — at which point a *targeted* exclusion (not blanket
+  full-chain validation) would be the FP-minimal, FN-safe fix. The general
+  banner-vs-trailing-junk judgment is ADR-010 semantic-tier territory.
+
 ### #79. Exa API score clamping (vs normalization)
 - **File**: `src/aipea/search.py:583-597` + `SearchResult.__post_init__`
   clamp at `search.py:212-214`
