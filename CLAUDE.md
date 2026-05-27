@@ -29,7 +29,7 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~13,524 (`find src/aipea -name '*.py'`; 11,428 top-level + 2,096 `redteam/`; post-cycle-16 / branch `fix/quality-gate-bug-sweep`, 2026-05-26); ~10,662 on `main` at v1.6.2 (2026-04-24); ~12,000+ on `main` post-Wave-22 release-cut pending |
+| **Source LOC** | ~13,538 (`find src/aipea -name '*.py'`; 11,442 top-level + 2,096 `redteam/`; post-cycle-16 / branch `fix/quality-gate-bug-sweep`, 2026-05-26); ~10,662 on `main` at v1.6.2 (2026-04-24); ~12,000+ on `main` post-Wave-22 release-cut pending |
 | **Exports** | 60 symbols in `__all__` (Wave-22 extended from 50 via the redteam package surface). Was 50 in v1.6.0 (ADR-004 taint-aware feedback averaging), 44 in v1.5.0 |
 | **Build backend** | hatchling — **do NOT run `poetry install` / `poetry lock` / `poetry run` in this directory**. It silently creates an orphan venv in `~/Library/Caches/pypoetry/virtualenvs/aipea-*`. Use `make install` (pip + `.venv/`). |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |

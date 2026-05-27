@@ -44,7 +44,7 @@ See the README badges for live rendering of these.
 | Metric | Value | Source of truth |
 |---|---|---|
 | Library version | 1.6.2 (PyPI); v1.7.0-RC on `main` | [`pyproject.toml`](../pyproject.toml), [PyPI](https://pypi.org/project/aipea/1.6.2/) |
-| Source LOC | ~13,524 (11,428 top-level + 2,096 `redteam/`) | `find src/aipea -name '*.py' \| xargs wc -l` |
+| Source LOC | ~13,538 (11,442 top-level + 2,096 `redteam/`) | `find src/aipea -name '*.py' \| xargs wc -l` |
 | Test count | 1,866 collected (1,826 passed, 35 skipped, 5 xfailed) | `pytest --collect-only` / `make test` |
 | Test coverage | 91.75% | Codecov, `make test` |
 | Coverage floor (CI gate) | 75% | [`pyproject.toml`](../pyproject.toml) |
