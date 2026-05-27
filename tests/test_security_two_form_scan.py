@@ -1169,24 +1169,31 @@ class TestCycle8SciSchemePathFalsePositive:
     """CYCLE-8 (GPT round 6): the cycle-7 field-delimiter widening
     combined `:` opener WITH the optional leading `/?`, re-opening a
     path FP — `C:/TS//SCI` (Windows path) and `scheme:/SCI/REL` (URI
-    scheme) matched. Fixed by SPLITTING `_BANNER_OPENER`: `/?` is
-    admitted ONLY after start/whitespace/bracket (case A); field
-    delimiters get a separate NO-slash branch (case B).
+    scheme) matched.
+
+    SUPERSEDED IN PART (cycle-15 / GPT round 13): round 13 reversed the
+    blanket single-slash-field rejection — `C:/TS//SCI`, `c:/ts//sci`,
+    `scheme:/SCI/REL`, `file:/TS//SCI` now FLAG (a single-slash field
+    value whose slash is IMMEDIATELY followed by a banner shape; see
+    TestCycle15SingleSlashFieldValueBanner). This is the documented
+    round-6 ↔ round-13 tension, resolved toward the security-conservative
+    direction (flag a string that literally spells a classification
+    banner). What SURVIVES from round 6 is the invariant below: a
+    field-delimiter slash followed by a NON-banner path segment (`/docs`,
+    `/Users`) still rejects — the banner must follow the slash directly.
     """
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "payload",
         [
-            "C:/TS//SCI",
-            "c:/ts//sci",
-            "scheme:/SCI/REL",
-            "file:/TS//SCI",
-            "D:/docs/TS//SCI",
+            "D:/docs/TS//SCI",  # banner is mid-path (after 'docs'), not after the ':' slash
+            "D:/docs/normal/file.txt",  # ordinary drive path, no banner
+            "drive:/var/log/system",  # ordinary scheme-like path, no banner
         ],
-        ids=["win_path", "win_path_lower", "uri_scheme", "file_scheme", "win_subdir"],
+        ids=["win_subdir_banner_midpath", "win_subdir_plain", "scheme_plain"],
     )
-    def test_scheme_and_windows_path_reject(
+    def test_field_slash_before_non_banner_path_rejects(
         self,
         scanner: SecurityScanner,
         tactical_ctx: SecurityContext,
@@ -1194,7 +1201,7 @@ class TestCycle8SciSchemePathFalsePositive:
     ) -> None:
         result = scanner.scan(payload, context=tactical_ctx)
         assert "classified_marker:SCI" not in result.flags, (
-            f"scheme/path false-positive: {payload!r}; flags={result.flags}"
+            f"field-slash non-banner path false-positive: {payload!r}; flags={result.flags}"
         )
 
     @pytest.mark.unit
@@ -1370,9 +1377,10 @@ class TestCycle9SciLeadingDoubleSlashBanners:
             "http://x//SCI//TK",  # // preceded by 'x'
             "path/to//SCI//TK",  # mid-path
             "//SCI/readme",  # //SCI but /readme single-slash path continuation
-            "C:/TS//SCI",  # field-delim + slash (Windows path)
+            # NB: `C:/TS//SCI` MOVED to TestCycle15SingleSlashFieldValueBanner
+            # (now FLAGS — single-slash field value before a banner, round 13).
         ],
-        ids=["url_dbl", "url_x", "path_mid", "sci_readme_path", "win_path"],
+        ids=["url_dbl", "url_x", "path_mid", "sci_readme_path"],
     )
     def test_mid_uri_path_slash_run_still_rejects(
         self,
@@ -1476,16 +1484,20 @@ class TestCycle10SciFieldValueDoubleSlash:
     @pytest.mark.parametrize(
         "payload",
         [
-            "scheme:/SCI/REL",  # single slash after ':' → URI scheme → reject
-            "C:/TS//SCI",  # single slash after ':' → Windows drive → reject
-            "file:/TS//SCI",
-            "https://example.com:8080/TS//SCI",  # port colon + single slash
-            "https://example.com//SCI/REL",  # //SCI after host, not after ':'
-            "https://example.com/TS//SCI",
+            # NB (cycle-15 / GPT round 13): single-slash field values that
+            # are IMMEDIATELY followed by a banner shape (`scheme:/SCI/REL`,
+            # `C:/TS//SCI`, `file:/TS//SCI`) now FLAG — see
+            # TestCycle15SingleSlashFieldValueBanner. The cases that remain
+            # here reject because the `//SCI` / `/TS` is preceded by a WORD
+            # CHAR (host/port digit), not a field delimiter — so no opener
+            # fires regardless of slash count.
+            "https://example.com:8080/TS//SCI",  # /TS preceded by '0' (port digit)
+            "https://example.com//SCI/REL",  # //SCI after host '.com', not after ':'
+            "https://example.com/TS//SCI",  # /TS after host '.com'
         ],
-        ids=["scheme", "winpath", "file", "port", "url_host_dbl", "url_path"],
+        ids=["port", "url_host_dbl", "url_path"],
     )
-    def test_single_slash_after_delimiter_still_rejects(
+    def test_mid_token_slash_after_word_char_still_rejects(
         self,
         scanner: SecurityScanner,
         tactical_ctx: SecurityContext,
@@ -1493,7 +1505,7 @@ class TestCycle10SciFieldValueDoubleSlash:
     ) -> None:
         result = scanner.scan(payload, context=tactical_ctx)
         assert "classified_marker:SCI" not in result.flags, (
-            f"single-slash URI/path FP: {payload!r}; flags={result.flags}"
+            f"mid-token URI/path FP: {payload!r}; flags={result.flags}"
         )
 
     @pytest.mark.unit
@@ -1552,11 +1564,12 @@ class TestCycle11SciGenericCompartment:
         [
             "/sci/readme",  # single-slash non-REL → path → reject
             "/sci/rel/index.html",  # /REL + path continuation → reject
-            "scheme:/SCI/REL",  # single slash after field delim → reject
+            # NB: `scheme:/SCI/REL` MOVED to TestCycle15SingleSlashFieldValueBanner
+            # (now FLAGS — single-slash field value before a banner shape, round 13).
             "ascii//code reference",  # SCI inside ASCII (preceded by 'A') → reject
             "https://example.com//SCI/REL",  # //SCI after host → reject
         ],
-        ids=["path_readme", "rel_path", "scheme", "ascii_subword", "url_host"],
+        ids=["path_readme", "rel_path", "ascii_subword", "url_host"],
     )
     def test_generic_compartment_does_not_overmatch_paths(
         self,
@@ -1800,3 +1813,146 @@ class TestCycle14ApiKeySeparatorWhitespace:
         # "apiary - keeper" must NOT match (not api + separator + key).
         result = scanner.scan(f"apiary - keeper notes {'x' * 25}", context=general_ctx)
         assert not any("pii_detected:api_key" in f for f in result.flags)
+
+
+class TestCycle15SciLowercaseKnownCompartment:
+    """CYCLE-15 (GPT round 13, concern 2): the cycle-13 case-sensitivity fix
+    closed a round-11 false POSITIVE (lowercase path `//sci//readme`) but
+    opened a lowercase-bypass false NEGATIVE — `//sci//tk`, `//sci//gamma`,
+    `//sci/rel` (real lowercase IC banners) stopped forcing offline because
+    the compartment was uppercase-only.
+
+    Resolution: compartment = uppercase-generic (`[A-Z][A-Z0-9-]{1,40}`,
+    round 9) OR a case-INsensitive KNOWN-compartment list (round 13). A
+    lowercase KNOWN compartment flags; a lowercase UNKNOWN token still
+    rejects (round 11 preserved). This REFINES TestCycle13...: cycle-13
+    only ever asserted lowercase UNKNOWN tokens reject — those still do.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "//sci//tk",  # lowercase known compartment (double-slash)
+            "//sci//gamma",
+            "//sci/rel",  # lowercase /REL single-slash banner
+            "marked //sci//noforn",
+            "SCI//tk",  # mixed: uppercase SCI + lowercase known compartment
+            "ts//sci//gamma",  # fully lowercase, level-prefixed
+        ],
+        ids=["tk", "gamma", "rel", "noforn", "mixed", "level_lc"],
+    )
+    def test_lowercase_known_compartment_flags(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"lowercase KNOWN compartment not flagged: {payload!r}; flags={result.flags}"
+        )
+        assert result.force_offline is True
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "path=//sci//readme",  # lowercase UNKNOWN token → path → reject
+            "//sci//config",
+            "see x=//sci//docs here",
+            "http://sci//index",
+            "/sci/rel/index.html",  # lowercase /rel BUT path continuation → CONT guard rejects
+        ],
+        ids=["readme", "config", "docs", "url_index", "rel_path_cont"],
+    )
+    def test_lowercase_unknown_token_still_rejects(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, (
+            f"lowercase unknown token (path) wrongly flagged: {payload!r}; flags={result.flags}"
+        )
+
+
+class TestCycle15SingleSlashFieldValueBanner:
+    """CYCLE-15 (GPT round 13, concern 1): the cycle-10 opener admitted only
+    a 0/2+-slash run after a field delimiter (`(?:/{2,})?`), to reject
+    single-slash drive/URI forms (`C:/`, `scheme:/`). That was a TACTICAL
+    false NEGATIVE: `classification:/TS//SCI` and `label=/SCI/REL` are real
+    single-slash field-value banners that must flag.
+
+    Resolution: opener Case B widened to `/*` (any slash count). The
+    discriminator is NOT the slash count but whether a BANNER SHAPE follows
+    — so a single-slash field value flags ONLY when a banner immediately
+    follows. `C:/TS//SCI` (a "path" whose literal components ARE a banner)
+    flags too: in a classified-content gate, force-offline on a string that
+    literally spells `TS//SCI` is the security-conservative direction.
+    Single-slash field values with NO banner after (`C:/Users`,
+    `url=/api/v1`) still reject.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "classification:/TS//SCI",  # GPT round-13 example
+            "label=/SCI/REL",  # GPT round-13 example
+            "scheme:/SCI/REL",  # MOVED from cycle-10/11 reject tests
+            "C:/TS//SCI",  # literal banner in a "drive path" → conservative flag
+            "file:/TS//SCI",
+        ],
+        ids=["classification", "label_eq", "scheme", "winpath", "file"],
+    )
+    def test_single_slash_field_value_banner_flags(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"single-slash field-value banner not flagged: {payload!r}; flags={result.flags}"
+        )
+        assert result.force_offline is True
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "C:/Users/josh",  # drive path, NO banner after → reject
+            "url=/api/v1/users",  # field value, NO banner → reject
+            "scheme:/path/to/file",
+            "drive=C:/Windows/System32",
+            "ratio=1/SCI",  # 'SCI' alone is not a banner (needs //comp or /REL)
+        ],
+        ids=["winpath", "url", "scheme", "drive", "bare_sci"],
+    )
+    def test_single_slash_field_value_without_banner_rejects(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, (
+            f"single-slash field value without banner wrongly flagged: "
+            f"{payload!r}; flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    def test_widened_opener_slash_run_no_redos(
+        self, scanner: SecurityScanner, tactical_ctx: SecurityContext
+    ) -> None:
+        import time
+
+        payload = "x=" + "/" * 50000 + "SCI"
+        t0 = time.perf_counter()
+        scanner.scan(payload, context=tactical_ctx)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        assert elapsed_ms < 1000, (
+            f"widened field-delim opener slash-run scan took {elapsed_ms:.1f} ms — possible ReDoS"
+        )

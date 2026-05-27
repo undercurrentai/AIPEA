@@ -645,6 +645,66 @@ Verification: `make ci` (CI parity) clean — full suite **1796 passed /
 35 skipped / 5 xfailed in 81.74 s** at coverage **91.75%**; ruff +
 mypy clean.
 
+### Fixed (cycle-15 `/quality-gate` follow-up to PR #73 round 13, 2026-05-26)
+
+GPT 5.4 Pro's round-13 REQUEST_CHANGES raised two TACTICAL false
+NEGATIVES in the SCI classified-marker scanner. Both are fixed; both
+required reconciling against earlier rounds that had pulled the opposite
+direction (the SCI banner boundary has been the single hardest part of
+this module — see the in-code history block in `security.py`).
+
+**Security (`security.py`)**:
+
+  - **Lowercase-compartment bypass** (round 13, concern 2): the cycle-13
+    case-sensitivity fix (which closed the round-11 lowercase-PATH false
+    positive `//sci//readme`) over-corrected into a lowercase-BANNER false
+    negative — `//sci//tk`, `//sci//gamma`, `//sci/rel` stopped forcing
+    offline because the compartment token was uppercase-only. Resolved by
+    making the compartment **uppercase-generic OR a case-insensitive
+    KNOWN-compartment list** (`_SCI_KNOWN_COMPARTMENTS`: NOFORN, REL, FGI,
+    TK, GAMMA, ECI, FVEY, …). A lowercase KNOWN compartment now flags
+    (round 13); a lowercase UNKNOWN token (`readme`, `config`) still
+    rejects (round 11 preserved). `REL` in the tail and single-slash
+    branches is now `(?i:REL)` so lowercase `//sci/rel` flags while the
+    `_SCI_CONT_GUARD` still rejects a path continuation
+    (`/sci/rel/index.html`). The residual gap — a lowercase rendering of
+    an UNLISTED compartment (`//sci//someprogram`) — is the regex-tier
+    ceiling per ADR-010 (banner-vs-path on an arbitrary lowercase word is
+    a semantic-scanner concern).
+  - **Single-slash field-value banner** (round 13, concern 1): the
+    cycle-10 opener admitted only a 0/2+-slash run after a field
+    delimiter (`(?:/{2,})?`), to reject single-slash drive/URI forms
+    (`C:/`, `scheme:/`) per round 6. That blanket rejection was a false
+    negative for real field-value banners `classification:/TS//SCI`,
+    `label=/SCI/REL`. Resolved by widening opener Case B to `/*` (any
+    slash count): the discriminator is no longer the slash count but
+    whether a **banner shape follows** the opener. So `C:/Users`,
+    `url=/api/v1` still reject (no banner), while `classification:/TS//SCI`
+    flags. This reverses round 6 for the narrow case where a single-slash
+    field value is *immediately followed by a literal banner*
+    (`C:/TS//SCI`, `scheme:/SCI/REL` now flag) — the documented
+    round-6 ↔ round-13 tension, resolved toward the security-conservative
+    direction (force-offline on a string that literally spells a
+    classification banner is the safe error in a classified-content gate).
+
+Both widenings are ReDoS-safe (verified ~3–6 ms on 50 K-char adversarial
+slash runs; `/*` is a simple star on one char anchored by a fixed-width
+lookbehind).
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle15SciLowercaseKnownCompartment` (6 lowercase-known-flag +
+5 lowercase-unknown-reject) and `TestCycle15SingleSlashFieldValueBanner`
+(5 field-value-banner-flag + 5 no-banner-reject + 1 ReDoS). The
+superseded round-6/round-9 reject assertions in `TestCycle8…`,
+`TestCycle9…`, `TestCycle10…`, `TestCycle11…` were updated in place (the
+flipped cases moved into the cycle-15 ACCEPT tests; the surviving
+non-banner-path rejects retained) so the contract change is traceable,
+not silently dropped.
+
+Verification: `make ci` (CI parity) clean — full suite **1811 passed /
+35 skipped / 5 xfailed in 83.40 s** at coverage **91.75%**; ruff +
+mypy clean.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator

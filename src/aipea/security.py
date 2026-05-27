@@ -491,20 +491,37 @@ class SecurityScanner:
     _CLASSIFIED_LEVEL_PREFIXES: ClassVar[str] = (
         r"(?i:TS|S|C|U|TOP\s+SECRET|SECRET|CONFIDENTIAL|UNCLASSIFIED)"
     )
-    # Generic compartment / control-marking token after `SCI//` (cycle-11,
-    # GPT 5.4 Pro PR #73 round 9): the prior closed allow-list
-    # (NOFORN|REL|FGI|...) was a TACTICAL false negative for valid but
-    # UNLISTED compartments / codewords (GAMMA, ECI, FVEY, special-access
-    # program names, etc.) — IC compartment names are open-ended. The
-    # DOUBLE-slash branch now accepts any all-caps banner token
-    # `[A-Z][A-Z0-9-]{1,40}` (length-bounded; no ReDoS — verified ~3 ms on
-    # a 50 K-char token). The SINGLE-slash branch stays restricted to
-    # `/REL` (the only single-slash continuation that is unambiguously a
-    # banner and not a path segment), so `/sci/readme` etc. still reject.
-    # Subword false positives stay closed by the `_BANNER_OPENER`
-    # clean-boundary requirement (e.g. `ASCII//CODE` rejects — the SCI is
-    # preceded by `A`).
-    _SCI_COMPARTMENT_PATTERN: ClassVar[str] = r"[A-Z][A-Z0-9-]{1,40}"
+    # Compartment / control-marking token after `SCI//`. Reconciles three
+    # GPT 5.4 Pro PR #73 rounds that pulled in opposite directions:
+    #   round 9  — valid but UNLISTED compartments (GAMMA, ECI, FVEY,
+    #     special-access program names) must flag; IC compartment names
+    #     are open-ended, so a closed allow-list was a TACTICAL false
+    #     negative. → uppercase-generic `[A-Z][A-Z0-9-]{1,40}`.
+    #   round 11 — a lowercase UNKNOWN token after `//sci//` is a path
+    #     segment, not a banner (`path=//sci//readme`, `http://sci//index`)
+    #     and must NOT flag. → the uppercase-generic arm stays
+    #     case-SENSITIVE.
+    #   round 13 — a lowercase KNOWN compartment (`//sci//tk`,
+    #     `//sci//gamma`, `//sci/rel`) IS a real banner and MUST flag;
+    #     relying on case ALONE was a lowercase-bypass false negative.
+    # Resolution (cycle-15): compartment = uppercase-generic (catches any
+    # all-caps codeword incl. unlisted, round 9) OR a case-INsensitive
+    # KNOWN-compartment list (catches lowercase real compartments,
+    # round 13). A lowercase UNKNOWN token matches neither and rejects
+    # (round 11). The residual gap — a lowercase rendering of an UNLISTED
+    # compartment (`//sci//someprogram`) — is the regex-tier ceiling per
+    # ADR-010: disambiguating an arbitrary lowercase word as
+    # banner-vs-path needs the semantic-scanner tier. Length-bounded
+    # ({1,40}); no ReDoS (verified ~3 ms on a 50 K-char token). Subword
+    # FPs stay closed by `_BANNER_OPENER`'s clean-boundary requirement
+    # (`ASCII//CODE` rejects — the SCI is preceded by `A`).
+    _SCI_KNOWN_COMPARTMENTS: ClassVar[str] = (
+        r"(?i:NOFORN|REL|FGI|IMCON|ORCON|PROPIN|RELIDO|RSEN|HUMINT"
+        r"|COMINT|SI|TK|HCS|GAMMA|ECI|FVEY|ACGU)"
+    )
+    _SCI_COMPARTMENT_PATTERN: ClassVar[str] = (
+        r"(?:[A-Z][A-Z0-9-]{1,40}|" + _SCI_KNOWN_COMPARTMENTS + r")"
+    )
     # Banner opener (cycle-6, GPT 5.4 Pro PR #73 round 4; widened cycle-7
     # round 5): start-of-input OR a clean opening delimiter, followed by
     # an OPTIONAL single leading slash. The optional `/?` admits
@@ -551,31 +568,38 @@ class SecurityScanner:
     # simple star on a single char anchored at a clean boundary — no
     # ReDoS (verified ~1.4 ms on a 20 K-slash adversarial input).
     #
-    # Case B (cycle-10, GPT 5.4 Pro PR #73 round 8): a field delimiter
-    # `[:=,;|]` followed by an OPTIONAL DOUBLE-slash-or-more `(?:/{2,})?`.
-    # This admits structured key/value portion markings
-    # `classification=//SCI//TK`, `label://SCI/REL` (a TACTICAL false
-    # negative before) while a SINGLE slash after the delimiter still
-    # rejects — that is the URI-scheme / drive-letter pattern
-    # `scheme:/SCI/REL`, `C:/TS//SCI`, which `(?:/{2,})?` cannot match
-    # (it requires two-or-more slashes, never exactly one). A full URL
-    # `https://example.com//SCI/REL` still rejects because the `//SCI`
-    # there follows the host (`.com`), not the `:`; only `://SCI…`
-    # (compartment immediately after the scheme colon) matches — the
-    # same shape GPT classes as a banner.
-    _BANNER_OPENER: ClassVar[str] = r"(?:(?:^|(?<=[\s(\[{<\"']))/*|(?<=[:=,;|])(?:/{2,})?)"
+    # Case B (cycle-10 round 8; WIDENED cycle-15 round 13): a field
+    # delimiter `[:=,;|]` followed by a slash-RUN of ANY length `/*`
+    # (zero / one / two-or-more). Earlier cycles used `(?:/{2,})?`
+    # (zero or 2+) to reject single-slash field values as drive-letter /
+    # URI-scheme paths (`C:/…`, `scheme:/…`). GPT round 13 showed that
+    # was a TACTICAL false NEGATIVE: `classification:/TS//SCI` and
+    # `label=/SCI/REL` are real single-slash field-value banners that
+    # must flag. The discriminator is NOT the slash count — it is whether
+    # a BANNER SHAPE (`<level>//SCI`, `SCI//<compartment>`, `SCI/REL`)
+    # follows the opener. So `/*` is safe: `C:/Users/josh`,
+    # `url=/api/v1/users`, `scheme:/path/to/file` still reject (no banner
+    # after the slash), while `classification:/TS//SCI` AND `C:/TS//SCI`
+    # (a "path" whose literal components ARE a classification banner) both
+    # flag — the security-conservative direction in TACTICAL mode. A full
+    # URL `https://example.com//SCI/REL` still rejects because the `//SCI`
+    # follows the host (`.com`, a word char), not a field delimiter. `/*`
+    # is a simple star on one char anchored by a fixed-width lookbehind —
+    # no ReDoS (verified ~6 ms on a 50 K-slash run).
+    _BANNER_OPENER: ClassVar[str] = r"(?:(?:^|(?<=[\s(\[{<\"']))/*|(?<=[:=,;|])/*)"
 
     # SCI tail guard for the `<level>//SCI` branch (cycle-7 round 5):
     # after `SCI`, allow a valid banner tail (`//<compartment>`, `/REL`)
     # or a terminal (whitespace / end / non-slash punctuation), but
     # REJECT a path-style single-slash continuation (`/readme`,
-    # `/index.html`). `(?!/(?!/|REL\b))` = "not followed by [ a slash
+    # `/index.html`). `(?!/(?!/|(?i:REL)\b))` = "not followed by [ a slash
     # that is NOT followed by (another slash | REL) ]": a `//` (chained
     # compartment) or `/REL` is allowed; a lone `/<path>` is rejected.
     # This closes the cycle-6 asymmetry GPT flagged in round 5 — the
     # terminal guard was on the second SCI branch but not the first, so
-    # `/TS//SCI/readme` wrongly matched.
-    _SCI_TAIL_GUARD: ClassVar[str] = r"(?!/(?!/|REL\b))"
+    # `/TS//SCI/readme` wrongly matched. `REL` is `(?i:REL)` (cycle-15
+    # round 13) so a lowercase `/TS//SCI/rel` banner tail also flags.
+    _SCI_TAIL_GUARD: ClassVar[str] = r"(?!/(?!/|(?i:REL)\b))"
     # Compartment-continuation guard for the second SCI branch: after a
     # consumed compartment suffix, allow `//` (further chaining) and
     # terminal but reject a single-slash path (`SCI//NOFORN/path`).
@@ -593,11 +617,13 @@ class SecurityScanner:
         #       `https://sci-fi.example` (no level word in front of `//`)
         #       and `https://example.com/TS//SCI` (`/` not `(`/`\s`/`^`
         #       before TS) both correctly reject;
-        #   (b) followed by a known compartment / control-marking
-        #       continuation via `//<KEYWORD>` or `/REL`. The keyword
-        #       allow-list rejects `/sci/readme` (README is not a
-        #       compartment) while accepting `SCI//NOFORN`, `SCI/REL`,
-        #       `SCI//FGI`, etc.
+        #   (b) followed by a compartment / control-marking continuation
+        #       via `//<compartment>` or `/REL`. The compartment pattern
+        #       (uppercase-generic OR a case-insensitive known-list, see
+        #       `_SCI_COMPARTMENT_PATTERN`) rejects `/sci/readme` (a
+        #       lowercase UNKNOWN token — not a compartment) while
+        #       accepting `SCI//NOFORN`, `SCI/REL`, `SCI//FGI`, `//sci//tk`
+        #       (lowercase KNOWN), etc.
         # Pre-marker gate evolution (the SCI boundary has been the
         # single hardest part of this module to get right; documented
         # here in full so the next maintainer doesn't re-litigate it):
@@ -637,11 +663,15 @@ class SecurityScanner:
         # path-style single-slash continuation".
         # Compiled WITHOUT re.IGNORECASE (cycle-13): `(?i:SCI)` and the
         # `(?i:...)` level make the structural tokens case-insensitive,
-        # while `_SCI_COMPARTMENT_PATTERN` ([A-Z]...) stays case-SENSITIVE
-        # so a lowercase bare compartment (a path segment like `readme`)
-        # does NOT match — only an uppercase one (a real IC compartment).
-        # `REL` in the tail/single-slash branches is likewise uppercase-
-        # only (real banners write `/REL` uppercase; `/rel` is a path).
+        # while the uppercase-generic arm of `_SCI_COMPARTMENT_PATTERN`
+        # ([A-Z]...) stays case-SENSITIVE so a lowercase UNKNOWN bare
+        # compartment (a path segment like `readme`) does NOT match. A
+        # lowercase KNOWN compartment DOES match via the case-insensitive
+        # known-list arm (cycle-15 round 13). `REL` in the tail and
+        # single-slash branches is `(?i:REL)` (cycle-15 round 13): a
+        # lowercase `//sci/rel` is a real banner that must flag, while
+        # `_SCI_CONT_GUARD` still rejects a path continuation
+        # (`/sci/rel/index.html` → `/index` after `rel`).
         "SCI": (
             _BANNER_OPENER
             + _CLASSIFIED_LEVEL_PREFIXES
@@ -653,7 +683,7 @@ class SecurityScanner:
             + _SCI_COMPARTMENT_PATTERN
             + r"\b"
             + _SCI_CONT_GUARD
-            + r"|\s*/\s*REL\b"
+            + r"|\s*/\s*(?i:REL)\b"
             + _SCI_CONT_GUARD
             + r")"
         ),
