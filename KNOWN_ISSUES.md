@@ -438,6 +438,45 @@ as intentional rather than deferred or fixed.
   v2.0.0); a semantic pass can resolve lowercase-unlisted-compartment
   banner-vs-path that the regex tier cannot.
 
+### #F14. NFKC-stable non-ASCII banner delimiters (regex-tier ceiling)
+- **File**: `_BANNER_OPENER` / `_SCI_TAIL_GUARD` / `_SCI_CONT_GUARD` in
+  `src/aipea/security.py` (the SCI opener + terminator boundary sets).
+  *(Symbolic reference — see #F12 note on line-number rot.)*
+- **Source**: PR #73 round 14→15 (cycle-16/17) banner-terminator work + the
+  Claude↔GPT 5.4 Pro tier-ceiling dialogue (`/claude-gpt-dialogue`,
+  2026-05-27); documented in `.quality-gate/cycle17-findings.md`.
+- **Contract**: the SCI scanner is an **ASCII banner lexer** operating on
+  NFKC-normalized input. `scan()` first applies `unicodedata.normalize("NFKC",
+  …)` + confusable-translation + invisible-strip, which folds compatibility
+  forms to ASCII — so **NBSP (U+00A0), EM/IDEOGRAPHIC space, and FULLWIDTH
+  COLON (U+FF1A) all FLAG** (they normalize to ASCII space / `:` upstream and
+  the ASCII terminator matches). The opener/terminator sets are then an
+  explicit, CLOSED ASCII delimiter enumeration (whitespace `[ \t\n\r\f\v]`,
+  wrappers `( ) [ ] { } < > " ' ` + backtick, field/sentence delimiters
+  `: = , ; |` and `. ! ?`).
+- **Behavior (the ceiling)**: a banner whose delimiter is an **NFKC-STABLE
+  non-ASCII** character — em-dash `—` (U+2014), en-dash `–` (U+2013),
+  curly/smart quotes `“ ” ‘ ’` (U+201C/D, U+2018/9), and similar Unicode
+  punctuation NFKC does NOT fold to ASCII — does **not** match. E.g.
+  `“TS//SCI”` (curly-quote-wrapped) and `TS//SCI—note` (em-dash) do not flag.
+- **Why this is the correct regex-tier behavior**: the boundary set is
+  deliberately ASCII so the contract is honest — NFKC handles the
+  compatibility forms; what remains (NFKC-stable exotic punctuation) is
+  open-ended Unicode-punctuation surface with negligible real-world IC/tactical
+  frequency, and "is this exotic-wrapped token a banner" is a semantic
+  judgment. Inflating the regex to chase every Unicode codepoint is exactly the
+  asymptotic refinement ADR-010 exists to absorb. If a specific codepoint
+  becomes operationally important, handle it via **pre-normalization** (extend
+  the NFKC/confusable stage), NOT regex inflation.
+- **Pinned by**: `tests/test_security_two_form_scan.py::
+  TestCycle17DialogueRefinements::test_nfkc_stable_non_ascii_delimiter_defers_to_adr010`
+  (asserts em/en-dash + curly-quote delimiters defer) and the companion
+  `test_nfkc_normalized_unicode_boundary_flags` (asserts NBSP/fullwidth-colon
+  DO flag via NFKC — the live edge of the ASCII contract).
+- **Re-evaluate**: when the ADR-010 semantic scanner tier ships (target
+  v2.0.0), or sooner via a pre-normalization extension if a specific exotic
+  delimiter proves operationally frequent.
+
 ### #79. Exa API score clamping (vs normalization)
 - **File**: `src/aipea/search.py:583-597` + `SearchResult.__post_init__`
   clamp at `search.py:212-214`

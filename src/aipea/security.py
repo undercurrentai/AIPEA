@@ -604,7 +604,16 @@ class SecurityScanner:
     # markers are routinely wrapped in markdown inline code (`` `TS//SCI` ``);
     # backtick is a quote-like delimiter, so it joins the bracket/quote set as
     # both a clean opener (here) and a clean terminator (the SCI guards below).
-    _BANNER_OPENER: ClassVar[str] = r"(?:(?:^|(?<=[\s(\[{<\"'`]))/*|(?<=[:=,;|])/*)"
+    #
+    # ASCII whitespace (cycle-17 Claude↔GPT tier-ceiling dialogue, GPT round
+    # 15): the clean-boundary class uses an EXPLICIT ASCII whitespace set
+    # `[ \t\n\r\f\v]`, NOT `\s`. Under Python's default Unicode mode `\s`
+    # would silently admit NBSP (U+00A0) and other Unicode spaces, which would
+    # CONTRADICT the documented contract that non-ASCII delimiters defer to the
+    # ADR-010 semantic tier (KNOWN_ISSUES F14). Keeping the boundary ASCII
+    # makes that deferral honest. (The intra-banner `\s*` spacing between slash
+    # tokens, e.g. `TS // SCI`, is a separate tolerance concern and stays `\s`.)
+    _BANNER_OPENER: ClassVar[str] = r"(?:(?:^|(?<=[ \t\n\r\f\v(\[{<\"'`]))/*|(?<=[:=,;|])/*)"
 
     # SCI tail guard for the `<level>//SCI` branch. REWRITTEN cycle-16 (GPT
     # 5.4 Pro PR #73 round 14) from a negative-lookahead-on-slash to an
@@ -621,27 +630,42 @@ class SecurityScanner:
     # end-of-input or whitespace). Anything else — a `-`, a `.`/`!`/`?` NOT
     # at a sentence end, a single `/<path>`, a word char — is rejected.
     #
-    # cycle-17 (GPT round 15) added three terminators to the cycle-16 set:
+    # cycle-17 (GPT round 15 + the Claude↔GPT tier-ceiling dialogue) extended
+    # the cycle-16 terminator set with the remaining ASCII structural
+    # delimiters and refined the sentence rule:
     #   - COLON `:` — `Classification: TS//SCI:` is a ubiquitous banner form;
     #     `:` is structurally identical to the `,`/`;` already accepted (a
     #     cycle-16 omission, not a new behavior).
+    #   - PIPE `|` — table/log forms `|TS//SCI|`, `|SCI//TK|`; `|` is already a
+    #     left field-delimiter, so it joins the terminator set too.
     #   - BACKTICK — markdown inline-code wrapping (`` `TS//SCI` ``).
-    #   - SENTENCE `. ! ?` via the nested `(?=$|\s)` lookahead — a banner at a
-    #     sentence end (`TS//SCI.`) flags, while a dotted path/file suffix
-    #     (`//SCI//TK.bak`, `.tar.gz`) still REJECTS because the char after the
-    #     `.` is not EOI/whitespace. This threads round-14 (.bak rejects) and
-    #     round-15 (sentence-final flags).
+    #   - SENTENCE `. ! ?` followed by ZERO OR MORE ASCII closing wrappers
+    #     (`` ) ] } > " ' ` ``) and THEN ASCII whitespace or end-of-input. So
+    #     `TS//SCI.`, `TS//SCI."`, `(TS//SCI.)` all flag, while a dotted
+    #     path/file suffix (`//SCI//TK.bak`, `.tar.gz`) still REJECTS because
+    #     the char after the `.` is not a closer/ws/EOI. Threads round-14
+    #     (.bak rejects) and round-15 (sentence-final flags).
+    #   - ASCII whitespace `[ \t\n\r\f\v]` (NOT `\s`): keeps the boundary ASCII
+    #     so NBSP / Unicode spaces defer to ADR-010 (see the opener comment).
     # This preserves the round-5 fix (`/TS//SCI/readme` rejects) and the
-    # round-14 hyphen/dot path-suffix FP closure.
-    _SCI_TAIL_GUARD: ClassVar[str] = r"(?=$|[\s)\]}>\"',;:`]|//|/(?i:REL)\b|[.!?](?=$|\s))"
+    # round-14 hyphen/dot path-suffix FP closure. The terminator set is now the
+    # CLOSED, ENUMERATED ASCII structural-delimiter contract agreed in the
+    # tier-ceiling dialogue; non-ASCII / exotic delimiters are ADR-010 (F14).
+    _SCI_TAIL_GUARD: ClassVar[str] = (
+        r"(?=$|[ \t\n\r\f\v)\]}>\"',;:|`]|//|/(?i:REL)\b"
+        r"|[.!?][\"')\]}>`]*(?=$|[ \t\n\r\f\v]))"
+    )
     # Compartment-continuation guard for the second SCI branch (after a
     # consumed compartment or `/REL`). Same terminator set as the tail guard
     # minus the `/REL` tail (a compartment is already consumed): end, a clean
-    # terminator char (incl. colon/backtick, cycle-17), `//` (further
-    # chaining, `SCI//NOFORN//ORCON`), or a sentence `. ! ?` before EOI/ws.
-    # Rejects a single-slash path (`SCI//NOFORN/path`), a `-` suffix
-    # (`//SCI//ZULU-test`), and a non-sentence `.` suffix (`//SCI//TK.bak`).
-    _SCI_CONT_GUARD: ClassVar[str] = r"(?=$|[\s)\]}>\"',;:`]|//|[.!?](?=$|\s))"
+    # ASCII terminator char (ws, closing wrapper, `, ; : |`, backtick), `//`
+    # (further chaining, `SCI//NOFORN//ORCON`), or a sentence `. ! ?`+closers
+    # before ASCII ws/EOI. Rejects a single-slash path (`SCI//NOFORN/path`), a
+    # `-` suffix (`//SCI//ZULU-test`), and a non-sentence `.` (`//SCI//TK.bak`).
+    _SCI_CONT_GUARD: ClassVar[str] = (
+        r"(?=$|[ \t\n\r\f\v)\]}>\"',;:|`]|//"
+        r"|[.!?][\"')\]}>`]*(?=$|[ \t\n\r\f\v]))"
+    )
 
     _CLASSIFIED_MARKER_PATTERNS: ClassVar[dict[str, str]] = {
         "TOP SECRET": r"\bTOP\s+SECRET\b",

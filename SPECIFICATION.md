@@ -288,15 +288,23 @@ Key production learnings baked in:
   an uppercase-generic token `[A-Z](?:[A-Z0-9-]{0,38}[A-Z0-9])?` **OR** a
   case-insensitive known-compartment list `_SCI_KNOWN_COMPARTMENTS`) or `/REL`,
   continuation-guarded by `_SCI_CONT_GUARD`. Both guards are **explicit positive
-  banner terminators** (cycle-16): after the marking token the input must end, hit a
-  clean boundary (whitespace, closing bracket/brace/paren/angle, quote, comma,
-  semicolon), or continue as `//`-chained compartment (or `/REL`) — a `-`, `.`,
-  single-`/` path, or word char rejects. It flags `TS//SCI`, `SCI//NOFORN`,
-  `//sci//tk`, `classification:/TS//SCI`, `SCI//SPECIAL-ACCESS`; rejects the
-  common-English subword class, lowercase path/URI segments (`/sci/readme`), and
-  hyphen/dot path-file suffixes (`//sci//gamma-ray`, `//SCI//TK.bak`). A lowercase
-  rendering of an *unlisted* compartment (`//sci//someprogram`) is the documented
-  regex-tier ceiling, deferred to the LLM-as-judge semantic-scan tier (ADR-010).
+  banner terminators** over a **closed, enumerated ASCII delimiter set** (cycle-16;
+  extended + ASCII-locked cycle-17 via the Claude↔GPT tier-ceiling dialogue): after
+  the marking token the input must end, hit a clean ASCII boundary (ASCII whitespace
+  `[ \t\n\r\f\v]`, closing wrapper `) ] } > " '` backtick, or `, ; : |`), continue
+  as `//`-chained compartment (or `/REL`), **or end a sentence (`. ! ?` followed by
+  zero or more ASCII closing wrappers, then ASCII whitespace or end-of-input)** — a
+  `-`, a non-sentence `.`, a single-`/` path, or a word char rejects. It flags
+  `TS//SCI`, `SCI//NOFORN`, `//sci//tk`, `classification:/TS//SCI`,
+  `SCI//SPECIAL-ACCESS`, `` `TS//SCI` ``, `TS//SCI:`, `|TS//SCI|`, `TS//SCI.`,
+  `(TS//SCI.)`; rejects the common-English subword class, lowercase path/URI
+  segments (`/sci/readme`), and hyphen/dot path-file suffixes (`//sci//gamma-ray`,
+  `//SCI//TK.bak`). Because `scan()` NFKC-normalizes input upstream, compatibility
+  forms fold to ASCII and still flag (`TS//SCI：` fullwidth colon, NBSP). The
+  documented regex-tier ceiling deferred to the LLM-as-judge semantic-scan tier
+  (ADR-010) is: (a) a lowercase rendering of an *unlisted* compartment
+  (`//sci//someprogram`, KNOWN_ISSUES #F13), and (b) NFKC-stable non-ASCII
+  delimiters (em/en dash, curly quotes; #F14).
 - **Whitespace-tolerant multi-word labels** (cycle-2 F3): multi-word PHI labels
   (`medical record`, `date of birth`) and the `TOP SECRET` classified marker use
   `\s+` (not literal " ") between tokens so double-space, tab, and NFKC-equivalent

@@ -2149,3 +2149,114 @@ class TestCycle17SciColonBacktickSentenceTerminators:
         assert elapsed_ms < 1000, (
             f"sentence-punctuation run scan took {elapsed_ms:.1f} ms — possible ReDoS"
         )
+
+
+class TestCycle17DialogueRefinements:
+    """CYCLE-17 refinements from the Claude↔GPT 5.4 Pro tier-ceiling dialogue
+    (`/claude-gpt-dialogue`, GPT round 15 convergence). Four tightenings to the
+    cycle-17 terminator/opener contract:
+      1. SENTENCE punctuation may be followed by ZERO+ ASCII closing wrappers
+         (`` ) ] } > " ' ` ``) before whitespace/EOI — so `TS//SCI."`,
+         `(TS//SCI.)` flag (Claude's `[.!?](?=$|\\s)` missed these).
+      2. PIPE `|` is a terminator (table/log forms `|TS//SCI|`); it was already
+         a left field-delimiter.
+      3. ASCII-ONLY whitespace `[ \\t\\n\\r\\f\\v]` at the boundary (NOT `\\s`):
+         NBSP / Unicode spaces now DEFER to ADR-010 (KNOWN_ISSUES #F14) rather
+         than being silently admitted — keeps the ASCII-delimiter contract honest.
+      4. (doc) the cycle-15 `classification:/TS//SCI` field+optional-slash left
+         form is preserved and documented.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            'TS//SCI."',  # period + double-quote closer
+            "TS//SCI.'",  # period + single-quote closer
+            "TS//SCI.)",  # period + paren closer
+            "TS//SCI.`",  # period + backtick closer
+            "(TS//SCI.)",  # wrapped + sentence-final
+            'He said "TS//SCI." today',  # period + quote mid-prose
+            "|TS//SCI|",  # pipe-delimited table cell
+            "|SCI//TK|",
+            "a|TS//SCI|b",  # pipe-delimited log columns
+        ],
+        ids=[
+            "period_dquote",
+            "period_squote",
+            "period_paren",
+            "period_backtick",
+            "wrapped_sentence",
+            "prose_quote",
+            "pipe",
+            "pipe_tk",
+            "pipe_cols",
+        ],
+    )
+    def test_sentence_closers_and_pipe_flag(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"sentence-closer/pipe banner not flagged: {payload!r}; flags={result.flags}"
+        )
+        assert result.force_offline is True
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "TS//SCI\u00a0next",  # NBSP -> NFKC space -> flags
+            "SCI//TK\u00a0",  # trailing NBSP -> space
+            "TS//SCI\u2003wide",  # EM SPACE -> space
+            "SCI//NOFORN\u3000",  # IDEOGRAPHIC SPACE -> space
+            "TS//SCI\uff1a",  # FULLWIDTH COLON -> NFKC ':' -> flags
+        ],
+        ids=["nbsp", "nbsp_trailing", "em_space", "ideographic_space", "fullwidth_colon"],
+    )
+    def test_nfkc_normalized_unicode_boundary_flags(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        # The scan pipeline NFKC-normalizes compatibility forms to ASCII
+        # (NBSP/EM/IDEOGRAPHIC space -> U+0020; fullwidth colon -> ':') BEFORE
+        # the SCI regex runs (security.py scan() step 1). So the ASCII-only
+        # terminator DOES flag these: the Unicode form is handled upstream, not
+        # by the terminator. This is why an ASCII boundary is safe + honest.
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"NFKC-normalized Unicode boundary should flag: {payload!r}; flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "TS//SCI\u2014x",  # EM DASH: NFKC-stable, not ASCII -> defers
+            "TS//SCI\u2013x",  # EN DASH
+            "\u201cTS//SCI\u201d",  # CURLY DOUBLE QUOTES wrapping
+            "\u2018SCI//TK\u2019",  # CURLY SINGLE QUOTES wrapping
+        ],
+        ids=["em_dash", "en_dash", "curly_double", "curly_single"],
+    )
+    def test_nfkc_stable_non_ascii_delimiter_defers_to_adr010(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        # NFKC-STABLE non-ASCII punctuation (em/en dash, curly/smart quotes) is
+        # NOT folded to ASCII, so the ASCII opener/terminator does not match it.
+        # This is the documented regex-tier CEILING (KNOWN_ISSUES #F14):
+        # banner-vs-exotic-delimiter is semantic-tier (ADR-010). Intentional,
+        # documented false-negative -- NOT a regression.
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, (
+            f"NFKC-stable non-ASCII delimiter should defer (#F14 ceiling): "
+            f"{payload!r}; flags={result.flags}"
+        )

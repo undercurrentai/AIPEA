@@ -776,22 +776,43 @@ third uncovered in the SCI scanner.
     to reflect the cycle-13 original-case matching (the compile-loop CASE
     HANDLING comment remains the authoritative source).
 
-ReDoS-safe (verified ~2.7-5 ms on 50 K-char slash/compartment/hyphen and a
-50 K sentence-punctuation adversarial run).
+**Dialogue refinements** (Claude↔GPT 5.4 Pro tier-ceiling dialogue,
+`/claude-gpt-dialogue`, GPT round-15 convergence) — four tightenings GPT
+required for a clean pass, all applied:
+
+  - **Sentence punctuation + ASCII closers**: `. ! ?` may be followed by
+    zero-or-more ASCII closing wrappers (`` ) ] } > " ' ` ``) before
+    whitespace/EOI, so `TS//SCI."`, `(TS//SCI.)` flag (the bare
+    `[.!?](?=$|\s)` missed these).
+  - **Pipe `|` terminator**: table/log forms `|TS//SCI|`, `|SCI//TK|` flag
+    (`|` was already a left field-delimiter).
+  - **ASCII-only boundary whitespace** `[ \t\n\r\f\v]` (not `\s`): makes the
+    ASCII-delimiter contract honest. NB — because `scan()` applies NFKC
+    normalization UPSTREAM, NBSP/EM/IDEOGRAPHIC space and FULLWIDTH COLON fold
+    to ASCII and still FLAG; only NFKC-STABLE non-ASCII punctuation (em/en
+    dash, curly quotes) defers (KNOWN_ISSUES #F14).
+  - **Documented** the cycle-15 `classification:/TS//SCI` field+optional-slash
+    left form in the contract.
+
+ReDoS-safe (verified ~2.7-5 ms on 50 K-char slash/compartment/hyphen,
+sentence-punctuation, and closing-wrapper adversarial runs).
 
 This is the regex-tier completion of the SCI banner-boundary delimiter
-contract — the enumerated ASCII opener/terminator set. Edge cases OUTSIDE
-that set (exotic/non-ASCII delimiters; lowercase-unlisted compartments per
-KNOWN_ISSUES #F13) are the documented regex-tier ceiling deferred to the
-ADR-010 semantic-scan tier. See `.quality-gate/cycle17-findings.md` and the
-Claude↔GPT tier-boundary dialogue.
+contract — the CLOSED, ENUMERATED ASCII opener/terminator set, operating on
+NFKC-normalized input. Edge cases OUTSIDE that set — NFKC-stable non-ASCII
+delimiters (em/en dash, curly quotes; KNOWN_ISSUES #F14) and lowercase-unlisted
+compartments (#F13) — are the documented regex-tier ceiling deferred to the
+ADR-010 semantic-scan tier. The tier-boundary was negotiated and ratified in
+the Claude↔GPT dialogue; see `.quality-gate/cycle17-findings.md`.
 
 Regression tests (`tests/test_security_two_form_scan.py`):
 `TestCycle17SciColonBacktickSentenceTerminators` (11 colon/backtick/sentence
-accept + 6 dotted/hyphen-suffix reject + 1 ReDoS).
+accept + 6 dotted/hyphen-suffix reject + 1 ReDoS) and
+`TestCycle17DialogueRefinements` (9 sentence-closer/pipe accept + 5
+NFKC-normalized-Unicode-flag + 4 NFKC-stable-non-ASCII-defer).
 
-Verification: `make ci` (CI parity) clean — full suite **1844 passed /
-35 skipped / 5 xfailed in 84.49 s** at coverage **91.75%**; ruff +
+Verification: `make ci` (CI parity) clean — full suite **1862 passed /
+35 skipped / 5 xfailed in 82.92 s** at coverage **91.75%**; ruff +
 mypy clean.
 
 ### Added
