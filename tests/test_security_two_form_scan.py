@@ -1752,3 +1752,51 @@ class TestCycle13SciCompartmentCaseSensitivity:
             assert any("classified_marker:" in f for f in result.flags), (
                 f"simple marker not detected case-insensitively: {text!r}; flags={result.flags}"
             )
+
+
+class TestCycle14ApiKeySeparatorWhitespace:
+    """CYCLE-14 (GPT round 12): the cycle-12 `api(?:[_-]|\\s+)?key` allowed
+    whitespace OR a `_`/`-` separator, but not whitespace AROUND a
+    separator — `api - key:` / `api _ key:` / `api\\t-\\tkey:` evaded. Now
+    `api(?:\\s*[_-]\\s*|\\s+)?key` accepts every separator-whitespace combo.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "label",
+        ["api_key", "api-key", "apikey", "api key", "api - key", "api _ key", "API  -  KEY"],
+        ids=[
+            "underscore",
+            "hyphen",
+            "joined",
+            "space",
+            "spaced_hyphen",
+            "spaced_underscore",
+            "caps_wide",
+        ],
+    )
+    def test_api_key_separator_whitespace_variants(
+        self,
+        scanner: SecurityScanner,
+        general_ctx: SecurityContext,
+        label: str,
+    ) -> None:
+        result = scanner.scan(f"{label}: {'x' * 25}", context=general_ctx)
+        assert any("pii_detected:api_key" in f for f in result.flags), (
+            f"api_key label {label!r} not detected: flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    def test_api_key_tab_around_separator(
+        self, scanner: SecurityScanner, general_ctx: SecurityContext
+    ) -> None:
+        result = scanner.scan(f"api\t-\tkey = {'x' * 25}", context=general_ctx)
+        assert any("pii_detected:api_key" in f for f in result.flags), result.flags
+
+    @pytest.mark.unit
+    def test_benign_apiary_not_flagged(
+        self, scanner: SecurityScanner, general_ctx: SecurityContext
+    ) -> None:
+        # "apiary - keeper" must NOT match (not api + separator + key).
+        result = scanner.scan(f"apiary - keeper notes {'x' * 25}", context=general_ctx)
+        assert not any("pii_detected:api_key" in f for f in result.flags)

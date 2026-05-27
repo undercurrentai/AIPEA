@@ -623,6 +623,28 @@ Verification: `make ci` (CI parity) clean — full suite **1787 passed /
 35 skipped / 5 xfailed in 146.45 s** at coverage **91.97%**; ruff +
 mypy clean.
 
+### Fixed (cycle-14 `/quality-gate` follow-up to PR #73 round 12, 2026-05-26)
+
+GPT 5.4 Pro's round-12 REQUEST_CHANGES: the cycle-12 `api_key` fix
+`api(?:[_-]|\s+)?key` accepted whitespace OR a `_`/`-` separator, but
+not whitespace AROUND a separator — `api - key:` / `api _ key:` /
+`api\t-\tkey:` still evaded.
+
+**Security (`security.py`)**:
+
+  - **`api_key` separator-whitespace** (GPT round 12): label widened to
+    `api(?:\s*[_-]\s*|\s+)?key` — accepts any whitespace around an
+    optional single `_`/`-`, OR pure whitespace, OR the joined forms.
+    Closes every separator-whitespace combination in one pattern.
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle14ApiKeySeparatorWhitespace` (7 label-variant + 1 tab-around-
+separator + 1 benign-`apiary`-negative).
+
+Verification: `make ci` (CI parity) clean — full suite **1796 passed /
+35 skipped / 5 xfailed in 81.74 s** at coverage **91.75%**; ruff +
+mypy clean.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator

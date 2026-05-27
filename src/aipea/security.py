@@ -393,7 +393,14 @@ class SecurityScanner:
         # PR #73 round 10). The prior `api[_-]?key` rejected the space
         # variant, so the two-form scan could NOT close the `api key:
         # <secret>` bypass — the only remaining rigid PII/PHI separator.
-        "api_key": r"\b(api(?:[_-]|\s+)?key)\s*[:=]\s*\S{20,}",
+        # `api(?:\s*[_-]\s*|\s+)?key` — accepts ANY whitespace around an
+        # optional single `_`/`-` separator (`api - key`, `api _ key`,
+        # `api\t-\tkey`) OR pure whitespace (`api key`) OR the joined
+        # forms (`api_key`/`api-key`/`apikey`). Cycle-14 (GPT 5.4 Pro
+        # PR #73 round 12) closes the separator-whitespace combinations
+        # the cycle-12 `(?:[_-]|\s+)?` form missed (it allowed whitespace
+        # OR a separator, not whitespace AROUND a separator).
+        "api_key": r"\b(api(?:\s*[_-]\s*|\s+)?key)\s*[:=]\s*\S{20,}",
         "sk_key": r"\bsk-[a-zA-Z0-9_-]{20,}\b",
         "bearer_token": r"\bbearer\s+[a-zA-Z0-9._-]{20,}\b",
         "password": r"(password|passwd|pwd)\s*[:=]\s*\S+",
