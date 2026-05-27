@@ -91,13 +91,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.12"
 
@@ -169,7 +169,7 @@ jobs:
         # The job itself still exits non-zero because the earlier
         # review step failed — fail-closed semantics are preserved.
         if: always() && steps.diff.outputs.diff_empty != 'true'
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
         with:
           script: |
             const body = process.env.REVIEW_BODY || '(review produced no output)';
@@ -245,7 +245,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
@@ -325,7 +325,7 @@ jobs:
         # Job still exits non-zero because the codex-action step
         # failed — fail-closed semantics preserved.
         if: always() && steps.diff.outputs.diff_empty != 'true'
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
         with:
           script: |
             const body = process.env.REVIEW_BODY || '(review produced no output)';
@@ -399,7 +399,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
@@ -445,7 +445,7 @@ jobs:
       - name: Scrape verdict from PR comment
         if: always()
         id: verdict
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
         with:
           script: |
             const marker = '<!-- ai-second-review:claude -->';
