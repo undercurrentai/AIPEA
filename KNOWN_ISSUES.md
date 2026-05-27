@@ -372,6 +372,148 @@ These behaviors were flagged by bug-hunt waves but, after verification
 against upstream documentation or architectural intent, are recorded here
 as intentional rather than deferred or fixed.
 
+### #F12. Conversation-separator regex line-anchoring (vs mid-line)
+- **File**: the `(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:` entry in
+  `INJECTION_PATTERNS` in `src/aipea/security.py` (with its design comment
+  immediately preceding). *(Symbolic reference, not a line number: PR #73's
+  ~16 hardening cycles have shifted this entry's line repeatedly; per
+  CLAUDE.md §11 a symbolic anchor is used so the cite doesn't rot.)*
+- **Source**: Cycle-2 Lane-B bug-hunt sweep (Phase-2 of `/quality-gate`,
+  2026-05-26) flagged this as LOW C1; routed through `/claude-gpt-
+  dialogue` for the security design review.
+- **Verification**: SafePrompt regex-only F1 ~0.43 (2026 published
+  cross-language injection corpus); TokenMix PromptBench classifier-
+  only +18% accuracy delta vs regex-only. The empirical research is
+  consistent: closing the mid-line role-mention class at the regex
+  tier requires accepting a false-positive budget on benign English
+  prose ("Ask the assistant: it knows", "Try System: reboot first").
+- **Why line-anchoring is correct (at the regex tier)**: this is a
+  documented **regex-tier ceiling** consistent with ADR-008's
+  bright-line / adversarial-tier partitioning and ADR-010's deferral
+  of cross-language and ambiguous semantic disambiguation to the
+  LLM-as-judge tier. The bracket-style role-tag pattern
+  (`\[/?(system|user|assistant|human)\]`) and the XML role-tag pattern
+  (`</?(system|user|assistant)>`) already cover the unambiguous
+  inline-mid-line forms; what F12 declines to add is the **bare-colon
+  mid-line form** which is structurally indistinguishable from benign
+  natural language.
+- **Pinned by**: `tests/test_security_two_form_scan.py::
+  TestF12ConversationSeparatorLineAnchoredDesign::
+  test_mid_line_role_documented_not_blocked` (asserts the current
+  intentional non-detection so a future regex broadening cannot
+  silently introduce mid-line FPs). Recorded as `wontfix` in
+  `.quality-gate/accepted-findings.jsonl` with full rationale.
+- **Re-evaluate**: when the ADR-010 semantic scanner tier ships
+  (target v2.0.0). At that point this test should flip to assert
+  `is_blocked` and the entry should move to a "Fixed" log.
+
+### #F13. Lowercase UNLISTED SCI compartment (regex-tier ceiling)
+- **File**: `_SCI_COMPARTMENT_PATTERN` / `_SCI_KNOWN_COMPARTMENTS` in
+  `src/aipea/security.py` (the SCI entry of `_CLASSIFIED_MARKER_PATTERNS`).
+  *(Symbolic reference — see F12 note on line-number rot.)*
+- **Source**: PR #73 round 11→13 (cycle-13→15) reconciliation of the SCI
+  compartment-vs-path boundary; documented in the cycle-15 CHANGELOG entry
+  and `.quality-gate/cycle15-findings.md`.
+- **Behavior**: the SCI compartment token matches an **uppercase-generic**
+  codeword (`[A-Z](?:[A-Z0-9-]{0,38}[A-Z0-9])?`, catches any all-caps
+  compartment incl. unlisted ones) **OR** a **case-insensitive known-list**
+  (`NOFORN|REL|FGI|TK|GAMMA|…`, catches lowercase real compartments). A
+  lowercase rendering of an **unlisted** compartment (`//sci//someprogram`)
+  matches neither arm and does **not** flag.
+- **Why this is the correct regex-tier behavior**: rounds 11 and 13 pulled in
+  opposite directions — a lowercase UNKNOWN token after `//sci//` is almost
+  always a path segment (`//sci//readme`, round 11, must NOT flag), yet a
+  lowercase KNOWN compartment is a real banner (`//sci//tk`, round 13, MUST
+  flag). At the regex tier the only available discriminator is case + a
+  known-compartment list. Disambiguating an *arbitrary lowercase word* as
+  banner-vs-path is irreducible at this tier — it is exactly the semantic
+  judgment ADR-010 defers to the LLM-as-judge tier. Accepting this narrow
+  false-negative is the security-conservative trade against the alternative
+  (flagging every lowercase `//x//word`, which floods TACTICAL mode with
+  false positives on ordinary paths).
+- **Pinned by**: `tests/test_security_two_form_scan.py::
+  TestCycle15SciLowercaseKnownCompartment::test_lowercase_unknown_token_still_rejects`
+  (asserts lowercase-unlisted tokens reject — the live edge of this ceiling).
+- **Re-evaluate**: when the ADR-010 semantic scanner tier ships (target
+  v2.0.0); a semantic pass can resolve lowercase-unlisted-compartment
+  banner-vs-path that the regex tier cannot.
+
+### #F14. NFKC-stable non-ASCII banner delimiters (regex-tier ceiling)
+- **File**: `_BANNER_OPENER` / `_SCI_TAIL_GUARD` / `_SCI_CONT_GUARD` in
+  `src/aipea/security.py` (the SCI opener + terminator boundary sets).
+  *(Symbolic reference — see #F12 note on line-number rot.)*
+- **Source**: PR #73 round 14→15 (cycle-16/17) banner-terminator work + the
+  Claude↔GPT 5.4 Pro tier-ceiling dialogue (`/claude-gpt-dialogue`,
+  2026-05-27); documented in `.quality-gate/cycle17-findings.md`.
+- **Contract**: the SCI scanner is an **ASCII banner lexer** operating on
+  NFKC-normalized input. `scan()` first applies `unicodedata.normalize("NFKC",
+  …)` + confusable-translation + invisible-strip, which folds compatibility
+  forms to ASCII — so **NBSP (U+00A0), EM/IDEOGRAPHIC space, and FULLWIDTH
+  COLON (U+FF1A) all FLAG** (they normalize to ASCII space / `:` upstream and
+  the ASCII terminator matches). The opener/terminator sets are then an
+  explicit, CLOSED ASCII delimiter enumeration (whitespace `[ \t\n\r\f\v]`,
+  wrappers `( ) [ ] { } < > " ' ` + backtick, field/sentence delimiters
+  `: = , ; |` and `. ! ?`).
+- **Behavior (the ceiling)**: a banner whose delimiter is an **NFKC-STABLE
+  non-ASCII** character — em-dash `—` (U+2014), en-dash `–` (U+2013),
+  curly/smart quotes `“ ” ‘ ’` (U+201C/D, U+2018/9), and similar Unicode
+  punctuation NFKC does NOT fold to ASCII — does **not** match. E.g.
+  `“TS//SCI”` (curly-quote-wrapped) and `TS//SCI—note` (em-dash) do not flag.
+- **Why this is the correct regex-tier behavior**: the boundary set is
+  deliberately ASCII so the contract is honest — NFKC handles the
+  compatibility forms; what remains (NFKC-stable exotic punctuation) is
+  open-ended Unicode-punctuation surface with negligible real-world IC/tactical
+  frequency, and "is this exotic-wrapped token a banner" is a semantic
+  judgment. Inflating the regex to chase every Unicode codepoint is exactly the
+  asymptotic refinement ADR-010 exists to absorb. If a specific codepoint
+  becomes operationally important, handle it via **pre-normalization** (extend
+  the NFKC/confusable stage), NOT regex inflation.
+- **Pinned by**: `tests/test_security_two_form_scan.py::
+  TestCycle17DialogueRefinements::test_nfkc_stable_non_ascii_delimiter_defers_to_adr010`
+  (asserts em/en-dash + curly-quote delimiters defer) and the companion
+  `test_nfkc_normalized_unicode_boundary_flags` (asserts NBSP/fullwidth-colon
+  DO flag via NFKC — the live edge of the ASCII contract).
+- **Re-evaluate**: when the ADR-010 semantic scanner tier ships (target
+  v2.0.0), or sooner via a pre-normalization extension if a specific exotic
+  delimiter proves operationally frequent.
+
+### #F15. Conservative banner-PREFIX matching (vs strict full-chain validation)
+- **File**: `_SCI_TAIL_GUARD` / `_SCI_CONT_GUARD` (bare `//` and `/REL`
+  continuations) + `_check_classified_markers()` (`re.search`, not
+  `fullmatch`) in `src/aipea/security.py`. *(Symbolic reference — see #F12.)*
+- **Source**: PR #73 round 16 (GPT 5.4 Pro REQUEST_CHANGES). GPT observed that
+  a valid banner PREFIX followed by an invalid chained suffix still flags:
+  `TS//SCI//readme`, `TS//SCI/REL/index.html`, `SCI//NOFORN//readme` flag on
+  the `TS//SCI` / `TS//SCI/REL` / `SCI//NOFORN` prefix. GPT proposed consuming
+  and validating the ENTIRE compartment chain before a match can succeed.
+- **Decision: DECLINED as a deliberate design choice (NOT a deferral).** The
+  proposed change is **security-regressive** for a TACTICAL classified gate:
+  - Each cited string CONTAINS a complete, valid IC banner at a clean boundary
+    (`TS//SCI`, `TS//SCI/REL`, `SCI//NOFORN`). Flagging them is a **true
+    positive**, not a false positive — `TS//SCI/REL` is a textbook SCI+REL
+    marking.
+  - Requiring the *whole token* to validate would make
+    `TS//SCI/REL/index.html` **reject** — i.e. MISS content that literally
+    spells `TS//SCI/REL`. That is a **false negative**: the dangerous direction
+    that every prior round (5→15) explicitly guarded against ("a missed banner
+    leaks classified content to an external model").
+  - The asymmetry is decisive: a false positive (forcing offline on a
+    banner-prefixed path) costs a local-model route; a false negative leaks a
+    real banner. The conservative prefix-match is the security-correct default.
+  - Two of three frontier reviewers (Codex, Claude Opus 4.6) PASS the current
+    behavior across all four review rounds (13–16).
+  - This satisfies the ratified tier-ceiling stopping rule
+    (`.quality-gate/cycle17-findings.md`): the change does not fix a real FP
+    (the cited cases are TPs) and would reopen the false-NEGATIVE class — so it
+    is out of scope by the rule's own criteria.
+- **Pinned by**: the prefix-flag behavior is asserted throughout
+  `TestCycle1{5,6,7}…` (e.g. `SCI//NOFORN//ORCON` flags as a chained banner).
+- **Re-evaluate**: only if a concrete, high-frequency benign FP (a real input
+  that contains a valid banner prefix yet is genuinely non-classified) is
+  observed in production — at which point a *targeted* exclusion (not blanket
+  full-chain validation) would be the FP-minimal, FN-safe fix. The general
+  banner-vs-trailing-junk judgment is ADR-010 semantic-tier territory.
+
 ### #79. Exa API score clamping (vs normalization)
 - **File**: `src/aipea/search.py:583-597` + `SearchResult.__post_init__`
   clamp at `search.py:212-214`

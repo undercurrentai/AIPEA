@@ -64,17 +64,29 @@ def _extract_status(response: Any) -> str | None:
     those returns ``"Status.COMPLETED"`` instead of ``"completed"``,
     which would never match `TERMINAL_STATES` and the loop would
     poll-until-deadline. Prefer `.value` on enum members.
+
+    Non-string non-enum values (a numeric or bool ``status`` produced by
+    a buggy upstream or proxy-wrapped retrieve, e.g. ``{"status": 0}``)
+    are coerced to ``None`` — the caller's loop then maps that to
+    ``"unknown"`` and waits for a real status. The old ``str(status)``
+    would render ``"0"`` / ``"True"``, which never matches
+    ``TERMINAL_STATES`` either but signals the wrong thing to the
+    operator log.
     """
     status = getattr(response, "status", None)
     if status is not None:
         if isinstance(status, enum.Enum):
             return str(status.value)
-        return str(status)
+        if isinstance(status, str):
+            return status
+        return None
     if isinstance(response, dict):
         s = response.get("status")
         if isinstance(s, enum.Enum):
             return str(s.value)
-        return str(s) if s is not None else None
+        if isinstance(s, str):
+            return s
+        return None
     return None
 
 
@@ -126,7 +138,14 @@ def poll_until_terminal(
     deadline = monotonic() + poll_timeout_seconds
     last_status = "queued"
     while True:
-        if monotonic() > deadline:
+        # `>=` (not `>`) so a zero-duration deadline (or a frozen test
+        # `monotonic` injected at the same instant as the start) still
+        # times out on the first iteration instead of busy-looping. The
+        # one-tick difference is invisible for the production case (real
+        # `time.monotonic` advances between calls) but closes the test-
+        # seam infinite-loop reachable through the injectable `monotonic=`
+        # parameter when `poll_timeout_seconds=0`.
+        if monotonic() >= deadline:
             if cancel is not None:
                 try:
                     cancel(response_id)
@@ -140,9 +159,13 @@ def poll_until_terminal(
             sleep(poll_interval_seconds)
             continue
         status = _extract_status(current)
-        if status != last_status:
-            logger.info("response status: %s -> %s", last_status, status)
-            last_status = status or "unknown"
+        # Coerce None → "unknown" BEFORE the inequality check so
+        # consecutive None statuses don't re-trigger the log every poll
+        # (was: 300 lines per stuck call at 5s x 1500s deadline).
+        coerced = status if status is not None else "unknown"
+        if coerced != last_status:
+            logger.info("response status: %s -> %s", last_status, coerced)
+            last_status = coerced
         if status in terminal_states:
             return current
         sleep(poll_interval_seconds)

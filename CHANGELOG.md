@@ -7,6 +7,814 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (cycle-2 `/quality-gate` bug-hunt sweep, 2026-05-26)
+
+Six commits on `fix/quality-gate-bug-sweep` closing 12 findings from
+the Phase-2 Lane-B sweep (parallel Claude debugger agents) plus a
+follow-up GPT 5.4 Pro adversarial critique that widened the security-
+finding scope. Lane A (Codex) was unavailable for this run (`codex
+exec` hung on stdin-read after 9 h zero-CPU; skill-sanctioned fallback
+to Lane-B per `bug-hunt §Error Handling`). All fixes ship with
+regression tests (47 new test cases across 4 test files); zero
+existing tests regressed.
+
+**Security (`security.py`) — HIGH × 1 + LOW × 2** (commit `6272ffb`):
+
+- **F3 (HIGH C3)** — Multi-word PHI and classified-marker patterns
+  were bypassable via zero-width inter-word splits, double-space,
+  tab, and three NFKC-stable invisibles plus the Unicode TAG block.
+  Four-component fix: `_ALL_INVISIBLE_RE` now covers CGJ (U+034F),
+  ALM (U+061C), MVS (U+180E), and the TAG block (U+E0020–U+E007F);
+  literal-space tokens in `PHI_PATTERNS` and the new
+  `_CLASSIFIED_MARKER_PATTERNS` use `\s+` (no more double-space /
+  tab evasion); PII/PHI/classified now scan BOTH normalization
+  forms (stripped + spaced) with `dict.fromkeys` flag dedup;
+  `force_offline` is the OR of the two TACTICAL scans.
+- **F11 (LOW C3)** — Bare `\bSCI\b` false-matched `sci-fi`, `the
+  SCI department`, `scientific`. Naive `(?<![\w-])SCI(?![\w-])`
+  alternative ALSO failed (spaces are neither word nor hyphen).
+  SCI now requires IC-banner compartment-delimiter context:
+  `(?<=//)SCI\b|\bSCI(?=//|/[A-Z])`. Matches `TS//SCI`,
+  `TOP SECRET//SCI//NOFORN`, `SCI//REL TO USA`; rejects the
+  common-English subword false-positive class.
+- **F12 (LOW C1, wontfix)** — Mid-line conversation-separator
+  regex is intentionally line-anchored at the regex tier per
+  ADR-010 semantic-scanner deferral. Documented in code
+  comments and `.quality-gate/accepted-findings.jsonl`; pinned
+  by `test_mid_line_role_documented_not_blocked` so a future
+  regex broadening cannot silently introduce mid-line false
+  positives.
+
+**Learning (`learning.py`) — MEDIUM × 1** (commit `a6357e8`):
+
+- **F4 (MEDIUM C3)** — `prune_events(max_age_days=N)` had a
+  calendar-day data-loss bug: cutoff used Python `isoformat()`
+  (T-separated, microseconds, "+00:00") while `created_at`
+  used SQLite's `datetime('now')` format (space-separated,
+  second precision). Position 10 of the comparison had `' '`
+  (0x20) on the stored side vs `'T'` (0x54) on the cutoff
+  side, making ANY row created on the cutoff's calendar date
+  at any time of day compare less-than the cutoff and get
+  wrongly deleted. Fixed by formatting the cutoff with
+  `strftime("%Y-%m-%d %H:%M:%S")`.
+
+**Analyzer (`analyzer.py`) — LOW × 3** (commit `59b302b`):
+
+- **F8/F9/F10 (LOW C3 × 3)** — Three term-matching sites
+  (`calculate_confidence`, `_calculate_ambiguity`,
+  `_determine_search_strategy`) used substring `str.in` /
+  `str.find` matching, producing false hits: `"mighty"`
+  matched `"might"` (compound confidence + ambiguity
+  penalties on clean queries), `"asbestos"` / `"bestselling"`
+  matched `"best"`, `"construe"` matched `"true"` (misrouted
+  search strategy). Fixed via four module-level compiled
+  regexes anchored at `\b` boundaries (`_AMBIGUITY_RE`,
+  `_AMBIGUITY_CONFIDENCE_RE`, `_COMPARATIVE_RE`,
+  `_VERIFICATION_RE`).
+
+**Red-team (`redteam/`) — HIGH × 2 + LOW × 3 + cycle-1 recovery**
+(commits `3bb503a` + `d5eae2b`):
+
+- **Cycle-1 recovery (`3bb503a`)** — 11 production fixes plus a
+  test-infrastructure HIGH bug from an earlier Phase-2 attempt
+  that never reached `main`. Production fixes: per-poll TLS-
+  handshake reuse on `OpenAIResponsesProvider` (single sync
+  client across all poll iterations); 4xx retrieve-error
+  fail-fast classification (no more 25-min spin on 401/404);
+  `asyncio.to_thread` off-load for the sync polling loop (so
+  it doesn't block the event loop for 25 min); generator round-
+  label off-by-one fix and loop-variable shadowing repair;
+  evaluator smoothed-IDF (n_docs==1 degenerate-case fix
+  mirroring sklearn's `smooth_idf` default) and empty-payload
+  `empty_response` tagging; `_polling` None-status log-spam
+  coercion; reporter atomic-write (tmp-file + `os.replace`)
+  and Markdown-injection sanitization (backtick neutralization
+  via U+200B wraps + control-char strip); Anthropic SSE
+  `error` event handling. The test-infrastructure fix repaired
+  a 25-minute CI hang in the cycle-1 regression test file —
+  stub `httpx.Response` objects lacked `request=`, which made
+  `r.raise_for_status()` raise `RuntimeError` (caught + retried
+  by `poll_until_terminal` → infinite busy-loop to the 1500s
+  default). Fix attaches `request=httpx.Request(...)` to all
+  stubs and pins an explicit short `poll_timeout_seconds` on
+  the worker-thread test.
+- **F1/F2 (HIGH C3 × 2, commit `d5eae2b`)** —
+  `OpenAIResponsesProvider._one_generation` left the create-
+  response parse unguarded: `create_resp.json()` could raise
+  `json.JSONDecodeError` (a `ValueError` subclass, NOT
+  `httpx.HTTPError`), and `created.get("id")` could raise
+  `AttributeError` on a non-dict body (list / null / number).
+  Both escaped the documented "providers never raise" contract
+  and crashed the whole batch. Fixed via a new
+  `_parse_create_response` static helper. Also drops
+  `_one_generation`'s cyclomatic complexity back under the
+  project's `max-complexity = 15` ceiling. Fix covers
+  `OpenAICodexProvider` too via inheritance.
+- **F5/F6 (LOW C3 + LOW C2, commit `d5eae2b`)** — `_polling.py`:
+  deadline `>` → `>=` (closes the test-seam infinite-loop
+  reachable via a frozen injected `monotonic` +
+  `poll_timeout_seconds=0`); `_extract_status` coerces non-
+  string non-enum status values to `None` instead of
+  stringifying `0` → `"0"` / `True` → `"True"` (which never
+  match `TERMINAL_STATES` but produce misleading operator
+  log lines).
+- **F7 (LOW C3, commit `d5eae2b`)** — `reporter.py` summary
+  reported `len(novel)`, silently capped at 10 by the top-10
+  display slice. Now reports the true undetected count with a
+  `(top-N by novelty score shown below)` qualifier — material
+  for a security audit artifact committed to git.
+
+**Repo hygiene** (commit `401919b`):
+
+- `.gitignore` now ignores `.claude/scheduled_tasks.lock` (a
+  machine-local Claude Code scheduler runtime lock that
+  surfaced as an untracked file; mirrors the existing
+  `.quality-gate/` ephemera ignore).
+
+Verification: `ruff check` + `ruff format --check` clean (57 files);
+`mypy --strict src/aipea/` clean (28 source files); full suite **1515
+passed, 35 skipped, 5 xfailed** in 25.44 s at coverage **91.60%**
+(baseline pre-cycle-2 was 1456 passed / 91.63%). The 5 `xfails` are
+pre-existing architectural-ceiling docs (Wave-21 paraphrase tier known
+FP zone + the HIPAA `patient_name` ignore-case false-positive guards),
+unchanged by cycle-2.
+
+Phase-2 cycle-2 ledger at `.quality-gate/cycle2-findings.md`; GPT 5.4
+Pro security design dialogue transcript at
+`.quality-gate/cycle2-security-dialogue.md`.
+
+### Fixed (cycle-3 `/quality-gate` follow-up to PR #73, 2026-05-26)
+
+GPT 5.4 Pro's REQUEST_CHANGES verdict on PR #73 (cycle-2) blocked
+merge with a primary concern (SCI false positives on URL/path
+forms) plus a non-blocking duplicate-warning observation. In parallel,
+a cycle-3 Lane-B verification sweep against the cycle-2 fixes
+identified eight related gaps — incomplete-closure issues where the
+cycle-2 fix addressed a documented bypass class but missed adjacent
+variants of the same class. Four atomic commits close all 11
+findings.
+
+**Security (`security.py`)** — commit `3e20b59`:
+
+  - **SCI IC-banner-context-anchored** (GPT BLOCKER + cycle-3 F4):
+    cycle-2's `(?<=//)SCI\b|\bSCI(?=//|/[A-Z])` matched
+    `https://sci-fi.example` and `/sci/readme`. Now requires real IC
+    banner context: SCI preceded by a known classification level
+    (TS / S / C / U / TOP SECRET / SECRET / CONFIDENTIAL /
+    UNCLASSIFIED) + `//`, or followed by a known compartment suffix
+    (`//(NOFORN|REL|FGI|IMCON|ORCON|PROPIN|RELIDO|RSEN|HUMINT|COMINT|
+    SI|TK|HCS)\b` or `/REL\b`).
+  - **`_ALL_INVISIBLE_RE` expansion** (cycle-3 F2, HIGH C3): added
+    VS-1..16 (U+FE00-FE0F), Mongol VS-1..3 (U+180B-D), Egyptian
+    Hieroglyph Format Controls (U+13430-13438), Brahmi Number Joiner
+    (U+1107F), LANGUAGE TAG (U+E0001), and the Variation Selectors
+    Supplement (U+E0100-E01EF). Cycle-2's expansion missed these
+    NFKC-stable invisibles, leaving inter-word PHI/classified/
+    injection bypasses open.
+  - **`_UNICODE_NEWLINE_RE` expansion** (cycle-3 F3, MEDIUM C3):
+    NEL (U+0085), VT (U+000B), FF (U+000C) are `str.splitlines()`-
+    recognized line terminators that bypassed the line-anchored
+    conversation-separator injection pattern. Now normalized to `\n`.
+  - **Custom blocked patterns two-form scan** (cycle-3 F1, MEDIUM C3):
+    cycle-2's two-form scan covered PII/PHI/classified/injection but
+    NOT custom patterns. Now mirrors PII/PHI/classified.
+  - **SSN/CCN whitespace tolerance** (cycle-3 F5/F6, LOW C2):
+    `\b\d{3}\s*-\s*\d{2}\s*-\s*\d{4}\b` (SSN) and
+    `\b\d{4}[\s-]*\d{4}[\s-]*\d{4}[\s-]*\d{4}\b` (CCN) now accept
+    double-space / tab variants.
+  - **Init-time contract for `CLASSIFIED_MARKERS`** (cycle-3 F7,
+    LOW C1): every marker in `CLASSIFIED_MARKERS` MUST have a
+    matching entry in `_CLASSIFIED_MARKER_PATTERNS`. Catches the
+    F11-class false-positive risk at scanner instantiation time.
+  - **Log-after-dedup for classified-marker warnings** (GPT
+    non-blocking observation): the two-form classified scan no
+    longer double-emits warnings; `scan()` emits one WARNING per
+    unique marker after the two-form dedupe.
+
+**Analyzer (`analyzer.py`)** — commit `ec5fa55`:
+
+  - **Inflection regression fix** (cycle-3 A1, MEDIUM C3): cycle-2's
+    bare `\b(compare|versus|...)\b` alternations dropped inflected
+    forms ("compared", "comparing", "comparison", "comparisons",
+    "differences", "verifying", "verifies", "verified",
+    "verification", "confirmed", "confirms", "confirming",
+    "confirmation", "accurately") that the pre-fix substring code
+    correctly caught. All 14 inflected queries now correctly route
+    to MULTI_SOURCE again. False-positive guards from cycle-2
+    preserved ("best" inside "asbestos" still rejected).
+
+**Learning (`learning.py`)** — commit `31f5d0c`:
+
+  - **`ts` format alignment with SQLite schema** (cycle-3 A3, LOW
+    C2): `record_feedback`'s `ts = datetime.now(UTC).isoformat()`
+    populated `timestamp` + `last_updated` upserts in mixed format
+    with the schema's `datetime('now')` DEFAULT. Latent
+    cycle-2-F4-class data-loss bug. Now uses
+    `strftime("%Y-%m-%d %H:%M:%S")`.
+
+**Reporter (`redteam/reporter.py`)** — commit `0c24ed3`:
+
+  - **Conditional summary parenthetical** (cycle-3 A2, LOW C2):
+    `(top-N by novelty score shown below)` only appears when
+    `len(undetected) > len(novel)`. Previously read
+    `"Undetected payloads: 0 (top-0 by novelty score shown below)"`
+    in the all-detected case.
+
+**Regression-test additions** (~70 new test methods across 4 files):
+
+  - `tests/test_security_two_form_scan.py`: 52 new cycle-3 cases
+    (custom blocked two-form, 11 expanded invisibles × {PHI,
+    injection}, 5 newline-class cases, 18 SCI banner-context cases,
+    8 PII whitespace cases, init-contract assertion, log-dedup
+    assertion)
+  - `tests/test_analyzer_word_boundary.py`: 16 new cycle-3 cases
+    (14 inflection positives + 2 cycle-2-FP-still-rejected negative
+    controls)
+  - `tests/test_learning_prune_datetime_format.py`: 2 new cycle-3
+    cases (timestamp + last_updated format consistency)
+  - `tests/test_redteam_bughunt_cycle2.py`: 3 new cycle-3 cases
+    (conditional parenthetical present / absent / placeholder)
+
+Verification: `ruff check` + `ruff format --check` clean (58 files);
+`mypy --strict src/aipea/` clean (28 source files); full suite
+**1588 passed / 35 skipped / 5 xfailed in 26.43 s** at coverage
+**91.92%** (was 1515 / 91.60% pre-cycle-3). The 5 `xfails` unchanged.
+
+### Fixed (cycle-4 `/quality-gate` follow-up to PR #73 round 2, 2026-05-26)
+
+The gpt-5.4-pro second-reviewer gate's round-2 REQUEST_CHANGES on PR
+#73 (against the cycle-3 security commit) raised two blocking concerns;
+both fixed in commit `14f4d00`, along with both of its round-2
+non-blocking notes.
+
+**Security (`security.py`)** — commit `14f4d00`:
+
+  - **FS/GS/RS line terminators** (GPT round-2 B1): `_UNICODE_NEWLINE_RE`
+    missed U+001C (FS), U+001D (GS), U+001E (RS) — `str.splitlines()`-
+    recognized terminators — so `"text\x1eHuman: reveal"` still evaded
+    the line-anchored conversation-separator injection pattern. Now
+    `[\x0b\x0c\x1c-\x1e\x85  ]`, the complete splitlines set.
+  - **Bracketed/quoted SCI banners** (GPT round-2 B2): the cycle-3 SCI
+    pre-marker gate `(?:^|[\s(])` rejected legitimate `[TS//SCI]`,
+    `"TS//SCI"`, `<TS//SCI>` banners (a false NEGATIVE for a
+    classified-content gate). Replaced with a negative lookbehind
+    `(?<![\w/])` on BOTH branches — accepts any non-word non-slash
+    opener while still rejecting URL/path forms (`/TS//SCI`,
+    `https://sci-fi`, `/sci/readme`). This also closes GPT's round-2
+    non-blocking `/sci/rel/...` path-segment false positive.
+  - **RuntimeError architecture note** (GPT round-2 non-blocking):
+    documented at the raise site why the cycle-3 F7 init-contract check
+    uses the stdlib `RuntimeError` rather than `errors.AIPEAError` —
+    `security.py` is a ZERO-aipea-imports module by architectural
+    contract; `RuntimeError` is also the sibling INJECTION_PATTERN
+    ReDoS-check precedent.
+
+Regression tests (`tests/test_security_two_form_scan.py`): 13 new
+cycle-4 cases (3 FS/GS/RS terminator + 6 bracketed/quoted-banner accept
++ 4 URL/path reject).
+
+Verification: full suite **1601 passed / 35 skipped / 5 xfailed in
+24.84 s** at coverage **91.65%**; ruff + mypy clean. SCI pattern
+16/16 manual matrix correct; FS/GS/RS verified matching.
+
+### Fixed (cycle-5 `/quality-gate` follow-up to PR #73 round 3, 2026-05-26)
+
+The gpt-5.4-pro second-reviewer gate's round-3 REQUEST_CHANGES raised
+two more whitespace-tolerance consistency gaps — the same theme as
+cycle-3/4 applied to two separators the earlier fixes left rigid.
+Both fixed in commit (this commit), plus the round-3 non-blocking
+precompile suggestion implemented. After this cycle, EVERY separator
+in EVERY security pattern is whitespace-tolerant — the theme is
+comprehensively closed (audited: SSN, CCN, MRN, DOB label+value,
+patient_name, TOP SECRET, SCI delimiters).
+
+**Security (`security.py`)**:
+
+  - **DOB date-VALUE whitespace tolerance** (GPT round-3 B1): the
+    cycle-2 fix widened the `date\s+of\s+birth` LABEL but left the
+    date VALUE rigid. `DOB: 01 / 02 / 1990` and `date of birth
+    01 - 02 - 1990` evaded. Now
+    `\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*\d{2,4}`.
+  - **SCI delimiter whitespace tolerance** (GPT round-3 B2): the
+    cycle-4 SCI pattern accepted only exact `//` and `/REL`.
+    `TS // SCI`, `S // SCI`, `SCI / REL` (transcribed/dictated
+    spacing) evaded — and TS/S/REL are not standalone markers, so
+    TACTICAL `force_offline` was bypassed. Now `\s*/\s*/\s*` and
+    `\s*/\s*REL` on both branches; each `\s*` is bounded by a
+    mandatory literal `/` (no ReDoS ambiguity).
+  - **Precompiled classified-marker patterns** (GPT round-3
+    non-blocking): `_CLASSIFIED_MARKER_PATTERNS` are now compiled
+    once in `__init__` into `_compiled_classified` (catches regex
+    typos at construction; avoids per-scan recompilation). Deliberately
+    NOT run through `_is_regex_safe` — that validator's 200-char cap
+    is a user-input heuristic the legitimately-long SCI alternation
+    exceeds; the classified patterns are hardcoded + ReDoS-safe by
+    construction.
+
+Regression tests (`tests/test_security_two_form_scan.py`): 19 new
+cycle-5 cases (5 DOB-value + 1 DOB negative control, 7 SCI-delimiter
+accept + 5 SCI false-positive reject, 1 precompile-table assertion).
+
+Verification: full suite **1620 passed / 35 skipped / 5 xfailed in
+25.26 s** at coverage **91.65%**; ruff + mypy clean. DOB + SCI
+whitespace matrices verified (all accept/reject cases correct).
+
+### Fixed (cycle-6 `/quality-gate` follow-up to PR #73 round 4, 2026-05-26)
+
+The gpt-5.4-pro gate's round-4 REQUEST_CHANGES identified a SCI
+leading-slash FALSE NEGATIVE — the security-conservative direction
+(a missed classified banner in TACTICAL mode leaks classified content
+to an external model). Fixed in commit (this commit); GPT's round-4
+non-blocking subclassing-contract note also documented.
+
+**Security (`security.py`)**:
+
+  - **SCI leading-slash banner admission** (GPT round-4 blocker): the
+    cycle-4 `(?<![\w/])` guard rejected leading-slash banners
+    `/TS//SCI`, ` /SCI/REL` (list-marker / stray-slash markings at a
+    clean boundary) — real classified markings that MUST flag. New
+    `_BANNER_OPENER = (?:^|(?<=[\s(\[{<"']))/?` admits an OPTIONAL
+    leading slash at a CLEAN boundary (start-of-input or after
+    whitespace / open-bracket / quote / angle / paren), while STILL
+    rejecting mid-URI/path slashes (`https://example.com/TS//SCI`,
+    `path/to/TS//SCI`) where the slash is preceded by a word char.
+  - **Compartment-vs-path terminal guard** `(?!/(?!/))` (cycle-6): the
+    leading-slash admission would otherwise re-accept the cycle-1
+    `/sci/rel/index.html` path FP. The terminal guard rejects a marker
+    followed by a SINGLE `/` (path continuation) while ALLOWING `//`
+    (a compartment delimiter — so multi-compartment banners
+    `SCI//NOFORN//ORCON` still flag) and the terminal/whitespace case.
+    This is the precise discriminator that lets the leading-slash
+    banner admission coexist with the path rejection: the test moved
+    from "is there a leading slash" to "is the marker followed by a
+    path-style single-slash continuation".
+  - **Subclassing-contract note** (GPT round-4 non-blocking): extending
+    `CLASSIFIED_MARKERS` (e.g. via subclass) without a matching
+    `_CLASSIFIED_MARKER_PATTERNS` entry now raises `RuntimeError` at
+    `__init__` (cycle-3 F7 invariant). This is an intentional
+    fail-closed contract — documented here for any consumer subclassing
+    `SecurityScanner`. The runtime fallback in `_check_classified_
+    markers` still covers instance-level monkeypatch mutations.
+
+Regression tests (`tests/test_security_two_form_scan.py`): a new
+`TestCycle6SciLeadingSlashBanners` class (8 leading-slash-accept + 5
+mid-URI/path-reject + 1 multi-compartment-accept + 1 compartment-path-
+reject) plus a reconciliation of the cycle-5 `path_spaced_rel` case
+(`/sci / rel` with spaces is now correctly a banner, not a path).
+
+Verification: `make ci` (CI parity) clean — full suite **1635 passed /
+35 skipped / 5 xfailed in 38.09 s** at coverage **91.73%**; ruff +
+mypy clean. The SCI accept/reject matrix is now 27 cases (18 accept
+banner forms + 9 reject URI/path/prose forms), all verified.
+
+### Fixed (cycle-7 `/quality-gate` follow-up to PR #73 round 5, 2026-05-26)
+
+The gpt-5.4-pro gate's round-5 REQUEST_CHANGES caught two real bugs in
+the cycle-6 SCI work — one an asymmetry the cycle-6 fix itself
+introduced. Both fixed; GPT's round-5 non-blocking "extract the guards
+into named constants" suggestion also implemented.
+
+**Security (`security.py`)**:
+
+  - **First-branch path-continuation guard** (GPT round-5 B1): the
+    cycle-6 `(?!/(?!/))` terminal guard was applied only to the SECOND
+    SCI branch (`SCI//suffix` / `SCI/REL`), NOT the first
+    (`<level>//SCI`). So `/TS//SCI/readme`, `TS//SCI/index.html` wrongly
+    matched and forced offline. The first branch now carries
+    `_SCI_TAIL_GUARD = (?!/(?!/|REL\b))` — rejects a path continuation
+    (`/readme`) while ALLOWING valid banner tails (`//<compartment>`
+    chained, `/REL`) and terminals. `TS//SCI//NOFORN` and `TS//SCI/REL`
+    still match.
+  - **Field-delimiter openers** `: = , ; |` (GPT round-5 B2):
+    `_BANNER_OPENER` lacked field delimiters, so unquoted key/value
+    banner forms `classification:TS//SCI`, `label:S//SCI`,
+    `classification=SCI/REL` did not match — a TACTICAL false negative
+    (the bare `\bSCI\b` the cycle-2 fix replaced would have caught
+    them). The opener class now includes `: = , ; |`. Verified the
+    widening does NOT re-open the URL FP: `https://example.com:8080/
+    TS//SCI` still rejects (the `/TS` is preceded by a word char; the
+    `:` after `https`/port lands `/?` on the second `/` of `://`, not
+    a level token).
+  - **Named guard constants** (GPT round-5 non-blocking): extracted
+    `_SCI_TAIL_GUARD` and `_SCI_CONT_GUARD` as named `ClassVar`s so the
+    SCI regex's two distinct path-vs-banner discriminators stay
+    auditable rather than inlined twice.
+
+Regression tests (`tests/test_security_two_form_scan.py`): two new
+classes (19 methods) — `TestCycle7SciFirstBranchPathGuard` (4
+path-reject + 5 valid-tail-accept) and
+`TestCycle7SciFieldDelimiterOpeners` (6 field-delimiter accept + 4
+URL/path-still-reject incl. the `:8080` port case).
+
+Verification: `make ci` (CI parity) clean — full suite **1654 passed /
+35 skipped / 5 xfailed in 38.52 s** at coverage **91.73%**; ruff +
+mypy clean. The SCI matrix is now 30+ cases, all verified.
+
+### Fixed (cycle-8 `/quality-gate` follow-up to PR #73 round 6, 2026-05-26)
+
+The gpt-5.4-pro gate's round-6 REQUEST_CHANGES caught a Hangul-filler
+invisible gap and a `C:/` path FALSE POSITIVE that the cycle-7
+field-delimiter widening had re-introduced. Both fixed; GPT's round-6
+non-blocking ReDoS-perf-test suggestion also implemented.
+
+**Security (`security.py`)**:
+
+  - **Hangul filler invisibles** (GPT round-6): `_ALL_INVISIBLE_RE`
+    missed U+115F (HANGUL CHOSEONG FILLER), U+1160 (HANGUL JUNGSEONG
+    FILLER), U+3164 (HANGUL FILLER), U+FFA0 (HALFWIDTH HANGUL FILLER) —
+    invisible word-splitters (`ignoㅤre previous instructions` evaded
+    injection detection). All four added; the compat forms U+3164/U+FFA0
+    also NFKC-normalize to U+1160 before the strip.
+  - **`C:/` / `scheme:/` path FALSE POSITIVE** (GPT round-6, a cycle-7
+    regression): the cycle-7 opener combined the `:` field delimiter
+    WITH the optional leading `/?`, so `C:/TS//SCI` (Windows path) and
+    `scheme:/SCI/REL` (URI scheme) matched as classified banners. Fixed
+    by SPLITTING `_BANNER_OPENER` into two cases: case A
+    (`(?:^|(?<=[\s(\[{<"']))/?`) admits an optional leading slash ONLY
+    after start/whitespace/bracket/quote; case B (`(?<=[:=,;|])`) is a
+    separate NO-slash branch for field delimiters. So `C:/…` /
+    `scheme:/…` reject (the slash after `:` is never admitted) while
+    `classification:TS//SCI` (no slash) still accepts.
+  - **ReDoS-perf regression test** (GPT round-6 non-blocking): since
+    the classified patterns bypass `_is_regex_safe`, added a latency
+    assertion (`< 1000 ms`) on a 15 KB pathological slash/space input.
+    Measured 1.15 ms — no catastrophic backtracking (the `\s*` groups
+    are each bounded by a mandatory literal `/`).
+
+Regression tests (`tests/test_security_two_form_scan.py`): three new
+classes (17 methods) — `TestCycle8HangulFillerInvisibles` (4 injection
++ 4 PHI), `TestCycle8SciSchemePathFalsePositive` (5 scheme/path-reject +
+5 banner-accept), `TestCycle8SciRegexLatency` (1 ReDoS perf).
+
+Verification: `make ci` (CI parity) clean — full suite **1673 passed /
+35 skipped / 5 xfailed in 35.65 s** at coverage **91.73%**; ruff +
+mypy clean.
+
+### Fixed (cycle-9 `/quality-gate` follow-up to PR #73 round 7, 2026-05-26)
+
+GPT 5.4 Pro's round-7 REQUEST_CHANGES (a leading-double-slash SCI false
+negative) plus Claude Opus 4.6's round-7 APPROVE-with-consistency-note
+(PII/PHI duplicate logging).
+
+**Security (`security.py`)**:
+
+  - **Leading double-slash SCI portion markings** (GPT round 7): the
+    cycle-8 `_BANNER_OPENER` admitted only `/?` (zero-or-one leading
+    slash), so canonical IC portion markings with a leading DOUBLE
+    slash — `//SCI//TK`, `//SCI/REL` — at a clean boundary did not
+    match (a TACTICAL false negative; `TS`/`REL`/`TK` are not
+    standalone markers, so nothing else caught them). Case A now uses
+    `/*` (a leading slash-RUN of any length), so 0/1/2/N leading
+    slashes match WHEN the run starts at a clean boundary
+    (start-of-input / whitespace / bracket). Mid-URI/path slash runs
+    still reject: `https://example.com//SCI/REL` (the `//` is preceded
+    by `.com`), `path/to//SCI//TK` (preceded by `o`), `//SCI/readme`
+    (single-slash path continuation after SCI). `/*` is a simple star
+    on one char anchored at a clean boundary — no ReDoS (verified ~1.4
+    ms on a 20 K-slash adversarial input; a regression test pins this).
+  - **PII/PHI duplicate WARNING logs** (Claude round-7 consistency
+    note): `_check_pii` / `_check_phi` logged per-match, and the
+    two-form scan calls them twice, so a clean `SSN: 123-45-6789`
+    (matching in both normalized + spaced forms) emitted the WARNING
+    twice before the flag-level dedup. Logging moved to `scan()`
+    post-dedup — one WARNING per unique flag — matching the
+    classified-marker dedup-then-log pattern established earlier in
+    this PR. Cosmetic (no security/correctness impact); closes the
+    last log-consistency gap.
+
+Regression tests (`tests/test_security_two_form_scan.py`): two new
+classes (12 methods) — `TestCycle9SciLeadingDoubleSlashBanners` (6
+double-slash-accept + 5 URI/path-reject + 1 ReDoS-latency) and
+`TestCycle9PiiPhiLogDedup` (1 PII + 1 PHI single-log-per-unique-flag).
+
+Verification: `make ci` (CI parity) clean — full suite **1736 passed /
+35 skipped / 5 xfailed in 35.86 s** at coverage **91.74%**; ruff +
+mypy clean.
+
+### Fixed (cycle-10 `/quality-gate` follow-up to PR #73 round 8, 2026-05-26)
+
+GPT 5.4 Pro's round-8 REQUEST_CHANGES: a field delimiter `[:=,;|]`
+FOLLOWED BY a double-slash compartment marking — `classification=//SCI//TK`,
+`label://SCI/REL` — was a TACTICAL false negative, because the cycle-8
+`_BANNER_OPENER` case B (field delimiter) was strictly no-slash.
+
+**Security (`security.py`)**:
+
+  - **Field-value double-slash banners** (GPT round 8): case B now
+    admits an optional `(?:/{2,})?` after the field delimiter — a
+    DOUBLE-slash (or more) compartment marking accepts
+    (`classification=//SCI//TK`, `label://SCI/REL`), while a SINGLE
+    slash after the delimiter still rejects — that single-slash form is
+    exactly the URI-scheme / drive-letter pattern (`scheme:/SCI/REL`,
+    `C:/TS//SCI`) the round-6 fix established must reject, and
+    `(?:/{2,})?` requires two-or-more slashes so it can never match a
+    lone `/`. A full URL `https://example.com//SCI/REL` still rejects
+    (the `//SCI` follows the host `.com`, not the scheme colon); only
+    `://SCI…` — a compartment immediately after the delimiter — matches,
+    the same shape GPT classifies as a banner.
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle10SciFieldValueDoubleSlash` (5 field-value-double-slash accept
++ 6 single-slash URI/path reject + 1 ReDoS-latency).
+
+Verification: `make ci` (CI parity) clean — full suite **1748 passed /
+35 skipped / 5 xfailed in 50.66 s** at coverage **91.96%**; ruff +
+mypy clean.
+
+### Fixed (cycle-11 `/quality-gate` follow-up to PR #73 round 9, 2026-05-26)
+
+GPT 5.4 Pro's round-9 REQUEST_CHANGES: the SCI compartment allow-list
+(`NOFORN|REL|FGI|...`) was a CLOSED set, a TACTICAL false negative for
+valid but UNLISTED compartments / codewords (GAMMA, ECI, FVEY,
+special-access program names — IC compartment names are open-ended).
+
+**Security (`security.py`)**:
+
+  - **Generic compartment token** (GPT round 9): the DOUBLE-slash branch
+    `SCI//<compartment>` now accepts any all-caps banner token
+    `[A-Z][A-Z0-9-]{1,40}` (`_SCI_COMPARTMENT_PATTERN`) instead of the
+    hardcoded closed list. The SINGLE-slash branch stays restricted to
+    `/REL` (the only single-slash continuation unambiguously a banner,
+    not a path), so `/sci/readme`, `/sci/rel/index.html`, `scheme:/SCI`
+    still reject. Subword false positives stay closed by the
+    `_BANNER_OPENER` clean-boundary requirement (`ASCII//CODE` rejects —
+    the SCI is preceded by `A`). Length-bounded (≤41 chars); no ReDoS
+    (verified ~3 ms on a 50 K-char token). This removes the closed-list
+    false-negative class entirely — the SCI grammar's four FN dimensions
+    (invisibles, leading-slash runs, field delimiters, compartments) are
+    now all generalized rather than enumerated.
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle11SciGenericCompartment` (7 unlisted/listed-compartment accept
++ 5 path/subword reject + 1 ReDoS-latency).
+
+Verification: `make ci` (CI parity) clean — full suite **1761 passed /
+35 skipped / 5 xfailed in 38.07 s** at coverage **91.74%**; ruff +
+mypy clean.
+
+### Fixed (cycle-12 `/quality-gate` follow-up to PR #73 round 10, 2026-05-26)
+
+GPT 5.4 Pro's round-10 REQUEST_CHANGES — a NEW-dimension PII finding
+(not SCI; cycle-11 satisfied GPT on SCI, which dropped to non-blocking
+notes): the `api_key` PII pattern's label `api[_-]?key` matched
+`api_key` / `api-key` / `apikey` but NOT the whitespace form
+`api key:` / `api\tkey:` / `api\xa0key:` (NBSP) / `api​key:` (ZWSP) —
+so an API-key secret with a space evaded PII detection even with the
+two-form scan (the label never accepted a space).
+
+**Security (`security.py`)**:
+
+  - **`api_key` whitespace tolerance** (GPT round 10): label widened to
+    `api(?:[_-]|\s+)?key` — accepts underscore, hyphen, OR whitespace
+    between `api` and `key`. This was the LAST rigid PII/PHI separator
+    (audit confirmed SSN/CCN/MRN/DOB/patient_name/TOP-SECRET are all
+    already whitespace-tolerant or single-word); the whitespace-
+    tolerance theme is now comprehensively closed across every pattern.
+  - **`SCI//README` behavior pinned** (GPT round-10 non-blocking): the
+    cycle-11 generic compartment token flags `SCI//README` (double-slash
+    compartment shape → conservative TACTICAL flag) while the path form
+    `/sci/readme` (single-slash, lowercase) rejects. Pinned with tests
+    so the regex doesn't silently calcify.
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle12ApiKeyWhitespace` (6 label-variant + 3 invisible-separator
++ 1 benign-prose) and `TestCycle12SciReadmeBehaviorPinned` (2).
+
+Verification: `make ci` (CI parity) clean — full suite **1773 passed /
+35 skipped / 5 xfailed in 156.55 s** at coverage **92.02%**; ruff +
+mypy clean.
+
+### Fixed (cycle-13 `/quality-gate` follow-up to PR #73 round 11, 2026-05-26)
+
+GPT 5.4 Pro's round-11 REQUEST_CHANGES: a regression the cycle-11
+generic-compartment widening introduced. Because the SCI pattern was
+matched against the UPPER-CASED query, the generic compartment token
+classified ordinary lowercase path/URI text as SCI —
+`path=//sci//readme`, `http://sci//index`, `/sci//readme` all matched
+(after upper-casing, `readme` → `README` looked "all-caps") and wrongly
+`force_offline`'d in TACTICAL mode.
+
+**Security (`security.py`)** — case-aware SCI matching:
+
+  - The SCI pattern is now matched against the **ORIGINAL-case** query
+    (not `query.upper()`), with a **case-SENSITIVE** bare-branch
+    compartment token (`[A-Z][A-Z0-9-]{1,40}`). Real IC compartments
+    (NOFORN, GAMMA, TK, FVEY) are UPPERCASE; path/URI segments (readme,
+    index, docs) are lowercase — so the case is the discriminator that
+    finally resolves the cycle-9↔11 FN/FP oscillation (closed-list FN
+    on unlisted compartments ↔ generic-token FP on lowercase paths).
+  - Implementation: the SCI pattern is compiled WITHOUT `re.IGNORECASE`
+    and uses inline `(?i:...)` for its structural tokens (level, `SCI`,
+    `REL`) so those stay case-insensitive, while the compartment stays
+    case-sensitive. The simple markers (TOP SECRET, SECRET,
+    CONFIDENTIAL, NOFORN) are compiled WITH `re.IGNORECASE` and remain
+    fully case-insensitive (preserving prior behavior). The level-
+    prefixed branch (`<level>//SCI`) still flags regardless of tail
+    case — a level establishes banner context — so only the BARE
+    `SCI//<token>` branch is compartment-case-sensitive.
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle13SciCompartmentCaseSensitivity` (7 lowercase-path reject +
+5 uppercase-banner accept + 1 level-prefixed-lowercase flag + 1
+simple-markers-stay-case-insensitive). Full security suite (464 tests)
+unchanged-green.
+
+Verification: `make ci` (CI parity) clean — full suite **1787 passed /
+35 skipped / 5 xfailed in 146.45 s** at coverage **91.97%**; ruff +
+mypy clean.
+
+### Fixed (cycle-14 `/quality-gate` follow-up to PR #73 round 12, 2026-05-26)
+
+GPT 5.4 Pro's round-12 REQUEST_CHANGES: the cycle-12 `api_key` fix
+`api(?:[_-]|\s+)?key` accepted whitespace OR a `_`/`-` separator, but
+not whitespace AROUND a separator — `api - key:` / `api _ key:` /
+`api\t-\tkey:` still evaded.
+
+**Security (`security.py`)**:
+
+  - **`api_key` separator-whitespace** (GPT round 12): label widened to
+    `api(?:\s*[_-]\s*|\s+)?key` — accepts any whitespace around an
+    optional single `_`/`-`, OR pure whitespace, OR the joined forms.
+    Closes every separator-whitespace combination in one pattern.
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle14ApiKeySeparatorWhitespace` (7 label-variant + 1 tab-around-
+separator + 1 benign-`apiary`-negative).
+
+Verification: `make ci` (CI parity) clean — full suite **1796 passed /
+35 skipped / 5 xfailed in 81.74 s** at coverage **91.75%**; ruff +
+mypy clean.
+
+### Fixed (cycle-15 `/quality-gate` follow-up to PR #73 round 13, 2026-05-26)
+
+GPT 5.4 Pro's round-13 REQUEST_CHANGES raised two TACTICAL false
+NEGATIVES in the SCI classified-marker scanner. Both are fixed; both
+required reconciling against earlier rounds that had pulled the opposite
+direction (the SCI banner boundary has been the single hardest part of
+this module — see the in-code history block in `security.py`).
+
+**Security (`security.py`)**:
+
+  - **Lowercase-compartment bypass** (round 13, concern 2): the cycle-13
+    case-sensitivity fix (which closed the round-11 lowercase-PATH false
+    positive `//sci//readme`) over-corrected into a lowercase-BANNER false
+    negative — `//sci//tk`, `//sci//gamma`, `//sci/rel` stopped forcing
+    offline because the compartment token was uppercase-only. Resolved by
+    making the compartment **uppercase-generic OR a case-insensitive
+    KNOWN-compartment list** (`_SCI_KNOWN_COMPARTMENTS`: NOFORN, REL, FGI,
+    TK, GAMMA, ECI, FVEY, …). A lowercase KNOWN compartment now flags
+    (round 13); a lowercase UNKNOWN token (`readme`, `config`) still
+    rejects (round 11 preserved). `REL` in the tail and single-slash
+    branches is now `(?i:REL)` so lowercase `//sci/rel` flags while the
+    `_SCI_CONT_GUARD` still rejects a path continuation
+    (`/sci/rel/index.html`). The residual gap — a lowercase rendering of
+    an UNLISTED compartment (`//sci//someprogram`) — is the regex-tier
+    ceiling per ADR-010 (banner-vs-path on an arbitrary lowercase word is
+    a semantic-scanner concern).
+  - **Single-slash field-value banner** (round 13, concern 1): the
+    cycle-10 opener admitted only a 0/2+-slash run after a field
+    delimiter (`(?:/{2,})?`), to reject single-slash drive/URI forms
+    (`C:/`, `scheme:/`) per round 6. That blanket rejection was a false
+    negative for real field-value banners `classification:/TS//SCI`,
+    `label=/SCI/REL`. Resolved by widening opener Case B to `/*` (any
+    slash count): the discriminator is no longer the slash count but
+    whether a **banner shape follows** the opener. So `C:/Users`,
+    `url=/api/v1` still reject (no banner), while `classification:/TS//SCI`
+    flags. This reverses round 6 for the narrow case where a single-slash
+    field value is *immediately followed by a literal banner*
+    (`C:/TS//SCI`, `scheme:/SCI/REL` now flag) — the documented
+    round-6 ↔ round-13 tension, resolved toward the security-conservative
+    direction (force-offline on a string that literally spells a
+    classification banner is the safe error in a classified-content gate).
+
+Both widenings are ReDoS-safe (verified ~3–6 ms on 50 K-char adversarial
+slash runs; `/*` is a simple star on one char anchored by a fixed-width
+lookbehind).
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle15SciLowercaseKnownCompartment` (6 lowercase-known-flag +
+5 lowercase-unknown-reject) and `TestCycle15SingleSlashFieldValueBanner`
+(5 field-value-banner-flag + 5 no-banner-reject + 1 ReDoS). The
+superseded round-6/round-9 reject assertions in `TestCycle8…`,
+`TestCycle9…`, `TestCycle10…`, `TestCycle11…` were updated in place (the
+flipped cases moved into the cycle-15 ACCEPT tests; the surviving
+non-banner-path rejects retained) so the contract change is traceable,
+not silently dropped.
+
+Verification: `make ci` (CI parity) clean — full suite **1811 passed /
+35 skipped / 5 xfailed in 83.40 s** at coverage **91.75%**; ruff +
+mypy clean.
+
+### Fixed (cycle-16 `/quality-gate` follow-up to PR #73 round 14, 2026-05-26)
+
+GPT 5.4 Pro's round-14 REQUEST_CHANGES: the cycle-15 widenings (lowercase
+known-compartment list + `(?i:REL)`) exposed a path/file-suffix false
+POSITIVE in the SCI scanner. The compartment and `/REL` branches
+terminated with `\b` followed by a continuation guard that only rejected a
+following single `/`. Because `\b` succeeds before `-` and `.`, a
+hyphenated/dotted path-or-file suffix slipped through and wrongly forced
+offline in TACTICAL mode: `path=//sci//gamma-ray`, `path=//SCI//TK-demo`,
+`path=/sci/rel-team`, `//SCI//ZULU-test`, `//sci//gamma.tmp`.
+
+**Security (`security.py`)**:
+
+  - **Banner-terminator rewrite** (GPT round 14): `_SCI_TAIL_GUARD` and
+    `_SCI_CONT_GUARD` are rewritten from a negative-lookahead-on-slash
+    (`(?!/(?!/...))`, which only constrained what followed a `/`) to an
+    EXPLICIT POSITIVE banner terminator. After a marking token the input
+    must now end, OR hit a clean banner boundary (whitespace, closing
+    bracket/brace/paren/angle, quote, comma, semicolon), OR continue as a
+    valid banner tail — `//` (chained compartment) or, after `<level>//SCI`,
+    `/REL`. A `-`, `.`, single-`/` path, or word char rejects. This both
+    preserves the round-5 fix (`/TS//SCI/readme` still rejects) and closes
+    the round-14 hyphen/dot path-suffix FP class.
+  - **Generic compartment arm cannot end in `-`** (GPT round 14, fix 2):
+    `_SCI_COMPARTMENT_PATTERN`'s uppercase-generic arm changed from
+    `[A-Z][A-Z0-9-]{1,40}` to `[A-Z](?:[A-Z0-9-]{0,38}[A-Z0-9])?` — same
+    1-40 length bound, still admits INTERNAL hyphens (`SPECIAL-ACCESS`), but
+    cannot terminate on one. Belt-and-suspenders behind the terminator.
+
+ReDoS-safe (verified ~2.6-5 ms on 50 K-char slash/compartment runs and a
+25 K-pair hyphen-run adversarial input).
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle16SciBannerTerminator` (7 hyphen/dot-suffix-reject + 7
+clean-terminator-accept incl. comma/paren/angle/semicolon/bracket and an
+all-caps internal-hyphen compartment + 1 ReDoS).
+
+Verification: `make ci` (CI parity) clean — full suite **1826 passed /
+35 skipped / 5 xfailed in 83.02 s** at coverage **91.75%**; ruff +
+mypy clean.
+
+### Fixed (cycle-17 `/quality-gate` follow-up to PR #73 round 15, 2026-05-27)
+
+GPT 5.4 Pro's round-15 REQUEST_CHANGES: the cycle-16 positive banner
+terminator set was incomplete, producing two false NEGATIVES and leaving a
+third uncovered in the SCI scanner.
+
+**Security (`security.py`)**:
+
+  - **Colon terminator** (GPT round 15): `Classification: TS//SCI:` is a
+    ubiquitous banner form, but `:` was absent from the cycle-16 terminator
+    set `[\s)\]}>"',;]` even though it is structurally identical to the `,`
+    and `;` already accepted. Added `:` to both `_SCI_TAIL_GUARD` and
+    `_SCI_CONT_GUARD` (a cycle-16 omission, not a behavior change).
+  - **Backtick opener + terminator** (GPT round 15): markers are routinely
+    wrapped in markdown inline code (`` `TS//SCI` ``); backtick was neither a
+    clean opener nor a clean terminator, so code-span-wrapped banners evaded.
+    Added backtick to `_BANNER_OPENER`'s clean-boundary class and both SCI
+    guards (it joins the quote/bracket set it belongs with).
+  - **Sentence-final punctuation** (GPT round 15): a banner ending a sentence
+    (`TS//SCI.`, `Marked TS//SCI!`, `SCI//NOFORN?`) was missed. Added a nested
+    lookahead alternative `[.!?](?=$|\s)` — `. ! ?` terminate ONLY when
+    immediately followed by end-of-input or whitespace. This flags sentence-
+    final banners while the round-14 dotted path/file suffixes
+    (`//SCI//TK.bak`, `.tar.gz`, `.bak.old`) STILL reject, because the char
+    after the `.` there is not EOI/whitespace.
+  - **Comment correction** (GPT round 15 non-blocking): the per-marker-pattern
+    header comment still claimed matching against `query.upper()`; corrected
+    to reflect the cycle-13 original-case matching (the compile-loop CASE
+    HANDLING comment remains the authoritative source).
+
+**Dialogue refinements** (Claude↔GPT 5.4 Pro tier-ceiling dialogue,
+`/claude-gpt-dialogue`, GPT round-15 convergence) — four tightenings GPT
+required for a clean pass, all applied:
+
+  - **Sentence punctuation + ASCII closers**: `. ! ?` may be followed by
+    zero-or-more ASCII closing wrappers (`` ) ] } > " ' ` ``) before
+    whitespace/EOI, so `TS//SCI."`, `(TS//SCI.)` flag (the bare
+    `[.!?](?=$|\s)` missed these).
+  - **Pipe `|` terminator**: table/log forms `|TS//SCI|`, `|SCI//TK|` flag
+    (`|` was already a left field-delimiter).
+  - **ASCII-only boundary whitespace** `[ \t\n\r\f\v]` (not `\s`): makes the
+    ASCII-delimiter contract honest. NB — because `scan()` applies NFKC
+    normalization UPSTREAM, NBSP/EM/IDEOGRAPHIC space and FULLWIDTH COLON fold
+    to ASCII and still FLAG; only NFKC-STABLE non-ASCII punctuation (em/en
+    dash, curly quotes) defers (KNOWN_ISSUES #F14).
+  - **Documented** the cycle-15 `classification:/TS//SCI` field+optional-slash
+    left form in the contract.
+
+ReDoS-safe (verified ~2.7-5 ms on 50 K-char slash/compartment/hyphen,
+sentence-punctuation, and closing-wrapper adversarial runs).
+
+This is the regex-tier completion of the SCI banner-boundary delimiter
+contract — the CLOSED, ENUMERATED ASCII opener/terminator set, operating on
+NFKC-normalized input. Edge cases OUTSIDE that set — NFKC-stable non-ASCII
+delimiters (em/en dash, curly quotes; KNOWN_ISSUES #F14) and lowercase-unlisted
+compartments (#F13) — are the documented regex-tier ceiling deferred to the
+ADR-010 semantic-scan tier. The tier-boundary was negotiated and ratified in
+the Claude↔GPT dialogue; see `.quality-gate/cycle17-findings.md`.
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle17SciColonBacktickSentenceTerminators` (11 colon/backtick/sentence
+accept + 6 dotted/hyphen-suffix reject + 1 ReDoS) and
+`TestCycle17DialogueRefinements` (9 sentence-closer/pipe accept + 5
+NFKC-normalized-Unicode-flag + 4 NFKC-stable-non-ASCII-defer).
+
+Verification: `make ci` (CI parity) clean — full suite **1862 passed /
+35 skipped / 5 xfailed in 82.92 s** at coverage **91.75%**; ruff +
+mypy clean.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator

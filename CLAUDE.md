@@ -1,17 +1,17 @@
 # CLAUDE.md - AIPEA
-> **Agent Contract v3.0.5** (governs this file) | **Library:** `aipea` v1.6.2 (PyPI) | Updated: 2026-04-24 | Owner: @joshuakirby
+> **Agent Contract v3.0.6** (governs this file) | **Library:** `aipea` v1.6.2 (PyPI; v1.7.0-RC on `main`) | Updated: 2026-05-26 | Owner: @joshuakirby
 >
 > *Note: the `version` field below is the version of this Agent Contract document, not the AIPEA library. The library version lives in `pyproject.toml` and `src/aipea/__init__.py`.*
 
 ```yaml
-agent_contract_version: 3.0.5  # version of THIS file; NOT the aipea library
+agent_contract_version: 3.0.6  # version of THIS file; NOT the aipea library
 library_version_source: pyproject.toml  # canonical aipea library version
 status: ACTIVE
 tier: 2  # Standard (~10K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
 inherits_from: ../../CLAUDE.md  # Undercurrent Holdings root
 maintainer: joshuakirby
-last_audit: 2026-04-24
+last_audit: 2026-05-26  # post-cycle-16 /quality-gate sweep + docs-sync reconciliation
 protocol: v4.0
 token_budget: 8000
 ```
@@ -29,8 +29,8 @@ token_budget: 8000
 | **CI matrix** | Python 3.11 + 3.12 |
 | **Coverage floor** | 75% |
 | **License** | MIT |
-| **Source LOC** | ~11,510 (branch `feat/redteam-b1-providers`, 2026-04-28); ~10,662 on main (v1.6.2, 2026-04-24) |
-| **Exports** | 50 symbols in `__all__` (as of ADR-004; was 44 in v1.5.0). B1 foundation does NOT extend the package `__all__`; +6 exports planned for B1 follow-up |
+| **Source LOC** | ~13,538 (`find src/aipea -name '*.py'`; 11,442 top-level + 2,096 `redteam/`; post-cycle-16 / branch `fix/quality-gate-bug-sweep`, 2026-05-26); ~10,662 on `main` at v1.6.2 (2026-04-24); ~12,000+ on `main` post-Wave-22 release-cut pending |
+| **Exports** | 60 symbols in `__all__` (Wave-22 extended from 50 via the redteam package surface). Was 50 in v1.6.0 (ADR-004 taint-aware feedback averaging), 44 in v1.5.0 |
 | **Build backend** | hatchling — **do NOT run `poetry install` / `poetry lock` / `poetry run` in this directory**. It silently creates an orphan venv in `~/Library/Caches/pypoetry/virtualenvs/aipea-*`. Use `make install` (pip + `.venv/`). |
 | **Quick commands** | `make all` (local) / `make ci` (CI parity) |
 
@@ -162,6 +162,7 @@ learning.py    <- imports _types (QueryType), security (ComplianceMode); stdlib:
 strategies.py  <- imports _types (QueryType enum only)
 _types.py      <- Shared enums + canonical helpers (ProcessingTier, QueryType, SearchStrategy, QUERY_TYPE_PATTERNS, get_model_family)
 models.py      <- Shared data models (QueryAnalysis)
+errors.py      <- ZERO imports (pure stdlib exception classes); AIPEAError + 5 subclasses (Wave C3)
 analyzer.py    <- imports security, _types, models
 engine.py      <- imports search, _types; lazy-imports strategies
 enhancer.py    <- imports ALL (facade); lazy-imports learning (opt-in via enable_learning)
@@ -169,8 +170,9 @@ cli.py         <- imports config (optional: typer, rich, httpx)
 __main__.py    <- imports cli.app (CLI entry point)
 ```
 
-**Optional sub-package** (B1 foundation on `feat/redteam-b1-providers`,
-not yet on main; ADR-009 implementation):
+**Optional sub-package** (ADR-009; B1 + B1-follow-up SHIPPED to `main` via
+PR #64/#65, Wave-22, 2026-04-24 — its public surface flows into the parent
+`src/aipea/__init__.py`):
 ```
 redteam/
 ├── _polling.py        <- stdlib only; long-call response polling helper
@@ -178,13 +180,19 @@ redteam/
 ├── _resolve.py        <- stdlib only; ANTHROPIC_API_KEY/OPENAI_API_KEY env > config > default
 ├── _types.py          <- stdlib only; RedTeamProvider Protocol +
 │                         RedTeamResult frozen dataclass + Technique StrEnum (8 OWASP cats)
+├── generator.py       <- imports _types; builds attack prompts per technique
+├── evaluator.py       <- imports _types; scores provider responses (success/refusal)
+├── reporter.py        <- imports _types; formats run results (text/JSON)
 ├── providers/
 │   ├── __init__.py    <- registry + _validate_provider (async-coroutine + attribute checks)
-│   └── ollama.py      <- stdlib + httpx; OllamaProvider reference impl
-└── __init__.py        <- public package surface (imports flow into the parent
-                          src/aipea/__init__.py at B1 follow-up)
+│   ├── ollama.py      <- stdlib + httpx; OllamaProvider reference impl (offline)
+│   ├── anthropic.py   <- stdlib + httpx; AnthropicProvider (Claude Opus, Messages API SSE)
+│   ├── openai_responses.py <- stdlib + httpx; gpt-5.5-pro via Responses API background mode
+│   └── openai_codex.py     <- stdlib + httpx; OpenAICodexProvider
+└── __init__.py        <- public package surface (flows into src/aipea/__init__.py)
 ```
-B1 follow-up adds: AnthropicProvider, OpenAIResponsesProvider, OpenAICodexProvider, generator, evaluator, reporter, CLI integration. B2 adds the budget ledger + daemon. B3 adds Council Mode + AgenticRed archive + weekly cron.
+**Planned (not yet implemented)**: B2 = budget ledger + daemon. B3 = Council
+Mode + AgenticRed archive + weekly cron.
 
 ### Design Principles
 

@@ -178,7 +178,27 @@ class AnthropicProvider:
                         elif evt_type == "message_start":
                             msg = event.get("message", {}) or {}
                             usage = msg.get("usage", {}) or {}
-                            usage_in = int(usage.get("input_tokens", 0) or 0)
+                            # Use max() defensively — the event SHOULD
+                            # only fire once per stream, but Anthropic's
+                            # API surface has evolved and we'd rather
+                            # not silently lose the larger token count
+                            # if a duplicate ever appears.
+                            usage_in = max(usage_in, int(usage.get("input_tokens", 0) or 0))
+                        elif evt_type == "error":
+                            # Per Anthropic streaming docs, an `error`
+                            # event can fire AFTER the HTTP 200 response
+                            # has been committed (overloaded_error,
+                            # api_error, internal_server_error). Without
+                            # this branch the stream falls through to
+                            # `error = "empty_response"` at line 188-189,
+                            # conflating a server-side mid-stream error
+                            # with a model refusal — two very different
+                            # signals for the budget ledger and corpus
+                            # skip predicate.
+                            err_obj = event.get("error", {}) or {}
+                            logger.warning("Anthropic SSE error event: %s", err_obj)
+                            error = "http_error"
+                            break
         except httpx.HTTPError as exc:
             logger.warning("Anthropic network error: %s", exc)
             error = "network"

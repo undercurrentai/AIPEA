@@ -116,7 +116,7 @@ Adopters who need only detection install AIPEA and consume the
 Adopters who need multi-model coordination buy Agora IV.
 
 The value pivot, from an open-core perspective: AIPEA is *deliberately
-easy to rebuild* (~10,662 LOC, stdlib + httpx, MIT). The moat lives in
+easy to rebuild* (~13K LOC, stdlib + httpx, MIT). The moat lives in
 AEGIS and Agora IV — the layers AIPEA was designed to make
 unnecessary-to-rebuild **above the detection substrate**.
 

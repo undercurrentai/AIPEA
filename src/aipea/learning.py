@@ -273,7 +273,19 @@ class AdaptiveLearningEngine:
         clamped = max(-1.0, min(1.0, score))
         qtype = query_type.value
         qhash = hashlib.sha256(qtype.encode()).hexdigest()[:16]
-        ts = datetime.now(UTC).isoformat()
+        # Cycle-3 A3: match the schema's `datetime('now')` SQLite format
+        # so the `timestamp` and `last_updated` columns share ONE
+        # canonical text format across the INSERT (Python-provided
+        # `ts`) and ON-CONFLICT-UPDATE paths (also Python-provided via
+        # `ts`). Pre-fix, `last_updated`'s schema DEFAULT used SQLite
+        # format ("YYYY-MM-DD HH:MM:SS") for new rows but the upsert
+        # overwrote with isoformat ("YYYY-MM-DDTHH:MM:SS.ffffff+00:00"),
+        # leaving the column in mixed formats across rows — the same
+        # latent class as the cycle-2 F4 prune_events bug. No live
+        # consumer does lex comparisons on these columns today, but
+        # aligning the format now prevents future re-introduction of
+        # the F4 data-loss bug class on any future age-based pruning.
+        ts = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         taint_json = json.dumps(list(taint)) if taint else None
 
         try:
@@ -448,7 +460,21 @@ class AdaptiveLearningEngine:
         try:
             with self._with_db_lock() as conn:
                 if age is not None:
-                    cutoff = (datetime.now(UTC) - timedelta(days=age)).isoformat()
+                    # `created_at` is stored by the SCHEMA DEFAULT
+                    # `datetime('now')` (SQLite format:
+                    # "YYYY-MM-DD HH:MM:SS" — space-separated, second
+                    # precision, no timezone offset). The cutoff MUST use
+                    # the SAME format for `WHERE created_at < ?` to compare
+                    # chronologically as lexicographic strings. With the
+                    # prior `datetime.now(UTC).isoformat()` (T-separated,
+                    # microseconds, "+00:00"), the position-10 character
+                    # was ' ' (0x20) on the stored side vs 'T' (0x54) on
+                    # the cutoff side — ' ' < 'T' — so EVERY row created
+                    # on the cutoff's calendar day (at any time of day)
+                    # compared as less-than the cutoff and was wrongly
+                    # deleted. This was confirmed data-loss on the
+                    # cutoff-day boundary.
+                    cutoff = (datetime.now(UTC) - timedelta(days=age)).strftime("%Y-%m-%d %H:%M:%S")
                     cursor = conn.execute(
                         "DELETE FROM learning_events WHERE created_at < ?",
                         (cutoff,),

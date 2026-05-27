@@ -21,6 +21,8 @@ Refs:
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import time
 from typing import Any
@@ -118,6 +120,52 @@ class OpenAIResponsesProvider:
                     )
         return results
 
+    @staticmethod
+    def _parse_create_response(
+        create_resp: httpx.Response,
+    ) -> tuple[str | None, str | None]:
+        """Parse a 2xx create-response body into ``(response_id, error)``.
+
+        Returns:
+            ``(response_id, None)`` on the happy path — a valid JSON object
+            carrying an ``"id"`` field.
+            ``(None, "non_json")`` if the body is not valid JSON OR is
+            valid JSON whose top level is not a dict (a top-level list,
+            null, number, or string).
+            ``(None, "missing_field")`` if the body is a valid dict but
+            lacks an ``"id"`` key.
+
+        Providers MUST NOT raise on any of these failure modes — the
+        documented contract is that failures are tagged via
+        ``RedTeamResult.error`` (see its docstring; ``"non_json"`` is
+        listed as a canonical tag) so the batch keeps going and the
+        budget ledger sees the failure. Without this helper, the
+        previous inline ``created = create_resp.json()`` allowed
+        ``json.JSONDecodeError`` (a ``ValueError`` subclass, NOT an
+        ``httpx.HTTPError``) to escape ``_one_generation`` and crash the
+        whole batch, and ``created.get("id")`` raised ``AttributeError``
+        on a top-level list/null body.
+        """
+        try:
+            created = create_resp.json()
+        except (json.JSONDecodeError, ValueError):
+            logger.warning(
+                "OpenAI Responses create: non-JSON body (status=%s, len=%d)",
+                create_resp.status_code,
+                len(create_resp.text),
+            )
+            return None, "non_json"
+        if not isinstance(created, dict):
+            logger.warning(
+                "OpenAI Responses create: non-dict JSON (type=%s)",
+                type(created).__name__,
+            )
+            return None, "non_json"
+        rid = created.get("id")
+        if not rid or not isinstance(rid, str):
+            return None, "missing_field"
+        return rid, None
+
     async def _one_generation(
         self,
         *,
@@ -157,32 +205,54 @@ class OpenAIResponsesProvider:
                 )
                 error = "http_error"
             else:
-                created = create_resp.json()
-                response_id = created.get("id")
-                if not response_id:
-                    error = "missing_field"
+                response_id, parse_error = self._parse_create_response(create_resp)
+                if response_id is None:
+                    # Helper contract: response_id is None iff parse_error
+                    # is set (one of "non_json" / "missing_field"). The
+                    # `response_id is None` narrowing (vs `parse_error is
+                    # not None`) is what lets mypy strict see `response_id`
+                    # as `str` in the else-branch below.
+                    error = parse_error
                 else:
+                    # Reuse ONE sync httpx.Client across all poll iterations
+                    # (was: per-iteration TLS+TCP handshake — up to 300/run
+                    # at the default 5s interval x 1500s deadline).
+                    sync_client = httpx.Client(timeout=self.timeout)
 
                     def _retrieve(rid: str) -> dict[str, Any]:
-                        # Sync inside the polling loop — poll_until_terminal
-                        # uses time.sleep, so we use a sync httpx client here.
-                        with httpx.Client(timeout=self.timeout) as sync:
-                            r = sync.get(
-                                f"{self.api_base}/responses/{rid}",
-                                headers=headers,
+                        r = sync_client.get(
+                            f"{self.api_base}/responses/{rid}",
+                            headers=headers,
+                        )
+                        # Classify retrieve errors:
+                        # - 4xx (except 429): permanent — synthesize a
+                        #   terminal "failed" status so poll_until_terminal
+                        #   exits the retry loop instead of spinning to the
+                        #   25-min deadline on a 401/404
+                        # - 5xx / 429 / network: transient — re-raise so the
+                        #   polling helper catches and retries with backoff
+                        if 400 <= r.status_code < 500 and r.status_code != 429:
+                            logger.warning(
+                                "OpenAI retrieve permanent error %s: %s",
+                                r.status_code,
+                                r.text[:500],
                             )
-                            r.raise_for_status()
-                            return r.json()  # type: ignore[no-any-return]
+                            return {"status": "failed", "_retrieve_http_status": r.status_code}
+                        r.raise_for_status()
+                        return r.json()  # type: ignore[no-any-return]
 
                     def _cancel(rid: str) -> None:
-                        with httpx.Client(timeout=self.timeout) as sync:
-                            sync.post(
-                                f"{self.api_base}/responses/{rid}/cancel",
-                                headers=headers,
-                            )
+                        sync_client.post(
+                            f"{self.api_base}/responses/{rid}/cancel",
+                            headers=headers,
+                        )
 
                     try:
-                        final = poll_until_terminal(
+                        # poll_until_terminal is sync (uses time.sleep);
+                        # off-load to a worker thread so we don't block
+                        # the asyncio event loop for up to 25 min.
+                        final = await asyncio.to_thread(
+                            poll_until_terminal,
                             response_id,
                             retrieve=_retrieve,
                             cancel=_cancel,
@@ -192,6 +262,8 @@ class OpenAIResponsesProvider:
                     except PollTimeoutError:
                         error = "timeout"
                         final = None
+                    finally:
+                        sync_client.close()
                     if final is not None:
                         status = final.get("status")
                         if status == "completed":

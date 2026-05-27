@@ -105,8 +105,61 @@ _CONFUSABLE_TRANS = str.maketrans(_CONFUSABLE_MAP)
 # and inter-word attacks).  Security scanning runs on BOTH the stripped
 # form AND a space-substituted form so \s-dependent injection patterns
 # also fire when invisible chars replace real spaces.  (#108, #108b)
-_UNICODE_NEWLINE_RE = re.compile("[\u2028\u2029]")
-_ALL_INVISIBLE_RE = re.compile("[\u00ad\u200b-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff9-\ufffb]")
+#
+# Cycle-2 expansion (F3, 2026-05-26): the prior class missed three
+# NFKC-stable invisibles documented in modern prompt-injection research
+# as inter-word evasion vectors against multi-word pattern detection:
+#   - U+034F  COMBINING GRAPHEME JOINER (CGJ) \u2014 Mn but used as invisible
+#             glue; preserved by NFKC
+#   - U+061C  ARABIC LETTER MARK (ALM)        \u2014 Cf (bidi); NFKC-stable
+#   - U+180E  MONGOLIAN VOWEL SEPARATOR (MVS) \u2014 Cf; NFKC-stable
+# Plus the TAG block U+E0020-U+E007F (Cf, plane 14) \u2014 used in the 2024
+# "ASCII smuggling" / Unicode-tag steganographic prompt-injection class.
+# These characters are NEVER expected in a legitimate LLM-bound query;
+# stripping them on the primary form (and replacing them with spaces on
+# the secondary form) is the conservative right call.
+# Unicode line terminators that Python's `str.splitlines()` recognizes
+# but `[\r\n]` in the conversation-separator INJECTION_PATTERN does not.
+# All are normalized to `\n` before pattern matching so the line-anchored
+# injection separator fires regardless of which terminator the attacker
+# used. Without normalizing NEL/VT/FF, a payload like "text<NEL>Human:
+# do evil" evaded the conversation-separator regex (cycle-3 F3).
+#   - U+000B VT  (vertical tab)
+#   - U+000C FF  (form feed)
+#   - U+001C FS  (file separator)        — cycle-4 (GPT 5.4 Pro PR #73)
+#   - U+001D GS  (group separator)       — cycle-4
+#   - U+001E RS  (record separator)      — cycle-4
+#   - U+0085 NEL (next line)
+#   - U+2028 LS  (line separator)
+#   - U+2029 PS  (paragraph separator)
+# This is the COMPLETE set of terminators Python's str.splitlines()
+# splits on (verified: 'a\x1cb'.splitlines() == ['a', 'b']). FS/GS/RS
+# were missed in cycle-3; 'text\x1eHuman: reveal' still evaded the
+# line-anchored conversation-separator pattern until this cycle-4 fix.
+_UNICODE_NEWLINE_RE = re.compile("[\x0b\x0c\x1c-\x1e\x85\u2028\u2029]")
+_ALL_INVISIBLE_RE = re.compile(
+    # Cycle-8 (GPT 5.4 Pro PR #73 round 6 + root-cause generalization):
+    # the COMPLETE Unicode Default_Ignorable_Code_Point set (the
+    # canonical "invisible for rendering" property, Unicode 15.1
+    # DerivedCoreProperties) UNION the non-DI format/control chars
+    # earlier cycles added (Brahmi Number Joiner U+1107F, Egyptian
+    # Hieroglyph Format Controls U+13430-13438, narrow-NBSP / line-sep
+    # tail of U+2028-202F). Covering the whole DI property — including
+    # its RESERVED ranges (e.g. U+E0000-E0FFF), which exist precisely
+    # so future-assigned invisibles are ignorable — future-proofs
+    # against the per-char reactive patching that drove cycles 3-8
+    # (CGJ, ALM, MVS, VS-1..16, Mongol VS, TAG block, VSS, LANGUAGE
+    # TAG, and the Hangul fillers U+115F/1160/3164/FFA0 that GPT
+    # flagged in round 6). All are stripped (primary form) or space-
+    # substituted (secondary form) by the two-form scan. Verified a
+    # strict SUPERSET of every prior cycle's class; matches no visible
+    # character.
+    "[\u00ad\u034f\u061c\u115f-\u1160\u17b4-\u17b5\u180b-\u180f"
+    "\u200b-\u200f\u2028-\u202f\u2060-\u206f\u3164\ufe00-\ufe0f"
+    "\ufeff\uffa0\ufff0-\ufffb\U0001107f\U00013430-\U00013438"
+    "\U0001bca0-\U0001bca3\U0001d173-\U0001d17a"
+    "\U000e0000-\U000e0fff]"
+)
 
 
 # =============================================================================
@@ -324,10 +377,30 @@ class SecurityScanner:
     """
 
     # PII patterns - always checked
+    # Cycle-3 F5/F6 whitespace tolerance: SSN and CCN structural
+    # separators now accept zero-or-more whitespace around the hyphens
+    # (SSN) and zero-or-more whitespace-or-hyphen between groups (CCN).
+    # The pre-fix patterns rejected tab/double-space variants between
+    # digit groups even though the two-form invisible-char scan
+    # couldn't help (digits can't span an inserted whitespace). Same
+    # `\s+`-as-canonical-separator principle as the cycle-2 F3 PHI fix.
     PII_PATTERNS: ClassVar[dict[str, str]] = {
-        "ssn": r"\b\d{3}-\d{2}-\d{4}\b",
-        "credit_card": r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b",
-        "api_key": r"\b(api[_-]?key)\s*[:=]\s*\S{20,}",
+        "ssn": r"\b\d{3}\s*-\s*\d{2}\s*-\s*\d{4}\b",
+        "credit_card": r"\b\d{4}[\s-]*\d{4}[\s-]*\d{4}[\s-]*\d{4}\b",
+        # `api(?:[_-]|\s+)?key` accepts the WHITESPACE form `api key:`
+        # (and tab / NBSP-after-NFKC / ZWSP-after-two-form) in addition
+        # to `api_key` / `api-key` / `apikey` (cycle-12, GPT 5.4 Pro
+        # PR #73 round 10). The prior `api[_-]?key` rejected the space
+        # variant, so the two-form scan could NOT close the `api key:
+        # <secret>` bypass — the only remaining rigid PII/PHI separator.
+        # `api(?:\s*[_-]\s*|\s+)?key` — accepts ANY whitespace around an
+        # optional single `_`/`-` separator (`api - key`, `api _ key`,
+        # `api\t-\tkey`) OR pure whitespace (`api key`) OR the joined
+        # forms (`api_key`/`api-key`/`apikey`). Cycle-14 (GPT 5.4 Pro
+        # PR #73 round 12) closes the separator-whitespace combinations
+        # the cycle-12 `(?:[_-]|\s+)?` form missed (it allowed whitespace
+        # OR a separator, not whitespace AROUND a separator).
+        "api_key": r"\b(api(?:\s*[_-]\s*|\s+)?key)\s*[:=]\s*\S{20,}",
         "sk_key": r"\bsk-[a-zA-Z0-9_-]{20,}\b",
         "bearer_token": r"\bbearer\s+[a-zA-Z0-9._-]{20,}\b",
         "password": r"(password|passwd|pwd)\s*[:=]\s*\S+",
@@ -344,9 +417,22 @@ class SecurityScanner:
     # the flag would otherwise make [A-Z] and [a-z] match case-insensitively
     # (a Python regex gotcha), producing a massive HIPAA false-positive
     # surface on any query containing "patient" + two ordinary words. (#95)
+    # Multi-word PHI label literals MUST use `\s+` (not literal " ") so
+    # double-space, tab, and NFKC-equivalent whitespace variants ("medical
+    # \trecord", "medical\xa0record" — NBSP NFKC-normalizes to space —
+    # "medical  record") all match. The pre-fix literal-space form left
+    # these whitespace variants as an evasion class even with the two-form
+    # invisible-char rewrite, because once the invisible was replaced with
+    # `\s` the multi-space gap still didn't match the single literal space.
+    # (Cycle-2 F3.)
+    # Cycle-5 (GPT 5.4 Pro PR #73 round 3): the DOB date VALUE separators
+    # are also whitespace-tolerant (`\s*[/-]\s*`), not just the label.
+    # Without it, "DOB: 01 / 02 / 1990" and "date of birth 01 - 02 - 1990"
+    # (spaces around the slashes/hyphens) evaded the HIPAA sweep even
+    # after the cycle-2 label fix.
     PHI_PATTERNS: ClassVar[dict[str, str]] = {
-        "mrn": r"\b(MRN|medical record)\s*[:=]?\s*\d+\b",
-        "dob": r"\b(DOB|date of birth)\s*[:=]?\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b",
+        "mrn": r"\b(MRN|medical\s+record)\s*[:=]?\s*\d+\b",
+        "dob": r"\b(DOB|date\s+of\s+birth)\s*[:=]?\s*\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*\d{2,4}\b",
         "patient_name": r"\b(?i:patient)\s*[:=]?\s*[A-Z][a-z]+\s+[A-Z][a-z]+\b",
     }
 
@@ -354,7 +440,12 @@ class SecurityScanner:
     # rely on case-sensitive character classes to avoid false positives. (#95)
     _PHI_CASE_SENSITIVE: ClassVar[frozenset[str]] = frozenset({"patient_name"})
 
-    # Classified content markers - only checked in TACTICAL mode
+    # Classified content markers - only checked in TACTICAL mode.
+    # Kept as a list of display names so the resulting flags
+    # (`classified_marker:<NAME>`) remain stable as a public contract.
+    # The actual match patterns live in `_CLASSIFIED_MARKER_PATTERNS`
+    # below — see that table for why each marker uses the pattern it
+    # uses (cycle-2 F11: bare `\bSCI\b` was a false-positive farm).
     CLASSIFIED_MARKERS: ClassVar[list[str]] = [
         "TOP SECRET",
         "SECRET",
@@ -362,6 +453,303 @@ class SecurityScanner:
         "NOFORN",
         "SCI",
     ]
+
+    # Per-marker regex patterns. NB (cycle-13, GPT round 11; comment
+    # corrected cycle-17, GPT round 15): these are NO LONGER matched against
+    # `query.upper()`. `_check_classified_markers` matches the ORIGINAL-case
+    # query; the simple markers are compiled WITH `re.IGNORECASE` (so they
+    # stay case-insensitive) while the SCI pattern is compiled case-SENSITIVE
+    # and uses inline `(?i:...)` for its structural tokens — see the compile
+    # loop's CASE HANDLING comment for the authoritative explanation. Notes:
+    #   - "TOP SECRET": uses `\s+` between TOP and SECRET so the
+    #     multi-space / tab variants don't evade (mirror of the PHI
+    #     pattern repair for cycle-2 F3).
+    #   - Single-word markers ("SECRET", "CONFIDENTIAL", "NOFORN"):
+    #     standard `\b...\b` boundary.
+    #   - "SCI": IC-banner-context-anchored. Bare `\bSCI\b` false-
+    #     positively matched "sci-fi" (hyphen is a word boundary),
+    #     "the SCI department", "scientific" subword, etc. (cycle-2
+    #     F11; GPT 5.4 Pro empirical critique confirmed the naive
+    #     `(?<![\w-])SCI(?![\w-])` alternative ALSO matches "the SCI
+    #     department" because spaces are non-word non-hyphen.) The
+    #     fix anchors SCI to its IC compartment-delimiter context:
+    #     the marker must be preceded by `//` (the IC banner
+    #     compartment delimiter, as in `TS//SCI` / `TOP SECRET//SCI`)
+    #     or followed by `//` / `/<UPPER>` (as in `SCI//NOFORN` /
+    #     `SCI/REL`). This matches established IC tradecraft and
+    #     rejects the common-English false-positive class.
+    # Known IC banner classification level prefixes. Used to anchor
+    # the SCI compartment marker to real banner context (cycle-3 PR #73
+    # GPT 5.4 Pro REQUEST_CHANGES + cycle-3 verification F4): the
+    # cycle-2 fix `(?<=//)SCI\b|\bSCI(?=//|/[A-Z])` still matched
+    # benign URLs like `https://sci-fi.example` and `/sci/readme`
+    # (`HTTPS://SCI-FI` upper-cased, `//` precedes SCI; `SCI/R` of
+    # `/sci/readme` matches the lookahead). The fix requires SCI to be
+    # adjacent to a recognized banner LEVEL (TS, S, C, U + full forms)
+    # via the IC compartment delimiter `//`, OR followed by a
+    # constrained banner CONTINUATION (NOFORN, REL, FGI, IMCON, etc.).
+    # `(?i:...)` — the level prefix is case-INSENSITIVE (a banner level may
+    # be written `TS` or `ts`), while the SCI compartment token (below) is
+    # case-SENSITIVE. The SCI pattern is compiled WITHOUT re.IGNORECASE
+    # (cycle-13), so this inline flag is what makes the level match any
+    # case against the original-case query.
+    _CLASSIFIED_LEVEL_PREFIXES: ClassVar[str] = (
+        r"(?i:TS|S|C|U|TOP\s+SECRET|SECRET|CONFIDENTIAL|UNCLASSIFIED)"
+    )
+    # Compartment / control-marking token after `SCI//`. Reconciles three
+    # GPT 5.4 Pro PR #73 rounds that pulled in opposite directions:
+    #   round 9  — valid but UNLISTED compartments (GAMMA, ECI, FVEY,
+    #     special-access program names) must flag; IC compartment names
+    #     are open-ended, so a closed allow-list was a TACTICAL false
+    #     negative. → uppercase-generic `[A-Z][A-Z0-9-]{1,40}`.
+    #   round 11 — a lowercase UNKNOWN token after `//sci//` is a path
+    #     segment, not a banner (`path=//sci//readme`, `http://sci//index`)
+    #     and must NOT flag. → the uppercase-generic arm stays
+    #     case-SENSITIVE.
+    #   round 13 — a lowercase KNOWN compartment (`//sci//tk`,
+    #     `//sci//gamma`, `//sci/rel`) IS a real banner and MUST flag;
+    #     relying on case ALONE was a lowercase-bypass false negative.
+    # Resolution (cycle-15): compartment = uppercase-generic (catches any
+    # all-caps codeword incl. unlisted, round 9) OR a case-INsensitive
+    # KNOWN-compartment list (catches lowercase real compartments,
+    # round 13). A lowercase UNKNOWN token matches neither and rejects
+    # (round 11). The residual gap — a lowercase rendering of an UNLISTED
+    # compartment (`//sci//someprogram`) — is the regex-tier ceiling per
+    # ADR-010: disambiguating an arbitrary lowercase word as
+    # banner-vs-path needs the semantic-scanner tier. Length-bounded
+    # ({1,40}); no ReDoS (verified ~3 ms on a 50 K-char token). Subword
+    # FPs stay closed by `_BANNER_OPENER`'s clean-boundary requirement
+    # (`ASCII//CODE` rejects — the SCI is preceded by `A`).
+    _SCI_KNOWN_COMPARTMENTS: ClassVar[str] = (
+        r"(?i:NOFORN|REL|FGI|IMCON|ORCON|PROPIN|RELIDO|RSEN|HUMINT"
+        r"|COMINT|SI|TK|HCS|GAMMA|ECI|FVEY|ACGU)"
+    )
+    # Generic arm ends in `[A-Z0-9]`, NOT `-` (cycle-16, GPT round 14): the
+    # prior `[A-Z][A-Z0-9-]{1,40}` could consume a trailing hyphen, which —
+    # combined with `\b` succeeding before `-` — let a hyphenated path/file
+    # suffix slip through (`//SCI//ZULU-test`). `[A-Z](?:[A-Z0-9-]{0,38}[A-Z0-9])?`
+    # keeps the 1-40 char length bound and still admits internal hyphens
+    # (`SPECIAL-ACCESS`) but cannot END on one. The banner-terminator guards
+    # (`_SCI_TAIL_GUARD`/`_SCI_CONT_GUARD`) are the primary defense; this is
+    # belt-and-suspenders.
+    _SCI_COMPARTMENT_PATTERN: ClassVar[str] = (
+        r"(?:[A-Z](?:[A-Z0-9-]{0,38}[A-Z0-9])?|" + _SCI_KNOWN_COMPARTMENTS + r")"
+    )
+    # Banner opener (cycle-6, GPT 5.4 Pro PR #73 round 4; widened cycle-7
+    # round 5): start-of-input OR a clean opening delimiter, followed by
+    # an OPTIONAL single leading slash. The optional `/?` admits
+    # leading-slash banners `/TS//SCI`, ` /SCI/REL` (a list-marker or
+    # stray-slash banner at a clean boundary — a real classified marking
+    # that MUST flag, since a missed classified banner in TACTICAL mode
+    # is the dangerous false-NEGATIVE direction). The clean-boundary
+    # requirement STILL rejects mid-URI/path forms
+    # (`https://example.com/TS//SCI`, `path/to/TS//SCI`, `/sci/readme`)
+    # where the slash is preceded by a word char or another path segment.
+    #
+    # Opener char class (cycle-7 round 5): whitespace, brackets/braces,
+    # angle-open, quotes, AND field delimiters `: = , ; |`. The field
+    # delimiters close a TACTICAL false-negative on unquoted key/value
+    # banner forms `classification:TS//SCI`, `label:S//SCI`,
+    # `classification=SCI/REL`. CRITICALLY the class excludes `/` and
+    # word chars, so adding `:`/`=` does NOT re-open the URL FP
+    # (`https://...:8080/TS//SCI` still rejects — the `/TS` is preceded
+    # by a word char, and `https:` + `/?` lands on the second `/` of
+    # `://`, not a level token). The lookbehind is fixed-width (1 char),
+    # a legal Python `re` lookbehind.
+    # SPLIT into two cases (cycle-8, GPT 5.4 Pro PR #73 round 6):
+    #   CASE A — start-of-input OR whitespace/bracket/quote/angle/paren,
+    #     THEN an OPTIONAL leading slash `/?` (admits leading-slash
+    #     banners `/TS//SCI`, ` /SCI/REL`).
+    #   CASE B — after a FIELD delimiter (`: = , ; |`), with NO optional
+    #     slash (admits `classification:TS//SCI`, `label:S//SCI`).
+    # The cycle-7 single-class form combined `:` WITH the optional `/?`,
+    # which re-opened a path FP: `C:/TS//SCI` (Windows path) and
+    # `scheme:/SCI/REL` (URI scheme) matched because `:` was a clean
+    # opener AND the `/` after it was consumed by `/?`. Separating the
+    # cases means a slash is admitted ONLY after start/whitespace/
+    # bracket (never after a field delimiter), so `C:/…` and `scheme:/…`
+    # reject while the no-slash field-delimiter banners still match.
+    #
+    # Case A leading-slash is `/*` (a slash-RUN), not `/?` (cycle-9, GPT
+    # 5.4 Pro PR #73 round 7): canonical IC portion markings carry a
+    # leading double slash — `//SCI//TK`, `//SCI/REL` — which `/?`
+    # (zero-or-one) could not match, a TACTICAL false negative. `/*`
+    # admits a leading slash-run of ANY length, but ONLY at a clean
+    # boundary (start / whitespace / bracket), so mid-URI/path slash
+    # runs still reject: `https://example.com//SCI/REL` (the `//SCI` is
+    # preceded by `m`), `path/to//SCI//TK` (preceded by `o`). `/*` is a
+    # simple star on a single char anchored at a clean boundary — no
+    # ReDoS (verified ~1.4 ms on a 20 K-slash adversarial input).
+    #
+    # Case B (cycle-10 round 8; WIDENED cycle-15 round 13): a field
+    # delimiter `[:=,;|]` followed by a slash-RUN of ANY length `/*`
+    # (zero / one / two-or-more). Earlier cycles used `(?:/{2,})?`
+    # (zero or 2+) to reject single-slash field values as drive-letter /
+    # URI-scheme paths (`C:/…`, `scheme:/…`). GPT round 13 showed that
+    # was a TACTICAL false NEGATIVE: `classification:/TS//SCI` and
+    # `label=/SCI/REL` are real single-slash field-value banners that
+    # must flag. The discriminator is NOT the slash count — it is whether
+    # a BANNER SHAPE (`<level>//SCI`, `SCI//<compartment>`, `SCI/REL`)
+    # follows the opener. So `/*` is safe: `C:/Users/josh`,
+    # `url=/api/v1/users`, `scheme:/path/to/file` still reject (no banner
+    # after the slash), while `classification:/TS//SCI` AND `C:/TS//SCI`
+    # (a "path" whose literal components ARE a classification banner) both
+    # flag — the security-conservative direction in TACTICAL mode. A full
+    # URL `https://example.com//SCI/REL` still rejects because the `//SCI`
+    # follows the host (`.com`, a word char), not a field delimiter. `/*`
+    # is a simple star on one char anchored by a fixed-width lookbehind —
+    # no ReDoS (verified ~6 ms on a 50 K-slash run).
+    #
+    # Backtick added to the clean-boundary class (cycle-17, GPT round 14→15):
+    # markers are routinely wrapped in markdown inline code (`` `TS//SCI` ``);
+    # backtick is a quote-like delimiter, so it joins the bracket/quote set as
+    # both a clean opener (here) and a clean terminator (the SCI guards below).
+    #
+    # ASCII whitespace (cycle-17 Claude↔GPT tier-ceiling dialogue, GPT round
+    # 15): the clean-boundary class uses an EXPLICIT ASCII whitespace set
+    # `[ \t\n\r\f\v]`, NOT `\s`. Under Python's default Unicode mode `\s`
+    # would silently admit NBSP (U+00A0) and other Unicode spaces, which would
+    # CONTRADICT the documented contract that non-ASCII delimiters defer to the
+    # ADR-010 semantic tier (KNOWN_ISSUES F14). Keeping the boundary ASCII
+    # makes that deferral honest. (The intra-banner `\s*` spacing between slash
+    # tokens, e.g. `TS // SCI`, is a separate tolerance concern and stays `\s`.)
+    _BANNER_OPENER: ClassVar[str] = r"(?:(?:^|(?<=[ \t\n\r\f\v(\[{<\"'`]))/*|(?<=[:=,;|])/*)"
+
+    # SCI tail guard for the `<level>//SCI` branch. REWRITTEN cycle-16 (GPT
+    # 5.4 Pro PR #73 round 14) from a negative-lookahead-on-slash to an
+    # EXPLICIT POSITIVE banner terminator. The old `(?!/(?!/|(?i:REL)\b))`
+    # only constrained what followed a `/`; it said nothing about `-` or
+    # `.`, so a hyphenated/dotted path-or-file suffix slipped through
+    # (`/TS//SCI-demo`, and via the compartment branch `//SCI//TK-demo`,
+    # `//sci//gamma-ray`, `/sci/rel-team`) because `\b` succeeds before `-`.
+    # The positive form requires that after `SCI` the input ends, or hits a
+    # clean banner terminator (whitespace, closing bracket/brace/paren/angle,
+    # quote, comma, semicolon, COLON, BACKTICK), OR continues as a valid
+    # banner tail — `//` (chained compartment) or `/REL` (case-insensitive,
+    # cycle-15 round 13), OR ends a sentence (`. ! ?` IMMEDIATELY before
+    # end-of-input or whitespace). Anything else — a `-`, a `.`/`!`/`?` NOT
+    # at a sentence end, a single `/<path>`, a word char — is rejected.
+    #
+    # cycle-17 (GPT round 15 + the Claude↔GPT tier-ceiling dialogue) extended
+    # the cycle-16 terminator set with the remaining ASCII structural
+    # delimiters and refined the sentence rule:
+    #   - COLON `:` — `Classification: TS//SCI:` is a ubiquitous banner form;
+    #     `:` is structurally identical to the `,`/`;` already accepted (a
+    #     cycle-16 omission, not a new behavior).
+    #   - PIPE `|` — table/log forms `|TS//SCI|`, `|SCI//TK|`; `|` is already a
+    #     left field-delimiter, so it joins the terminator set too.
+    #   - BACKTICK — markdown inline-code wrapping (`` `TS//SCI` ``).
+    #   - SENTENCE `. ! ?` followed by ZERO OR MORE ASCII closing wrappers
+    #     (`` ) ] } > " ' ` ``) and THEN ASCII whitespace or end-of-input. So
+    #     `TS//SCI.`, `TS//SCI."`, `(TS//SCI.)` all flag, while a dotted
+    #     path/file suffix (`//SCI//TK.bak`, `.tar.gz`) still REJECTS because
+    #     the char after the `.` is not a closer/ws/EOI. Threads round-14
+    #     (.bak rejects) and round-15 (sentence-final flags).
+    #   - ASCII whitespace `[ \t\n\r\f\v]` (NOT `\s`): keeps the boundary ASCII
+    #     so NBSP / Unicode spaces defer to ADR-010 (see the opener comment).
+    # This preserves the round-5 fix (`/TS//SCI/readme` rejects) and the
+    # round-14 hyphen/dot path-suffix FP closure. The terminator set is now the
+    # CLOSED, ENUMERATED ASCII structural-delimiter contract agreed in the
+    # tier-ceiling dialogue; non-ASCII / exotic delimiters are ADR-010 (F14).
+    _SCI_TAIL_GUARD: ClassVar[str] = (
+        r"(?=$|[ \t\n\r\f\v)\]}>\"',;:|`]|//|/(?i:REL)\b"
+        r"|[.!?][\"')\]}>`]*(?=$|[ \t\n\r\f\v]))"
+    )
+    # Compartment-continuation guard for the second SCI branch (after a
+    # consumed compartment or `/REL`). Same terminator set as the tail guard
+    # minus the `/REL` tail (a compartment is already consumed): end, a clean
+    # ASCII terminator char (ws, closing wrapper, `, ; : |`, backtick), `//`
+    # (further chaining, `SCI//NOFORN//ORCON`), or a sentence `. ! ?`+closers
+    # before ASCII ws/EOI. Rejects a single-slash path (`SCI//NOFORN/path`), a
+    # `-` suffix (`//SCI//ZULU-test`), and a non-sentence `.` (`//SCI//TK.bak`).
+    _SCI_CONT_GUARD: ClassVar[str] = (
+        r"(?=$|[ \t\n\r\f\v)\]}>\"',;:|`]|//"
+        r"|[.!?][\"')\]}>`]*(?=$|[ \t\n\r\f\v]))"
+    )
+
+    _CLASSIFIED_MARKER_PATTERNS: ClassVar[dict[str, str]] = {
+        "TOP SECRET": r"\bTOP\s+SECRET\b",
+        "SECRET": r"\bSECRET\b",
+        "CONFIDENTIAL": r"\bCONFIDENTIAL\b",
+        "NOFORN": r"\bNOFORN\b",
+        # SCI must appear in REAL IC banner context. Two valid forms:
+        #   (a) preceded by a classification level + `//`, with the
+        #       level itself preceded by start-of-input, whitespace,
+        #       or an opening paren — so a URL path like
+        #       `https://sci-fi.example` (no level word in front of `//`)
+        #       and `https://example.com/TS//SCI` (`/` not `(`/`\s`/`^`
+        #       before TS) both correctly reject;
+        #   (b) followed by a compartment / control-marking continuation
+        #       via `//<compartment>` or `/REL`. The compartment pattern
+        #       (uppercase-generic OR a case-insensitive known-list, see
+        #       `_SCI_COMPARTMENT_PATTERN`) rejects `/sci/readme` (a
+        #       lowercase UNKNOWN token — not a compartment) while
+        #       accepting `SCI//NOFORN`, `SCI/REL`, `SCI//FGI`, `//sci//tk`
+        #       (lowercase KNOWN), etc.
+        # Pre-marker gate evolution (the SCI boundary has been the
+        # single hardest part of this module to get right; documented
+        # here in full so the next maintainer doesn't re-litigate it):
+        #   cycle-2 `(?<=//)SCI\b|\bSCI(?=//|/[A-Z])` — matched
+        #     `https://sci-fi`, `/sci/readme` (URL/path FALSE POSITIVES).
+        #   cycle-4 `(?<![\w/])` — fixed the URL FPs but rejected
+        #     legitimate bracketed/quoted banners `[TS//SCI]` (FALSE
+        #     NEGATIVE).
+        #   cycle-5 — made the `//` and `/` delimiters whitespace-
+        #     tolerant (`\s*/\s*/\s*`, `\s*/\s*`) for `TS // SCI`,
+        #     `SCI / REL`.
+        #   cycle-6 (this) `_BANNER_OPENER` — admits an OPTIONAL leading
+        #     slash at a CLEAN boundary so `/TS//SCI`, ` /SCI/REL`
+        #     (list-marker / stray-slash banners — real markings that
+        #     MUST flag) are caught, while STILL rejecting mid-URI/path
+        #     slashes (`https://example.com/TS//SCI`, `path/to/TS//SCI`).
+        #     In a classified-content gate, a missed banner (false
+        #     negative) leaks classified content to an external model —
+        #     the dangerous direction — so the leading-slash admission
+        #     is the security-conservative choice.
+        # Two valid forms: (a) <level>//SCI, (b) SCI//<compartment> or
+        # SCI/REL. The compartment allow-list rejects `/sci/readme`
+        # (README is not a compartment). Each `\s*` is bounded by a
+        # mandatory literal `/` — no ReDoS ambiguity.
+        #
+        # The `_NOT_PATH_CONT = (?!/(?!/))` terminal guard (cycle-6)
+        # distinguishes a banner-terminal compartment from a path
+        # segment: it rejects a marker followed by a SINGLE `/`
+        # (path continuation, e.g. `/sci/rel/index.html` →
+        # `REL/index`) while ALLOWING `//` (a compartment delimiter,
+        # e.g. multi-compartment `SCI//NOFORN//ORCON`) and the
+        # terminal/whitespace case (`SCI//NOFORN`, `SCI/REL TO USA`).
+        # This is what lets the cycle-6 leading-slash admission
+        # (`/SCI/REL` banner) coexist with the cycle-1 path rejection
+        # (`/sci/rel/index.html`): the discriminator moved from "is
+        # there a leading slash" to "is the marker followed by a
+        # path-style single-slash continuation".
+        # Compiled WITHOUT re.IGNORECASE (cycle-13): `(?i:SCI)` and the
+        # `(?i:...)` level make the structural tokens case-insensitive,
+        # while the uppercase-generic arm of `_SCI_COMPARTMENT_PATTERN`
+        # ([A-Z]...) stays case-SENSITIVE so a lowercase UNKNOWN bare
+        # compartment (a path segment like `readme`) does NOT match. A
+        # lowercase KNOWN compartment DOES match via the case-insensitive
+        # known-list arm (cycle-15 round 13). `REL` in the tail and
+        # single-slash branches is `(?i:REL)` (cycle-15 round 13): a
+        # lowercase `//sci/rel` is a real banner that must flag, while
+        # `_SCI_CONT_GUARD` still rejects a path continuation
+        # (`/sci/rel/index.html` → `/index` after `rel`).
+        "SCI": (
+            _BANNER_OPENER
+            + _CLASSIFIED_LEVEL_PREFIXES
+            + r"\s*/\s*/\s*(?i:SCI)\b"
+            + _SCI_TAIL_GUARD
+            + r"|"
+            + _BANNER_OPENER
+            + r"(?i:SCI)(?:\s*/\s*/\s*"
+            + _SCI_COMPARTMENT_PATTERN
+            + r"\b"
+            + _SCI_CONT_GUARD
+            + r"|\s*/\s*(?i:REL)\b"
+            + _SCI_CONT_GUARD
+            + r")"
+        ),
+    }
 
     # Injection patterns - always checked and always blocked
     INJECTION_PATTERNS: ClassVar[list[str]] = [
@@ -433,6 +821,19 @@ class SecurityScanner:
         # decision history.
         r"</?(system|user|assistant)>",
         r"\[/?(system|user|assistant|human)\]",  # Bracket-style role tags
+        # Conversation separator injection — INTENTIONALLY line-anchored.
+        # Cycle-2 F12 documents this as a deliberate regex-tier design
+        # boundary: a mid-line role token ("...text. Assistant: ...")
+        # is NOT caught here because broadening to mid-line introduces
+        # real false positives on benign English prose ("Ask the
+        # assistant:", "Try System: reboot first", etc.). Per the
+        # ADR-010 / PR #61 design decision logged immediately above,
+        # disambiguating benign role-mentions from adversarial separator
+        # injection at the regex layer hits the same cross-language
+        # FP-budget ceiling SafePrompt / TokenMix-PromptBench identified;
+        # the right tool for the mid-line case is the LLM-as-judge tier
+        # (ADR-010 semantic scanner). Tracked in
+        # `.quality-gate/accepted-findings.jsonl` as `wontfix`.
         r"(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:",  # Conversation separator injection
         r"DROP\s+TABLE",
         r"UNION\s+SELECT",
@@ -442,6 +843,37 @@ class SecurityScanner:
 
     def __init__(self) -> None:
         """Initialize the security scanner with compiled regex patterns."""
+        # Cycle-3 F7 contract: every marker in CLASSIFIED_MARKERS MUST
+        # have an explicit _CLASSIFIED_MARKER_PATTERNS entry. The fall-
+        # back `\b<marker>\b` (still used by `_check_classified_markers`
+        # as a defensive belt-and-suspenders for marker-list mutations
+        # at runtime) is the exact shape that the cycle-2 F11 fix
+        # documented as broken for the SCI marker — common-English-
+        # subword false positives. Catch the contract violation at
+        # init time so a future maintainer can't silently re-introduce
+        # the F11 false-positive class by adding a marker name without
+        # a matching pattern entry.
+        missing_patterns = set(self.CLASSIFIED_MARKERS) - set(self._CLASSIFIED_MARKER_PATTERNS)
+        if missing_patterns:
+            # RuntimeError (a stdlib builtin) is deliberate, NOT the
+            # `errors.AIPEAError` hierarchy (GPT 5.4 Pro PR #73 round-2
+            # non-blocking note). `security.py` is a ZERO-aipea-imports
+            # module by architectural contract (SPECIFICATION §4 module
+            # dependency graph + CLAUDE.md §4 "security.py <- ZERO aipea
+            # imports (stdlib only)"); importing `aipea.errors` would
+            # violate it. RuntimeError is also the established precedent
+            # for the sibling INJECTION_PATTERN ReDoS-safety invariant
+            # check below. This is a developer-misconfiguration invariant
+            # (a programming error at class-definition time), not a
+            # user-facing runtime condition, so a builtin is the correct
+            # choice regardless.
+            raise RuntimeError(
+                f"CLASSIFIED_MARKERS contains markers missing from "
+                f"_CLASSIFIED_MARKER_PATTERNS: {sorted(missing_patterns)}. "
+                "Every marker MUST have an explicit pattern entry to avoid "
+                "the cycle-2 F11 false-positive class (bare `\\b<marker>\\b` "
+                "matching common English subwords)."
+            )
         self._compiled_pii: dict[str, re.Pattern[str]] = {
             name: re.compile(pattern, re.IGNORECASE) for name, pattern in self.PII_PATTERNS.items()
         }
@@ -463,6 +895,39 @@ class SecurityScanner:
                     f"Hardcoded INJECTION_PATTERN failed ReDoS safety check: {pattern!r}"
                 )
             self._compiled_injection.append(re.compile(pattern, re.IGNORECASE))
+        # Precompile classified-marker patterns once at init (cycle-5,
+        # GPT 5.4 Pro PR #73 round-3 non-blocking note): catches regex
+        # typos at construction time (re.compile raises re.error on a
+        # malformed pattern) rather than on first TACTICAL scan, and
+        # avoids per-call `re.compile` recompilation in
+        # `_check_classified_markers`.
+        #
+        # CASE HANDLING (cycle-13, GPT 5.4 Pro PR #73 round 11): matched
+        # against the ORIGINAL-case query (NOT `query.upper()`), because
+        # the SCI compartment token must be CASE-SENSITIVE — real IC
+        # compartments (NOFORN, TK, GAMMA) are UPPERCASE, while path /
+        # URI segments (readme, index) are lowercase. Upper-casing the
+        # query first destroyed that signal and made `path=//sci//readme`
+        # / `http://sci//index` match (a round-11 false positive). So:
+        #   - the simple markers (TOP SECRET, SECRET, CONFIDENTIAL,
+        #     NOFORN) are compiled with re.IGNORECASE (any case matches,
+        #     same as the old query.upper() behavior);
+        #   - the SCI pattern is compiled WITHOUT re.IGNORECASE — it uses
+        #     inline `(?i:...)` for its structural tokens (level, SCI,
+        #     REL) and a case-sensitive `[A-Z]...` for the bare-branch
+        #     compartment, so a lowercase compartment (path) does not
+        #     match while an uppercase one (banner) does.
+        #
+        # NB: NOT run through `_is_regex_safe` — that validator bounds
+        # the ReDoS risk of UNTRUSTED user-supplied `blocked_patterns`
+        # (incl. a 200-char cap the legitimately-long SCI alternation
+        # exceeds). The classified patterns are hardcoded, reviewed, and
+        # ReDoS-safe by construction (every `\s*` / bounded `{1,40}` is
+        # anchored by a mandatory literal).
+        self._compiled_classified: dict[str, re.Pattern[str]] = {}
+        for name, pattern in self._CLASSIFIED_MARKER_PATTERNS.items():
+            flags = 0 if name == "SCI" else re.IGNORECASE
+            self._compiled_classified[name] = re.compile(pattern, flags)
         logger.debug("SecurityScanner initialized with %d PII patterns", len(self.PII_PATTERNS))
 
     # Maximum pattern length to prevent ReDoS attacks
@@ -562,11 +1027,16 @@ class SecurityScanner:
         Returns:
             List of PII flags detected
         """
+        # NB: no per-match WARNING logging here. `scan()` calls this
+        # method TWICE (normalized + spaced form) and dedups the flags,
+        # so logging at the per-call site would double-emit for the
+        # common case. `scan()` logs once per unique flag after the
+        # two-form dedup — same treatment as classified markers (Claude
+        # Opus 4.6 PR #73 round-7 consistency note).
         flags: list[str] = []
         for name, pattern in self._compiled_pii.items():
             if pattern.search(query):
                 flags.append(f"pii_detected:{name}")
-                logger.warning("PII detected in query: %s", name)
         return flags
 
     def _check_phi(self, query: str) -> list[str]:
@@ -578,15 +1048,28 @@ class SecurityScanner:
         Returns:
             List of PHI flags detected
         """
+        # NB: no per-match WARNING logging here — see `_check_pii` note.
+        # `scan()` logs once per unique PHI flag after the two-form dedup.
         flags: list[str] = []
         for name, pattern in self._compiled_phi.items():
             if pattern.search(query):
                 flags.append(f"phi_detected:{name}")
-                logger.warning("PHI detected in HIPAA mode: %s", name)
         return flags
 
     def _check_classified_markers(self, query: str) -> tuple[list[str], bool]:
         """Check classified markers (TACTICAL mode).
+
+        Uses the per-marker pattern table `_CLASSIFIED_MARKER_PATTERNS`
+        rather than a blanket `\\b<marker>\\b` so that:
+          - "TOP SECRET" matches whitespace variants (single space,
+            double space, tab — cycle-2 F3).
+          - "SCI" requires IC-banner compartment-delimiter context
+            (preceded or followed by `//`) — cycle-2 F11. Bare
+            `\\bSCI\\b` is unsalvageable as a classified-marker
+            detector because the English subword "sci" appears in
+            countless benign contexts ("sci-fi", "scientific", "the
+            SCI department"). IC tradecraft pairs SCI with the
+            compartment delimiter `//`.
 
         Args:
             query: The query text to scan
@@ -596,12 +1079,37 @@ class SecurityScanner:
         """
         flags: list[str] = []
         force_offline = False
-        query_upper = query.upper()
-        for marker in self.CLASSIFIED_MARKERS:
-            if re.search(rf"\b{re.escape(marker)}\b", query_upper):
-                flags.append(f"classified_marker:{marker}")
+        # Match against the ORIGINAL-case query (cycle-13). The compiled
+        # patterns carry their own case handling: the simple markers were
+        # compiled with re.IGNORECASE, while SCI is case-sensitive on its
+        # bare-branch compartment token (uppercase = banner, lowercase =
+        # path). See __init__ for the rationale. Upper-casing here would
+        # destroy the SCI compartment case signal and re-open the
+        # `path=//sci//readme` false positive (GPT PR #73 round 11).
+        for name in self.CLASSIFIED_MARKERS:
+            compiled = self._compiled_classified.get(name)
+            if compiled is None:
+                # Defensive: a marker added to CLASSIFIED_MARKERS at
+                # runtime (e.g. via instance-level monkeypatch) after
+                # __init__ would not be in the precompiled table. The
+                # init-time contract check (see __init__) prevents the
+                # class-definition-time case; this fallback covers the
+                # runtime-mutation case so detection is never silently
+                # dropped. IGNORECASE so the fallback matches any case
+                # (mirrors the simple-marker compilation).
+                compiled = re.compile(rf"\b{re.escape(name)}\b", re.IGNORECASE)
+            if compiled.search(query):
+                flags.append(f"classified_marker:{name}")
                 force_offline = True
-                logger.warning("Classified marker detected, forcing offline: %s", marker)
+        # NB: classified-marker WARNING logging is intentionally NOT
+        # emitted here. `scan()` calls this method TWICE in TACTICAL
+        # mode (once on the normalized form, once on the spaced form)
+        # and the two flag sets are then deduped — so logging at the
+        # per-call site would double-emit warnings for the
+        # most-common case (where both forms produce the same flags).
+        # `scan()` emits a single deduped WARNING per unique
+        # classified marker AFTER the two-form merge. (GPT 5.4 Pro
+        # non-blocking observation on PR #73; cycle-3 follow-up.)
         return flags, force_offline
 
     def _check_injection(self, query: str) -> tuple[list[str], bool]:
@@ -683,17 +1191,62 @@ class SecurityScanner:
         is_blocked = False
         force_offline = False
 
-        # Always check PII patterns (stripped form — reconstitutes words)
-        flags.extend(self._check_pii(normalized_query))
+        # Always check PII patterns — scan BOTH forms (mirror of the
+        # existing injection two-form coverage). The stripped form
+        # reconstitutes intra-word splits ("ssn: 123-4​5-6789" →
+        # "ssn: 123-45-6789"); the spaced form catches the inter-word
+        # split that the strip would join into nonsense. Dedup flags
+        # via insertion-order dict so the audit log doesn't show
+        # duplicate `pii_detected:<name>` lines when both forms match.
+        # Cycle-2 F3.
+        pii_flags = list(
+            dict.fromkeys(self._check_pii(normalized_query) + self._check_pii(spaced_query))
+        )
+        flags.extend(pii_flags)
+        # Log once per unique PII flag AFTER the two-form dedup (Claude
+        # Opus 4.6 PR #73 round-7 consistency note — mirrors the
+        # classified-marker dedup-then-log pattern below).
+        for flag in pii_flags:
+            _, _, name = flag.partition(":")
+            logger.warning("PII detected in query: %s", name)
 
-        # Check PHI patterns only in HIPAA mode
+        # Check PHI patterns only in HIPAA mode — also two-form,
+        # because the multi-word labels (`medical record`,
+        # `date of birth`) are exactly the bypass surface the
+        # stripped form ("medicalrecord" / "dateofbirth") cannot
+        # match. Same dedup. Cycle-2 F3.
         if context.compliance_mode == ComplianceMode.HIPAA:
-            flags.extend(self._check_phi(normalized_query))
+            phi_flags = list(
+                dict.fromkeys(self._check_phi(normalized_query) + self._check_phi(spaced_query))
+            )
+            flags.extend(phi_flags)
+            # Log once per unique PHI flag after the two-form dedup.
+            for flag in phi_flags:
+                _, _, name = flag.partition(":")
+                logger.warning("PHI detected in HIPAA mode: %s", name)
 
-        # Check classified markers only in TACTICAL mode
+        # Check classified markers only in TACTICAL mode — also two-
+        # form. The "TOP SECRET" multi-word marker has the same
+        # bypass surface; the stripped form yields "TOPSECRET"
+        # (no match against `\bTOP\s+SECRET\b`), but the spaced
+        # form yields "TOP SECRET" which matches. `force_offline`
+        # is the OR of the two scans — once any classified marker
+        # is observed in any normalization of the input, route
+        # offline. Cycle-2 F3.
         if context.compliance_mode == ComplianceMode.TACTICAL:
-            classified_flags, force_offline = self._check_classified_markers(normalized_query)
+            norm_classified, norm_fo = self._check_classified_markers(normalized_query)
+            spaced_classified, spaced_fo = self._check_classified_markers(spaced_query)
+            classified_flags = list(dict.fromkeys(norm_classified + spaced_classified))
             flags.extend(classified_flags)
+            force_offline = norm_fo or spaced_fo
+            # Emit ONE WARNING per unique classified-marker flag after
+            # the two-form dedupe (so the common "both forms match"
+            # case doesn't double-log). GPT 5.4 Pro non-blocking
+            # observation on PR #73; cycle-3 follow-up.
+            for flag in classified_flags:
+                # flag is of the form "classified_marker:<NAME>"
+                _, _, name = flag.partition(":")
+                logger.warning("Classified marker detected, forcing offline: %s", name)
 
         # Check injection against BOTH forms — stripped catches intra-word
         # bypass (i\u200bgnore → ignore), spaced catches inter-word bypass
@@ -704,12 +1257,22 @@ class SecurityScanner:
         flags.extend(injection_flags)
         is_blocked = is_blocked or injection_blocked
 
-        # Check custom blocked patterns from context
-        custom_flags, custom_blocked = self._check_custom_patterns(
+        # Cycle-3 F1: custom blocked patterns now scan BOTH forms
+        # (parallel to PII/PHI/classified/injection). A consumer-
+        # configured multi-token pattern like `proprietary\s+formula`
+        # was previously evadable via inter-word ZWSP (stripped form
+        # fuses to "proprietaryformula" → no `\s+` match; spaced form
+        # would catch but was never checked). Dedup flags via
+        # insertion-order dict; OR the two `is_blocked` results.
+        custom_flags_n, custom_blocked_n = self._check_custom_patterns(
             normalized_query, context.blocked_patterns
         )
+        custom_flags_s, custom_blocked_s = self._check_custom_patterns(
+            spaced_query, context.blocked_patterns
+        )
+        custom_flags = list(dict.fromkeys(custom_flags_n + custom_flags_s))
         flags.extend(custom_flags)
-        is_blocked = is_blocked or custom_blocked
+        is_blocked = is_blocked or custom_blocked_n or custom_blocked_s
 
         result = ScanResult(flags=flags, is_blocked=is_blocked, force_offline=force_offline)
 

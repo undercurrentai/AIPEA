@@ -264,18 +264,65 @@ Scans queries for 4 categories of security-sensitive content:
 
 | Category | Patterns | Behavior |
 |----------|----------|----------|
-| **PII** | SSN, credit card, API key, password | Flag (always checked) |
-| **PHI** | MRN, DOB, patient name | Flag (HIPAA mode only) |
-| **Classified markers** | TOP SECRET, SECRET, NOFORN, SCI | Flag + force offline (TACTICAL only) |
-| **Injection** | SQL injection, XSS, prompt injection, template injection, bracket-style role tags | **Block** (always) |
+| **PII** | SSN, credit card, API key, password | Flag (always checked); scanned against BOTH normalization forms |
+| **PHI** | MRN (`MRN|medical\s+record`), DOB (`DOB|date\s+of\s+birth`), patient name | Flag (HIPAA mode only); whitespace-tolerant via `\s+` between literal-spaced label tokens; scanned against BOTH normalization forms |
+| **Classified markers** | TOP SECRET (`\bTOP\s+SECRET\b`), SECRET, NOFORN, SCI (IC banner anchored — see below) | Flag + force offline (TACTICAL only); scanned against BOTH normalization forms; `force_offline` is the OR of the two scans |
+| **Injection** | 12 patterns: SQL injection, XSS, prompt injection (instruction-override, paraphrase verbs Wave-21), template injection, bracket-style role tags, conversation separator (line-anchored — see §7.4) | **Block** (always); scanned against BOTH normalization forms |
 
 Key production learnings baked in:
 - **ReDoS protection**: Custom patterns validated against catastrophic backtracking
   before execution. Patterns exceeding 200 chars or containing nested quantifiers
   are rejected. Hardcoded `INJECTION_PATTERNS` are also self-validated at
   `SecurityScanner.__init__` time via the same checks (defense-in-depth).
-- **Word-boundary matching**: Classified markers use `\b` word boundaries to prevent
-  false positives (e.g., "SECRET" in "SECRETARY").
+- **Word-boundary matching**: Most classified markers and PHI labels use `\b` word
+  boundaries to prevent false positives (e.g., "SECRET" in "SECRETARY"). **SCI is
+  the documented exception** (cycle-2 F11): bare `\bSCI\b` false-positively matched
+  `sci-fi` (the hyphen is a `\b`), `the SCI department`, etc. SCI now requires IC
+  banner compartment-delimiter context. The canonical pattern is constructed in code
+  from named components — see `_CLASSIFIED_MARKER_PATTERNS["SCI"]` in `security.py`
+  (the literal is intentionally NOT transcribed here: it has evolved across ~16
+  hardening cycles — PR #73 rounds 1–14 — and a quoted copy rots). As of cycle-16
+  (2026-05-26) it is two alternations: **(a)** `_BANNER_OPENER` + a classification
+  level (`_CLASSIFIED_LEVEL_PREFIXES`) + `//SCI`, tail-guarded by `_SCI_TAIL_GUARD`;
+  and **(b)** `_BANNER_OPENER` + `SCI` + a compartment (`_SCI_COMPARTMENT_PATTERN` =
+  an uppercase-generic token `[A-Z](?:[A-Z0-9-]{0,38}[A-Z0-9])?` **OR** a
+  case-insensitive known-compartment list `_SCI_KNOWN_COMPARTMENTS`) or `/REL`,
+  continuation-guarded by `_SCI_CONT_GUARD`. Both guards are **explicit positive
+  banner terminators** over a **closed, enumerated ASCII delimiter set** (cycle-16;
+  extended + ASCII-locked cycle-17 via the Claude↔GPT tier-ceiling dialogue): after
+  the marking token the input must end, hit a clean ASCII boundary (ASCII whitespace
+  `[ \t\n\r\f\v]`, closing wrapper `) ] } > " '` backtick, or `, ; : |`), continue
+  as `//`-chained compartment (or `/REL`), **or end a sentence (`. ! ?` followed by
+  zero or more ASCII closing wrappers, then ASCII whitespace or end-of-input)** — a
+  `-`, a non-sentence `.`, a single-`/` path, or a word char rejects. It flags
+  `TS//SCI`, `SCI//NOFORN`, `//sci//tk`, `classification:/TS//SCI`,
+  `SCI//SPECIAL-ACCESS`, `` `TS//SCI` ``, `TS//SCI:`, `|TS//SCI|`, `TS//SCI.`,
+  `(TS//SCI.)`; rejects the common-English subword class, lowercase path/URI
+  segments (`/sci/readme`), and hyphen/dot path-file suffixes (`//sci//gamma-ray`,
+  `//SCI//TK.bak`). Because `scan()` NFKC-normalizes input upstream, compatibility
+  forms fold to ASCII and still flag (`TS//SCI：` fullwidth colon, NBSP). The
+  documented regex-tier ceiling deferred to the LLM-as-judge semantic-scan tier
+  (ADR-010) is: (a) a lowercase rendering of an *unlisted* compartment
+  (`//sci//someprogram`, KNOWN_ISSUES #F13), and (b) NFKC-stable non-ASCII
+  delimiters (em/en dash, curly quotes; #F14).
+- **Whitespace-tolerant multi-word labels** (cycle-2 F3): multi-word PHI labels
+  (`medical record`, `date of birth`) and the `TOP SECRET` classified marker use
+  `\s+` (not literal " ") between tokens so double-space, tab, and NFKC-equivalent
+  whitespace variants don't evade.
+- **Two-form invisible-char normalization**: every query is scanned twice — once
+  against the *stripped* form (invisibles removed; reconstitutes intra-word splits
+  like `i​gnore` → `ignore`) and once against the *spaced* form (invisibles
+  replaced with space; catches inter-word splits like `ignore​previous` →
+  `ignore previous`). Both forms are passed to PII, PHI, classified, and injection
+  scans (cycle-2 F3 extended the two-form coverage from injection-only to all four
+  categories). The `_ALL_INVISIBLE_RE` character class covers the complete Unicode
+  Default_Ignorable_Code_Point set (~4,190 codepoints — cycles 3–8 generalized it
+  from the original cycle-2 inventory of 21) plus a small set of non-DI format
+  controls: zero-width spaces, joiners, bidi controls, BOM, CGJ (U+034F), ALM
+  (U+061C), variation selectors (incl. the U+E0100 block), Hangul fillers, the
+  U+2060–U+206F format-control block, and the Unicode TAG block (U+E0020–U+E007F)
+  used in 2024 "ASCII smuggling" prompt-injection attacks. See `_ALL_INVISIBLE_RE`
+  in `security.py` for the canonical, code-of-record set.
 - **Immutable input**: Scanner no longer mutates the input `SecurityContext` — it
   returns `force_offline` as a field on `ScanResult` instead.
 
@@ -969,22 +1016,25 @@ Per-compliance-mode allowlists use **substring matching** (case-insensitive):
 
 ### 7.4 Injection Prevention
 
-10 injection patterns are **always blocked** regardless of compliance mode:
+12 injection patterns are **always blocked** regardless of compliance mode:
 
 1. `(ignore|disregard|forget|override) (the|all|your|my|any|these|those|of)* (previous|prior|above|earlier|preceding|system|developer|assistant){1,3} instructions` — Prompt injection (strong-cue form; supports stacked cues like "ignore previous system instructions" and "ignore the above developer instructions"; filler restricted to determiners/qualifiers so "forget to print your instructions" is not matched)
 2. `(ignore|disregard|forget|override) all (of|the|your|my|these|those|previous|prior|above|earlier|preceding|system|developer|assistant)* instructions` — Prompt injection (direct "all" form; filler allow-list includes role cues so "ignore all system instructions" blocks while "don't forget to send all instructions" does not)
 3. `(ignore|disregard|forget|override) (everything|all) (above|below|before|earlier|preceding)(?=\s*[.!?,;:\n]|$)` — Prompt injection sibling ("ignore everything above"; phrase-end lookahead so "ignore all prior art" is not matched)
 4. `</(system|user|assistant)>` — XML role tag injection
 5. `[/(system|user|assistant|human)]` — Bracket-style role tags
-6. `\n\s*(Human|Assistant|System):` — Conversation separator injection (with whitespace tolerance)
+6. `(?:^|[\r\n])\s*(?:Human|Assistant|System)\s*:` — Conversation separator injection. **INTENTIONALLY line-anchored** at the regex tier (cycle-2 F12 wontfix): mid-line role tokens (`"ask the assistant: it knows"`) are NOT detected here because broadening to mid-line introduces real false positives on benign English prose. Mid-line role-mention disambiguation belongs in the ADR-010 semantic-scanner tier (future v2.0.0). See the conversation-separator entry in `INJECTION_PATTERNS` in `security.py` (with its preceding design comment) — symbolic reference, not a line number, since PR #73's hardening cycles shift it repeatedly (CLAUDE.md §11) — plus `.quality-gate/accepted-findings.jsonl` and the `test_mid_line_role_documented_not_blocked` pin test.
 7. `DROP TABLE` — SQL injection
 8. `UNION SELECT` — SQL injection
 9. `{{.*}}` — Template injection (Jinja2/Handlebars)
 10. `<script>` — XSS attempt
+11. **Wave-21 paraphrase strong-cue** (`(?<!\w)(bypass|reset|cancel|nullify|revoke|terminate) (the|all|your|my|any|these|those|of)* (previous|prior|above|earlier|preceding|system|developer|assistant){1,3} instructions\b`) — extends pattern #1 to the synonyms-of-"ignore" verb cluster (PR #61 Wave-21 D4-B)
+12. **Wave-21 paraphrase all-form** (`(?<!\w)(bypass|reset|cancel|nullify|revoke|terminate) all (of|the|your|my|these|those|previous|prior|above|earlier|preceding|system|developer|assistant)* instructions\b`) — sibling all-form covering "reset all instructions" etc.
 
-All queries are normalized before pattern matching to prevent homoglyph bypass attacks:
+All queries are normalized before pattern matching to prevent homoglyph and zero-width bypass attacks:
 1. **NFKC normalization** — converts fullwidth characters and compatibility forms to ASCII equivalents
 2. **Confusable character mapping** — translates 35 common Cyrillic/Greek homoglyphs to Latin (e.g., Cyrillic U+043E 'o' to Latin 'o')
+3. **Two-form scan** (cycle-2 F3) — every query is matched twice against the entire pattern set: once with all invisibles STRIPPED (reconstitutes intra-word splits like `i​gnore` → `ignore`), once with all invisibles REPLACED WITH SPACE (catches inter-word splits like `ignore​previous` → `ignore previous` for `\s+` patterns). `_ALL_INVISIBLE_RE` covers the complete Unicode Default_Ignorable_Code_Point set (~4,190 codepoints; generalized in cycles 3–8 from the original cycle-2 inventory of 21) incl. ZWSP/ZWNJ/ZWJ, bidi controls, BOM, CGJ (U+034F), ALM (U+061C), variation selectors, Hangul fillers, the U+2060–U+206F format-control block, and the Unicode TAG block (U+E0020–U+E007F).
 
 Custom blocked patterns from `SecurityContext.blocked_patterns` are validated
 for ReDoS safety before execution.
