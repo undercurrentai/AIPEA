@@ -1956,3 +1956,95 @@ class TestCycle15SingleSlashFieldValueBanner:
         assert elapsed_ms < 1000, (
             f"widened field-delim opener slash-run scan took {elapsed_ms:.1f} ms — possible ReDoS"
         )
+
+
+class TestCycle16SciBannerTerminator:
+    """CYCLE-16 (GPT round 14): the cycle-15 widenings (lowercase known-list +
+    `(?i:REL)`) exposed a path/file-suffix false POSITIVE. The compartment/`REL`
+    branches terminated with `\\b` + a CONT guard that only blocked a following
+    single `/`. Because `\\b` succeeds before `-`/`.`, hyphenated/dotted path
+    suffixes matched: `path=//sci//gamma-ray`, `path=//SCI//TK-demo`,
+    `path=/sci/rel-team` all wrongly forced offline.
+
+    Resolution: `_SCI_TAIL_GUARD`/`_SCI_CONT_GUARD` rewritten from
+    negative-lookahead-on-slash to an EXPLICIT POSITIVE banner terminator
+    (`(?=$|[\\s)\\]}>"',;]|//[|/REL])`): after a marking token the input must end
+    or hit a clean banner boundary (whitespace, closing bracket/quote/paren/
+    angle, comma, semicolon), or continue as `//`-chained compartment (or `/REL`
+    after `<level>//SCI`). A `-`, `.`, single-`/` path, or word char rejects.
+    The generic compartment arm also now ends in `[A-Z0-9]` (no trailing `-`).
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "path=//sci//gamma-ray",  # lowercase known + hyphen suffix → path
+            "path=//SCI//TK-demo",  # known compartment + hyphen suffix
+            "path=/sci/rel-team",  # /REL + hyphen suffix
+            "note=//SCI//ZULU-test",  # generic compartment + hyphen suffix
+            "x=//sci//gamma.tmp",  # dot/file-extension suffix
+            "log=//SCI//TK.bak",
+            "marker=TS//SCI-demo",  # <level>//SCI + hyphen suffix (first branch)
+        ],
+        ids=[
+            "gamma_ray",
+            "tk_demo",
+            "rel_team",
+            "zulu_test",
+            "gamma_tmp",
+            "tk_bak",
+            "level_sci_demo",
+        ],
+    )
+    def test_hyphen_dot_path_suffix_rejects(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" not in result.flags, (
+            f"hyphen/dot path-suffix FP (round 14): {payload!r}; flags={result.flags}"
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "SCI//NOFORN, and more",  # comma terminator
+            "(TS//SCI)",  # closing paren terminator
+            "<SCI//NOFORN>",  # closing angle terminator
+            "SCI//NOFORN; next",  # semicolon terminator
+            "[TS//SCI]",  # closing bracket terminator
+            "marked //SCI//SPECIAL-ACCESS-PROGRAM here",  # all-caps INTERNAL hyphens OK
+            "SCI//NOFORN//ORCON",  # // chained compartment still accepts
+        ],
+        ids=["comma", "paren", "angle", "semicolon", "bracket", "internal_hyphen", "chained"],
+    )
+    def test_clean_banner_terminators_still_accept(
+        self,
+        scanner: SecurityScanner,
+        tactical_ctx: SecurityContext,
+        payload: str,
+    ) -> None:
+        result = scanner.scan(payload, context=tactical_ctx)
+        assert "classified_marker:SCI" in result.flags, (
+            f"clean banner terminator wrongly rejected: {payload!r}; flags={result.flags}"
+        )
+        assert result.force_offline is True
+
+    @pytest.mark.unit
+    def test_banner_terminator_no_redos(
+        self, scanner: SecurityScanner, tactical_ctx: SecurityContext
+    ) -> None:
+        import time
+
+        # Adversarial hyphen-run after a compartment opener.
+        payload = "//SCI//" + "A-" * 25000 + "z"
+        t0 = time.perf_counter()
+        scanner.scan(payload, context=tactical_ctx)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        assert elapsed_ms < 1000, (
+            f"banner-terminator hyphen-run scan took {elapsed_ms:.1f} ms — possible ReDoS"
+        )

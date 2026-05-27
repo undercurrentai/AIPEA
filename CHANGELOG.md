@@ -705,6 +705,47 @@ Verification: `make ci` (CI parity) clean — full suite **1811 passed /
 35 skipped / 5 xfailed in 83.40 s** at coverage **91.75%**; ruff +
 mypy clean.
 
+### Fixed (cycle-16 `/quality-gate` follow-up to PR #73 round 14, 2026-05-26)
+
+GPT 5.4 Pro's round-14 REQUEST_CHANGES: the cycle-15 widenings (lowercase
+known-compartment list + `(?i:REL)`) exposed a path/file-suffix false
+POSITIVE in the SCI scanner. The compartment and `/REL` branches
+terminated with `\b` followed by a continuation guard that only rejected a
+following single `/`. Because `\b` succeeds before `-` and `.`, a
+hyphenated/dotted path-or-file suffix slipped through and wrongly forced
+offline in TACTICAL mode: `path=//sci//gamma-ray`, `path=//SCI//TK-demo`,
+`path=/sci/rel-team`, `//SCI//ZULU-test`, `//sci//gamma.tmp`.
+
+**Security (`security.py`)**:
+
+  - **Banner-terminator rewrite** (GPT round 14): `_SCI_TAIL_GUARD` and
+    `_SCI_CONT_GUARD` are rewritten from a negative-lookahead-on-slash
+    (`(?!/(?!/...))`, which only constrained what followed a `/`) to an
+    EXPLICIT POSITIVE banner terminator. After a marking token the input
+    must now end, OR hit a clean banner boundary (whitespace, closing
+    bracket/brace/paren/angle, quote, comma, semicolon), OR continue as a
+    valid banner tail — `//` (chained compartment) or, after `<level>//SCI`,
+    `/REL`. A `-`, `.`, single-`/` path, or word char rejects. This both
+    preserves the round-5 fix (`/TS//SCI/readme` still rejects) and closes
+    the round-14 hyphen/dot path-suffix FP class.
+  - **Generic compartment arm cannot end in `-`** (GPT round 14, fix 2):
+    `_SCI_COMPARTMENT_PATTERN`'s uppercase-generic arm changed from
+    `[A-Z][A-Z0-9-]{1,40}` to `[A-Z](?:[A-Z0-9-]{0,38}[A-Z0-9])?` — same
+    1-40 length bound, still admits INTERNAL hyphens (`SPECIAL-ACCESS`), but
+    cannot terminate on one. Belt-and-suspenders behind the terminator.
+
+ReDoS-safe (verified ~2.6-5 ms on 50 K-char slash/compartment runs and a
+25 K-pair hyphen-run adversarial input).
+
+Regression tests (`tests/test_security_two_form_scan.py`):
+`TestCycle16SciBannerTerminator` (7 hyphen/dot-suffix-reject + 7
+clean-terminator-accept incl. comma/paren/angle/semicolon/bracket and an
+all-caps internal-hyphen compartment + 1 ReDoS).
+
+Verification: `make ci` (CI parity) clean — full suite **1826 passed /
+35 skipped / 5 xfailed in 83.02 s** at coverage **91.75%**; ruff +
+mypy clean.
+
 ### Added
 
 - **Wave-22: PR-B1 follow-up — frontier providers + generator + evaluator

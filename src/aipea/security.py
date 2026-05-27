@@ -519,8 +519,16 @@ class SecurityScanner:
         r"(?i:NOFORN|REL|FGI|IMCON|ORCON|PROPIN|RELIDO|RSEN|HUMINT"
         r"|COMINT|SI|TK|HCS|GAMMA|ECI|FVEY|ACGU)"
     )
+    # Generic arm ends in `[A-Z0-9]`, NOT `-` (cycle-16, GPT round 14): the
+    # prior `[A-Z][A-Z0-9-]{1,40}` could consume a trailing hyphen, which —
+    # combined with `\b` succeeding before `-` — let a hyphenated path/file
+    # suffix slip through (`//SCI//ZULU-test`). `[A-Z](?:[A-Z0-9-]{0,38}[A-Z0-9])?`
+    # keeps the 1-40 char length bound and still admits internal hyphens
+    # (`SPECIAL-ACCESS`) but cannot END on one. The banner-terminator guards
+    # (`_SCI_TAIL_GUARD`/`_SCI_CONT_GUARD`) are the primary defense; this is
+    # belt-and-suspenders.
     _SCI_COMPARTMENT_PATTERN: ClassVar[str] = (
-        r"(?:[A-Z][A-Z0-9-]{1,40}|" + _SCI_KNOWN_COMPARTMENTS + r")"
+        r"(?:[A-Z](?:[A-Z0-9-]{0,38}[A-Z0-9])?|" + _SCI_KNOWN_COMPARTMENTS + r")"
     )
     # Banner opener (cycle-6, GPT 5.4 Pro PR #73 round 4; widened cycle-7
     # round 5): start-of-input OR a clean opening delimiter, followed by
@@ -588,22 +596,28 @@ class SecurityScanner:
     # no ReDoS (verified ~6 ms on a 50 K-slash run).
     _BANNER_OPENER: ClassVar[str] = r"(?:(?:^|(?<=[\s(\[{<\"']))/*|(?<=[:=,;|])/*)"
 
-    # SCI tail guard for the `<level>//SCI` branch (cycle-7 round 5):
-    # after `SCI`, allow a valid banner tail (`//<compartment>`, `/REL`)
-    # or a terminal (whitespace / end / non-slash punctuation), but
-    # REJECT a path-style single-slash continuation (`/readme`,
-    # `/index.html`). `(?!/(?!/|(?i:REL)\b))` = "not followed by [ a slash
-    # that is NOT followed by (another slash | REL) ]": a `//` (chained
-    # compartment) or `/REL` is allowed; a lone `/<path>` is rejected.
-    # This closes the cycle-6 asymmetry GPT flagged in round 5 — the
-    # terminal guard was on the second SCI branch but not the first, so
-    # `/TS//SCI/readme` wrongly matched. `REL` is `(?i:REL)` (cycle-15
-    # round 13) so a lowercase `/TS//SCI/rel` banner tail also flags.
-    _SCI_TAIL_GUARD: ClassVar[str] = r"(?!/(?!/|(?i:REL)\b))"
-    # Compartment-continuation guard for the second SCI branch: after a
-    # consumed compartment suffix, allow `//` (further chaining) and
-    # terminal but reject a single-slash path (`SCI//NOFORN/path`).
-    _SCI_CONT_GUARD: ClassVar[str] = r"(?!/(?!/))"
+    # SCI tail guard for the `<level>//SCI` branch. REWRITTEN cycle-16 (GPT
+    # 5.4 Pro PR #73 round 14) from a negative-lookahead-on-slash to an
+    # EXPLICIT POSITIVE banner terminator. The old `(?!/(?!/|(?i:REL)\b))`
+    # only constrained what followed a `/`; it said nothing about `-` or
+    # `.`, so a hyphenated/dotted path-or-file suffix slipped through
+    # (`/TS//SCI-demo`, and via the compartment branch `//SCI//TK-demo`,
+    # `//sci//gamma-ray`, `/sci/rel-team`) because `\b` succeeds before `-`.
+    # The positive form requires that after `SCI` the input ends, or hits a
+    # clean banner terminator (whitespace, closing bracket/brace/paren/angle,
+    # quote, comma, semicolon), OR continues as a valid banner tail — `//`
+    # (chained compartment) or `/REL` (case-insensitive, cycle-15 round 13).
+    # Anything else — `-`, `.`, a single `/<path>`, a word char — is rejected.
+    # This both preserves the round-5 fix (`/TS//SCI/readme` rejects) and
+    # closes the round-14 hyphen/dot path-suffix FP class.
+    _SCI_TAIL_GUARD: ClassVar[str] = r"(?=$|[\s)\]}>\"',;]|//|/(?i:REL)\b)"
+    # Compartment-continuation guard for the second SCI branch (after a
+    # consumed compartment or `/REL`). Same cycle-16 rewrite: an explicit
+    # positive terminator — end, a clean banner terminator char, OR `//`
+    # (further compartment chaining, `SCI//NOFORN//ORCON`). Rejects a
+    # single-slash path (`SCI//NOFORN/path`) AND a `-`/`.` suffix
+    # (`//SCI//ZULU-test`, `//SCI//TK.bak`).
+    _SCI_CONT_GUARD: ClassVar[str] = r"(?=$|[\s)\]}>\"',;]|//)"
 
     _CLASSIFIED_MARKER_PATTERNS: ClassVar[dict[str, str]] = {
         "TOP SECRET": r"\bTOP\s+SECRET\b",
