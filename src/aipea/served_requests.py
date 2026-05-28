@@ -91,6 +91,10 @@ class ServedRequestStore:
         ttl_seconds: int = _DEFAULT_TTL_SECONDS,
         allow_hipaa: bool = False,
     ) -> None:
+        # Lifecycle attributes first, so __del__/close stay safe even if a
+        # validation check below raises before the DB is opened.
+        self._db_lock = threading.RLock()
+        self._conn: sqlite3.Connection | None = None
         if ttl_seconds < 1:
             msg = f"ttl_seconds must be >= 1 (got {ttl_seconds})"
             raise ValueError(msg)
@@ -99,8 +103,6 @@ class ServedRequestStore:
         self._key = self._resolve_key(hmac_key)
         resolved = db_path or os.environ.get(_ENV_DB_PATH, _DEFAULT_DB_PATH)
         self._db_path = Path(resolved)
-        self._db_lock = threading.RLock()
-        self._conn: sqlite3.Connection | None = None
         try:
             self._conn = self._open_connection()
             self._init_schema()
