@@ -1,5 +1,5 @@
 # CLAUDE.md - AIPEA
-> **Agent Contract v3.0.6** (governs this file) | **Library:** `aipea` v1.6.2 (PyPI; v1.7.0-RC on `main`) | Updated: 2026-05-26 | Owner: @joshuakirby
+> **Agent Contract v3.0.6** (governs this file) | **Library:** `aipea` v1.7.0 (PyPI; release-cut 2026-05-28) | Updated: 2026-05-28 | Owner: @joshuakirby
 >
 > *Note: the `version` field below is the version of this Agent Contract document, not the AIPEA library. The library version lives in `pyproject.toml` and `src/aipea/__init__.py`.*
 
@@ -11,7 +11,7 @@ tier: 2  # Standard (~10K LOC, 2 contributors, internal consumers)
 compliance_tier: STANDARD
 inherits_from: ../../CLAUDE.md  # Undercurrent Holdings root
 maintainer: joshuakirby
-last_audit: 2026-05-26  # post-cycle-16 /quality-gate sweep + docs-sync reconciliation
+last_audit: 2026-05-28  # v1.7.0 release-cut (G/E/H/I + Phase LIVE + governance scaffold)
 protocol: v4.0
 token_budget: 8000
 ```
@@ -52,7 +52,7 @@ token_budget: 8000
 - An Agora-specific module (AIPEA is product-agnostic)
 - A standalone service (it's a library; service mode is future)
 - A replacement for LLM APIs (it preprocesses inputs TO LLMs)
-- An AI-governed system (no model cards or governance artifacts — those live in Libertas-Core)
+- A full AI-GOVERNED-tier system. AIPEA carries its OWN minimal-risk EU-AI-Act scaffold at `ai/{system-register,model-card,data-card,risk-register}.yaml` documenting the negative-finding record (Title III Ch. 1; no Annex III high-risk use case applies), but the comprehensive AI-GOVERNED tier — trained-model cards, multi-agent oversight plans, consensus-protocol governance — lives in Libertas-Core. AIPEA's compliance tier remains STANDARD.
 
 ### 1.3 Out-of-Scope Operations
 
@@ -253,6 +253,7 @@ gpt-5.3-codex, Claude Opus 4.6) via
 | `AIPEA_OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL for offline models |
 | `AIPEA_OLLAMA_TIMEOUT` | `120` | Ollama generation timeout in seconds |
 | `AIPEA_DB_PATH` | `aipea_knowledge.db` | Path to offline knowledge SQLite database |
+| `AIPEA_LEARNING_DB_PATH` | `aipea_learning.db` | Path to adaptive-learning SQLite database (used only when `AIPEAEnhancer(enable_learning=True)`) |
 | `AIPEA_STORAGE_TIER` | `standard` | Storage tier: ultra_compact, compact, standard, extended |
 | `AIPEA_DEFAULT_COMPLIANCE` | `general` | Default compliance mode: general, hipaa, tactical (`fedramp` is deprecated — see ADR-002) |
 | `AIPEA_EXA_API_URL` | `https://api.exa.ai/search` | Exa API endpoint URL |

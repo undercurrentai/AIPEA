@@ -1535,5 +1535,5 @@ Stored in `docs/design-reference/` for historical reference:
 
 ---
 
-*AIPEA Specification v1.6.2 — AI Prompt Engineer Agent*
-*Undercurrent Holdings | 2026-04-24 (v1.6.2 released; PyPI 2026-04-24)*
+*AIPEA Specification v1.7.0 — AI Prompt Engineer Agent*
+*Undercurrent Holdings | 2026-05-28 (v1.7.0 release; PyPI publish auto-triggered via `publish.yml` OIDC on GitHub Release)*
