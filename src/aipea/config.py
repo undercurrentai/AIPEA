@@ -73,6 +73,20 @@ class AIPEAConfig:
         """Return True if a Firecrawl API key is configured."""
         return bool(self.firecrawl_api_key)
 
+    def source_of(self, field_name: str) -> str:
+        """Return where a config ``field_name`` was resolved from, for display.
+
+        Public read-only accessor over the private ``_sources`` provenance map.
+        Returns one of ``"env"``, ``"dotenv (<path>)"``, ``"toml (<path>)"``, or
+        ``"default"`` — the latter being the fallback for any field whose source
+        was not recorded. Prefer this over reaching into ``_sources`` directly.
+        """
+        return self._sources.get(field_name, "default")
+
+    def sources(self) -> dict[str, str]:
+        """Return a copy of the field→source provenance map (read-only view)."""
+        return dict(self._sources)
+
     @staticmethod
     def redact_key(key: str) -> str:
         """Redact an API key for display, showing first 4 and last 4 chars."""
