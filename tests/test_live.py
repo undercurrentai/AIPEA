@@ -438,6 +438,7 @@ class TestLivePromptEngine:
         assert openai_prompt != claude_prompt
         assert claude_prompt != gemini_prompt
 
+    @pytest.mark.filterwarnings("ignore::DeprecationWarning")  # deprecated method
     async def test_create_model_specific_prompt_wraps_base(self, engine: PromptEngine):
         """Model-specific prompt should contain the base prompt."""
         base = "Tell me about AI safety"
