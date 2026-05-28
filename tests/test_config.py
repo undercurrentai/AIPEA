@@ -225,6 +225,36 @@ class TestLoadConfig:
         assert cfg.http_timeout == 99.0
         assert "toml" in cfg._sources["exa_api_key"]
 
+    def test_source_of_public_accessor(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`source_of()` is the public read-only view over `_sources`; `sources()` copies it.
+
+        Covers env / toml / default provenance and the unrecorded-field fallback,
+        and confirms `sources()` returns a defensive copy (TODO §E — replaces the
+        private `cfg._sources` access the CLI used to do).
+        """
+        monkeypatch.delenv("EXA_API_KEY", raising=False)
+        monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+        monkeypatch.setenv("AIPEA_HTTP_TIMEOUT", "45")
+        toml = tmp_path / "config.toml"
+        toml.write_text('[aipea]\nexa_api_key = "from_toml"\n')
+        cfg = load_config(dotenv_path=tmp_path / "no.env", toml_path=toml)
+
+        # public accessor mirrors the private provenance map
+        assert cfg.source_of("exa_api_key") == cfg._sources["exa_api_key"]
+        assert "toml" in cfg.source_of("exa_api_key")
+        assert cfg.source_of("http_timeout") == "env"
+        assert cfg.source_of("firecrawl_api_key") == "default"  # unset → recorded "default"
+        # a field never recorded in _sources falls back to "default"
+        assert cfg.source_of("does_not_exist") == "default"
+
+        # sources() is a defensive copy — mutating it must not corrupt the config
+        snap = cfg.sources()
+        assert snap == cfg._sources
+        snap["exa_api_key"] = "TAMPERED"
+        assert cfg.source_of("exa_api_key") != "TAMPERED"
+
     def test_dotenv_overrides_toml(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("EXA_API_KEY", raising=False)
         monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)

@@ -81,7 +81,7 @@ else:
         table.add_row("Exports", str(len(aipea.__all__)))
 
         # Config sources
-        for field_name, source in cfg._sources.items():
+        for field_name, source in cfg.sources().items():
             table.add_row(f"  {field_name} source", source)
 
         console.print(table)
@@ -114,7 +114,7 @@ else:
             "EXA_API_KEY",
             f"[{exa_style}]{exa_status}[/{exa_style}]",
             AIPEAConfig.redact_key(cfg.exa_api_key),
-            cfg._sources.get("exa_api_key", "unknown"),
+            cfg.source_of("exa_api_key"),
         )
         if not cfg.has_exa():
             warnings.append("Exa API key not configured — Exa search will be disabled")
@@ -126,7 +126,7 @@ else:
             "FIRECRAWL_API_KEY",
             f"[{fc_style}]{fc_status}[/{fc_style}]",
             AIPEAConfig.redact_key(cfg.firecrawl_api_key),
-            cfg._sources.get("firecrawl_api_key", "unknown"),
+            cfg.source_of("firecrawl_api_key"),
         )
         if not cfg.has_firecrawl():
             warnings.append("Firecrawl API key not configured — Firecrawl search will be disabled")
@@ -136,7 +136,7 @@ else:
             "AIPEA_HTTP_TIMEOUT",
             "[green]set[/green]",
             f"{cfg.http_timeout}s",
-            cfg._sources.get("http_timeout", "unknown"),
+            cfg.source_of("http_timeout"),
         )
 
         console.print(table)
@@ -306,7 +306,7 @@ else:
         ]:
             if has_fn():
                 redacted = AIPEAConfig.redact_key(key_val)
-                source = cfg._sources.get(src_key, "?")
+                source = cfg.source_of(src_key)
                 chk.ok(name, f"{redacted} (from {source})")
             else:
                 chk.warn(name, f"not configured — {name.split()[0]} search disabled")

@@ -84,6 +84,32 @@ class TestCheckCommand:
             result = runner.invoke(app, ["check", "--connectivity"])
             assert "OK" in result.output or result.exit_code == 0
 
+    def test_check_connectivity_http_error_status_exits_1(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Non-200 from a provider → error appended → `check` exits 1 with status shown."""
+        monkeypatch.setenv("EXA_API_KEY", "test_key_1234567890")
+        monkeypatch.setenv("FIRECRAWL_API_KEY", "test_key_1234567890")
+        with patch("aipea.cli.httpx.post") as mock_post:
+            mock_post.return_value.status_code = 401
+            result = runner.invoke(app, ["check", "--connectivity"])
+        assert result.exit_code == 1
+        assert "HTTP 401" in result.output
+
+    def test_check_connectivity_network_error_exits_1(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An httpx network error is caught (not raised) and reported; `check` exits 1."""
+        import httpx
+
+        monkeypatch.setenv("EXA_API_KEY", "test_key_1234567890")
+        monkeypatch.setenv("FIRECRAWL_API_KEY", "test_key_1234567890")
+        with patch("aipea.cli.httpx.post", side_effect=httpx.ConnectError("refused")):
+            result = runner.invoke(app, ["check", "--connectivity"])
+        assert result.exit_code == 1
+        assert "Error" in result.output
+        assert "Traceback" not in (result.output or "")
+
 
 # ============================================================================
 # aipea doctor
@@ -95,6 +121,22 @@ class TestDoctorCommand:
         result = runner.invoke(app, ["doctor"])
         assert result.exit_code == 0
         assert "AIPEA Doctor" in result.output
+
+    def test_doctor_connectivity_failure_reports_fail(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """With keys set but the provider unreachable, doctor reports FAIL (with detail)
+        and still exits 0 (doctor diagnoses, it does not hard-fail)."""
+        import httpx
+
+        monkeypatch.setenv("EXA_API_KEY", "test_key_1234567890")
+        monkeypatch.setenv("FIRECRAWL_API_KEY", "test_key_1234567890")
+        with patch("aipea.cli.httpx.post", side_effect=httpx.ConnectError("refused")):
+            result = runner.invoke(app, ["doctor"])
+        assert result.exit_code == 0
+        assert "Exa connectivity" in result.output
+        assert "API request failed" in result.output  # the FAIL detail branch
+        assert "Traceback" not in (result.output or "")
 
     def test_doctor_shows_python_check(self) -> None:
         result = runner.invoke(app, ["doctor"])
@@ -720,3 +762,46 @@ class TestWaveC3TightenedExceptionHandling:
 
             assert "Traceback" not in (result.output or "")
             assert result.exit_code == 0
+
+
+class TestRedteamCommands:
+    """`aipea redteam` subcommands (ADR-009 CLI surface). Network-free paths only —
+    the `run` happy path needs a live provider and is exercised in live tests."""
+
+    def test_list_techniques(self) -> None:
+        result = runner.invoke(app, ["redteam", "list-techniques"])
+        assert result.exit_code == 0
+        assert "paraphrase" in result.output
+        assert "encoding_bypass" in result.output
+
+    def test_list_providers(self) -> None:
+        result = runner.invoke(app, ["redteam", "list-providers"])
+        assert result.exit_code == 0
+        assert "ollama" in result.output  # the offline reference provider is always registered
+
+    def test_run_unknown_provider_exits_1(self) -> None:
+        # get_provider() raises KeyError → SystemExit(1); no provider is instantiated.
+        result = runner.invoke(app, ["redteam", "run", "--provider", "no-such-provider"])
+        assert result.exit_code == 1
+
+    def test_run_unknown_technique_exits_1(self) -> None:
+        # Valid provider (class lookup only, no network) + invalid technique → exit 1.
+        result = runner.invoke(
+            app, ["redteam", "run", "--provider", "ollama", "--technique", "bogus-technique"]
+        )
+        assert result.exit_code == 1
+        assert "Unknown technique" in result.output
+
+
+class TestSeedKbDbOption:
+    def test_seed_kb_explicit_db_path(self, tmp_path: Path) -> None:
+        """`seed-kb --db <path>` uses the given path (covers the non-default branch).
+
+        Seeding is fully offline (curated stdlib seed set → SQLite), so this runs
+        without network or Ollama.
+        """
+        db = tmp_path / "seed.db"
+        result = runner.invoke(app, ["seed-kb", "--db", str(db)])
+        assert result.exit_code == 0, result.output
+        assert db.exists()
+        assert "Seeded" in result.output

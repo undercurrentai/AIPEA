@@ -1,30 +1,34 @@
-# Data Card (Template)
+# Data Card
 # EU AI Act Art. 10 | SOC 2 P, C1 | ISO 42001 Operation | NIST AI RMF MAP
+# NOTE: AIPEA has NO training data (it is not a trained model). The only bundled
+# "dataset" is the curated offline knowledge-base seed; runtime user prompts are
+# processed ephemerally and never persisted by the library.
 
 datasets:
-  - name: support-transcripts
-    owner: data-steward@example.com
-    lawful_basis: "contract | consent | legitimate interest | N/A"
-    personal_data: true
+  - name: offline-kb-seed
+    owner: "joshuakirby <josh@undercurrentholdings.com>"
+    lawful_basis: "N/A — curated public-domain reference snippets authored/selected by the maintainer"
+    personal_data: false
     special_categories: false
-    license: "internal"
-    provenance: "Describe origin and rights-of-use"
+    license: "MIT (ships with the library)"
+    provenance: >-
+      ~20 curated seed entries across 7 domains, authored/selected by the maintainer for the
+      optional offline knowledge base (`aipea seed-kb`). No scraped, user, or third-party data.
     minimization_measures:
-      - "Masking of PII fields"
-      - "Aggregation for analytics"
+      - "No personal data collected or stored"
+      - "Seed set is small, public-domain reference text only"
     access_controls:
-      - "Role-based access; least privilege"
-    retention_policy: "Define retention + deletion cadence"
+      - "Local SQLite file owned by the consuming process; no shared store"
+    retention_policy: "Bundled static seed; runtime prompts are NOT retained (processed in-memory, discarded after scan/enhance)"
     quality_checks:
-      - "Schema conformance"
-      - "Nulls/missing values thresholds"
+      - "Schema conformance (StorageTier schema)"
+      - "Seed-count assertion in tests"
     statistical_properties:
       balance_checks:
-        - "Locale"
-        - "Accent"
+        - "N/A — reference snippets, not a training distribution"
       bias_probes:
-        - "Age"
-        - "Gender (where lawfully processed)"
+        - "N/A — no learned parameters; deterministic preprocessing"
     dp_and_privacy_by_design:
-      - "Purpose limitation"
-      - "Default-deny egress from processing jobs"
+      - "Purpose limitation — prompts used only for the requested scan/enhance, then discarded"
+      - "PII/PHI/classified markers FLAGGED, never stored or transmitted by the library"
+      - "Search-provider egress is opt-in and integrator-configured"

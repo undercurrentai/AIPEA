@@ -251,6 +251,7 @@ class TestPromptEngine:
         assert str(datetime.now(UTC).year) in prompt
         assert len(prompt) > 200  # Should be reasonably detailed
 
+    @pytest.mark.filterwarnings("ignore::DeprecationWarning")  # deprecated method
     @pytest.mark.asyncio
     async def test_model_specific_optimization_openai(self, prompt_engine, mock_search_context):
         """Test model-specific prompt returns base prompt with search context for OpenAI"""
@@ -265,6 +266,7 @@ class TestPromptEngine:
         assert base_prompt in optimized
         assert "AI Safety Research 2025" in optimized  # Search context included
 
+    @pytest.mark.filterwarnings("ignore::DeprecationWarning")  # deprecated method
     @pytest.mark.asyncio
     async def test_model_specific_optimization_claude(self, prompt_engine, mock_search_context):
         """Test model-specific prompt returns base prompt with search context for Claude"""
@@ -279,6 +281,7 @@ class TestPromptEngine:
         assert base_prompt in optimized
         assert "<search_context>" in optimized  # Claude XML-formatted search context
 
+    @pytest.mark.filterwarnings("ignore::DeprecationWarning")  # deprecated method
     @pytest.mark.asyncio
     async def test_model_specific_optimization_gemini(self, prompt_engine, mock_search_context):
         """Test model-specific prompt returns base prompt with search context for Gemini"""
@@ -292,6 +295,23 @@ class TestPromptEngine:
 
         assert base_prompt in optimized
         assert "Supporting Information:" in optimized  # Gemini-formatted search context
+
+    @pytest.mark.asyncio
+    async def test_create_model_specific_prompt_emits_deprecation_warning(
+        self, prompt_engine, mock_search_context
+    ):
+        """`create_model_specific_prompt` is deprecated in v1.7.0 (removal v2.0.0).
+
+        It must emit a DeprecationWarning pointing to the canonical path while
+        still functioning during the deprecation window.
+        """
+        with pytest.warns(DeprecationWarning, match="removed in v2.0.0"):
+            result = await prompt_engine.create_model_specific_prompt(
+                base_prompt="Analyze AI safety",
+                model_type="gpt-4",
+                search_context=mock_search_context,
+            )
+        assert "Analyze AI safety" in result  # still functions while deprecated
 
     def test_prompt_template_complexity_simple(self, prompt_engine):
         """Test prompt template for simple complexity"""
@@ -460,6 +480,7 @@ class TestPromptEngineEdgeCases:
 
         assert query in result.enhanced_query
 
+    @pytest.mark.filterwarnings("ignore::DeprecationWarning")  # deprecated method
     @pytest.mark.asyncio
     async def test_unknown_model_type(self, prompt_engine):
         """Test handling of unknown model types"""
@@ -1624,6 +1645,7 @@ class TestEmbedSearchContext:
         assert "Supplementary Context from Web Search" in prompt
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")  # deprecated method
 class TestWave17CreateModelSpecificPromptSecurityFraming:
     """Regression for bug #86: ``create_model_specific_prompt`` dropped the
     prompt-injection mitigation header. ``enhance_for_models`` calls this

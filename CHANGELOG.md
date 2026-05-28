@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-05-28
+
+This release formalizes the v1.7.0-RC work that accumulated on `main`
+across PR #57 → PR #74 (post-v1.6.2 doc sync, ADR-005/008/009/010,
+Phase 4.a/4.b/4.c, cycle-2 through cycle-17 `/quality-gate` bug-hunt
+sweeps, and the SCI hardening rounds) plus the v1.7.0 release-cut
+polish (G/E/H/I) and Phase LIVE provider-observability fix below.
+The prior `[Unreleased]` content flows in as the subsequent sections
+of this release.
+
+### Added (v1.7.0 release-cut polish, 2026-05-27)
+
+- **G — DeprecationWarning + MIGRATION.md.**
+  `src/aipea/engine.py:PromptEngine.create_model_specific_prompt`
+  now emits `DeprecationWarning` (mirrors the FEDRAMP /
+  HTTP_TIMEOUT-alias deprecation pattern); scheduled removal in
+  v2.0.0. New `docs/MIGRATION.md` consolidates every scheduled
+  v2.0.0 removal (FEDRAMP, HTTP_TIMEOUT alias,
+  `create_model_specific_prompt`, `TierProcessor`) with
+  before/after migration recipes.
+- **E — `AIPEAConfig.source_of()` public accessor.**
+  `src/aipea/config.py` exposes `source_of(field_name)` +
+  `sources()` for per-field origin (env / dotenv / toml / default).
+  `src/aipea/cli.py` migrated 5 call sites from the private
+  `_sources` attribute to the new public API.
+- **H — Coverage hygiene.**
+  New `tests/test_models.py` covers `QueryAnalysis.__post_init__`
+  NaN coercion, `[0, 1]` clamping, and `to_dict()` enum
+  serialization (`src/aipea/models.py` 95 % → 100 %). Extended
+  `tests/test_cli.py` with redteam-command error paths,
+  `seed-kb`, and `check` / `doctor` connectivity-failure paths
+  (`src/aipea/cli.py` 76 % → 87 %).
+- **I — AIPEA-specific minimal-risk governance scaffold.**
+  Populated `ai/system-register.yaml` (id=aipea; EU AI Act
+  Title III Ch. 1 negative-finding rationale), `ai/model-card.yaml`
+  (model-agnostic preprocessing; known regex-tier ceilings
+  #F12–15), `ai/data-card.yaml` (no training data; runtime
+  prompts not persisted), and `ai/risk-register.yaml`
+  (R-AI-001 prompt injection, R-AI-002 classified-marker regex
+  false-negative, R-AI-003 integrator enforcement boundary).
+  The scaffold complements (does NOT replace) the broader
+  AI-GOVERNED-tier governance in Libertas-Core; `CLAUDE.md §1.2`
+  reconciled accordingly.
+
+### Fixed (Phase LIVE — redteam openai observability, 2026-05-27)
+
+- **`src/aipea/redteam/providers/openai_responses.py`** — when a
+  background-mode response reaches a non-success terminal status
+  (`failed` / `cancelled` / `incomplete`), the provider now logs
+  `error.code` + `error.message` (or `incomplete_details` for
+  `incomplete`) at WARNING before mapping to
+  `RedTeamResult(error="http_error")`. Surfaced live during
+  v1.7.0 Phase LIVE: an `aipea redteam run --provider openai`
+  against gpt-5.5-pro returned an empty corpus + bare
+  `http_error` with no logged reason; manual retrieve of the
+  background response revealed `code: "cyber_policy"` (OpenAI's
+  Trusted-Access-for-Cyber gate). Behavior unchanged for callers
+  (still `RedTeamResult(error="http_error")`); the diagnostic the
+  API returned is no longer silently discarded. New regression
+  test (`test_terminal_failed_status_logs_detail_and_tags_http_error`)
+  uses `httpx.MockTransport` (zero new deps) to assert both the
+  `http_error` tag and the logged `cyber_policy` detail. The
+  other three redteam providers (`ollama`, `anthropic`, `codex`)
+  all generate successfully live; only `gpt-5.5-pro` hits the
+  cyber-policy gate, which is now operator-diagnosable.
+
+### Documentation (v1.7.0 release-cut, 2026-05-27)
+
+- **`CLAUDE.md §1.2`** — reconciled the "no governance artifacts"
+  bullet to acknowledge AIPEA's own minimal-risk scaffold while
+  noting the AI-GOVERNED-tier governance still lives in
+  Libertas-Core. Compliance tier remains STANDARD.
+- **`CLAUDE.md §5.4`** — documented `AIPEA_LEARNING_DB_PATH`
+  (used only when `AIPEAEnhancer(enable_learning=True)`; default
+  `aipea_learning.db`); was already wired in `src/aipea/learning.py`
+  but undocumented.
+- **`SPECIFICATION.md` footer** — bumped v1.6.2 anchor → v1.7.0 +
+  release date.
+
 ### Fixed (cycle-2 `/quality-gate` bug-hunt sweep, 2026-05-26)
 
 Six commits on `fix/quality-gate-bug-sweep` closing 12 findings from

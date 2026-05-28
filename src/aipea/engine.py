@@ -24,6 +24,7 @@ import logging
 import math
 import re
 import threading
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -1058,8 +1059,13 @@ class PromptEngine:
             format (``## Query`` / ``<query>...</query>`` / ``Query:\\n1. ...``).
             This helper is retained for callers that already have a
             finished base prompt and only need per-model search-context
-            wrapping. Candidate for deprecation in a future major release;
-            see ``TODO.md`` § Opportunities.
+            wrapping.
+
+        .. deprecated:: 1.7.0
+            Scheduled for removal in v2.0.0. Prefer
+            :meth:`AIPEAEnhancer.enhance_for_models` (the canonical
+            multi-model path) or :meth:`formulate_search_aware_prompt`
+            (direct per-model formatting). See ``docs/MIGRATION.md``.
 
         Args:
             base_prompt: The base prompt to optimize
@@ -1069,6 +1075,19 @@ class PromptEngine:
         Returns:
             Model-optimized prompt string
         """
+        # Deprecated (v1.7.0; removal v2.0.0) — see docs/MIGRATION.md and ADR.
+        # `warnings.warn` (not a per-call `logger.warning`) is used here because
+        # this is a per-call helper: the warnings filter de-duplicates by
+        # call-site, whereas logging every invocation would spam hot callers.
+        # Contrast `ComplianceHandler` FEDRAMP, which warns once per construction.
+        warnings.warn(
+            "PromptEngine.create_model_specific_prompt is deprecated and will be "
+            "removed in v2.0.0. Use AIPEAEnhancer.enhance_for_models (the canonical "
+            "multi-model path) or PromptEngine.formulate_search_aware_prompt "
+            "(direct per-model formatting). See docs/MIGRATION.md.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         parts = [base_prompt]
 
         # Add search context if available.

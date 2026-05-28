@@ -272,6 +272,27 @@ class OpenAIResponsesProvider:
                             usage_in = int(usage.get("input_tokens", 0) or 0)
                             usage_out = int(usage.get("output_tokens", 0) or 0)
                         elif status in ("failed", "cancelled", "incomplete"):
+                            # Capture the terminal-failure detail so an operator can
+                            # distinguish a model-side safety refusal (e.g. OpenAI's
+                            # `cyber_policy` block on adversarial-payload generation, which
+                            # requires Trusted Access for Cyber enrollment) from a transient
+                            # infra failure. Without this, the bare `http_error` tag discards
+                            # the only diagnostic the API returned. A "failed" response
+                            # carries `error: {code, message}`; an "incomplete" one carries
+                            # `incomplete_details` instead.
+                            detail = final.get("error") or final.get("incomplete_details") or {}
+                            if isinstance(detail, dict) and detail.get("code"):
+                                logger.warning(
+                                    "OpenAI Responses terminal %s: code=%s msg=%s",
+                                    status,
+                                    detail.get("code"),
+                                    str(detail.get("message", ""))[:300],
+                                )
+                            else:
+                                logger.warning(
+                                    "OpenAI Responses terminal status=%s (no error detail)",
+                                    status,
+                                )
                             error = "http_error"  # treat non-success terminal as failure
         except httpx.HTTPError as exc:
             logger.warning("OpenAI Responses network error: %s", exc)
