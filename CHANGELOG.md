@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (F — AEGIS adapter contract audit, 2026-05-28)
+
+- **NEW `tests/test_aegis_integration.py`** — stdlib-only contract
+  pinning of the AIPEA surface that aegis-governance's
+  `src/integration/aipea_bridge.py` adapter consumes. 16 test cases
+  across 5 classes: flag constants (5 `FLAG_*` strings + `__all__`
+  membership), enum values (`ComplianceMode`, `ProcessingTier`,
+  `QueryType` `.value` strings), dataclass field names (`ScanResult`,
+  `EnhancementResult`, `QueryAnalysis`), `enhance_prompt` signature
+  (required kwargs + return annotation), and 4 behavioral invariants
+  (injection always blocked across all compliance modes, HIPAA flags
+  PHI, TACTICAL classified-marker forces offline, `scan_result`
+  populated on successful enhance). Catches surface-breaking changes
+  in AIPEA's CI BEFORE PyPI publish silently breaks the consumer.
+  Deviates from `TODO.md §F` line 269's original `pytest.skip` framing
+  (rationale in the test file's module docstring §Why no
+  aegis-governance import — inverts layering, depends on a
+  not-pip-installable sibling repo). Closes `TODO.md §F` items 1-3.
+
+### Changed (F — AEGIS adapter doc reconciliation, 2026-05-28)
+
+- **`docs/integration/aegis-adapter.md`** — rewritten (57 → ~245 lines)
+  to fix v1.6.0 drift: field-mapping row corrected from non-existent
+  `security_context.flags` to `scan_result.flags` (the v1.6.0 ADR-004
+  field). New canonical surface tables (flag constants, enum values,
+  dataclass fields, function signature) cross-referenced 1:1 with
+  `tests/test_aegis_integration.py` — every claim in the doc has a
+  test assertion and vice versa. New §Known integration gaps section
+  records two cross-repo findings (Gap 1: aegis-side adapter
+  hardcodes `security_flags=[]` discarding all AIPEA security findings;
+  Gap 2: adapter exported but no call site invokes it) for a future
+  aegis-governance PR. New §Why this is not an ADR section explains
+  the doc + test together ARE the contract. New §Behavioral invariants
+  section prose-mirrors the test class. Status section flags the
+  earlier "9 unit tests" cross-repo claim as not independently
+  verified by this AIPEA-side session.
+
 ## [1.7.0] - 2026-05-28
 
 This release formalizes the v1.7.0-RC work that accumulated on `main`

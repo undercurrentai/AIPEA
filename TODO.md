@@ -263,16 +263,40 @@ committed, pytest-9-tested, included in CDK `cdk.out/` for deployment).
 AIPEA's job is not to build the adapter — it's to lock in the API
 contract the adapter consumes.
 
-- [ ] **Contract audit**: enumerate AIPEA public symbols imported by
+- [x] **Contract audit**: enumerate AIPEA public symbols imported by
   `aipea_bridge.py`; confirm every one is in `__init__.py` `__all__`.
   ASK-first (per CLAUDE.md §2.2) for any additions.
-- [ ] **`tests/test_aegis_integration.py`** — NEW. Graceful `pytest.skip`
-  when `aegis-governance` isn't installed; exercises the
-  `preprocess_claim` → `enhance_prompt` round-trip end-to-end.
-- [ ] **Rewrite `docs/integration/aegis-adapter.md`** — from "planned
+  *Closed 2026-05-28*: `docs/integration/aegis-adapter.md §The contract`
+  enumerates every imported symbol (5 `FLAG_*` constants, 4 enums, 3
+  dataclass field-sets, 1 function signature); spot-checked against
+  `aipea.__all__` by `TestAEGISContractFlagConstants::test_flag_constants_in_all`.
+- [x] **`tests/test_aegis_integration.py`** — NEW. *Closed 2026-05-28*:
+  shipped stdlib-only, AIPEA-side contract pinning (16 test cases
+  across 5 classes; no `aegis-governance` import — rationale for
+  deviating from the original `pytest.skip` framing lives in the file's
+  module docstring §Why no aegis-governance import).
+- [x] **Rewrite `docs/integration/aegis-adapter.md`** — from "planned
   adapter spec" framing to "existing integration consumer guide" framing.
   Field-mapping matrix, compatibility note ("tested against
-  aegis-governance v1.1.0+").
+  aegis-governance v1.1.0+"). *Closed 2026-05-28*: rewrote from 57 →
+  ~245 lines; fixed the v1.6.0 `security_context.flags` → `scan_result.flags`
+  drift; added canonical surface tables cross-referenced 1:1 with the
+  new contract test; added §Known integration gaps for the two cross-repo
+  findings; added §Why this is not an ADR.
+
+**Post-F deferrals** (recorded 2026-05-28):
+- [ ] **[aegis-governance]** Fix `security_flags=[]` discard in
+  `src/integration/aipea_bridge.py` (Gap 1 in
+  `docs/integration/aegis-adapter.md`). One-line forward of
+  `result.scan_result.flags`; the AIPEA-side contract test pins
+  `scan_result` as a stable field so the fix is safe to land.
+- [ ] **[aegis-governance]** Wire `AIPEAGateAdapter.preprocess_claim`
+  into a call site — natural spot is `pcw_decide()` before submitting
+  to guardrails (Gap 2 in `docs/integration/aegis-adapter.md`).
+- [ ] **[aipea, optional]** Upgrade contract pinning to Griffe + Syrupy
+  if the AEGIS-facing surface triples or signature diffing across
+  versions becomes valuable. Trigger conditions + rationale in
+  `tests/test_aegis_integration.py` module docstring §When to revisit.
 
 ### G. Deprecation warnings for v2.0.0 removals
 
