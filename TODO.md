@@ -300,36 +300,76 @@ contract the adapter consumes.
 
 ### G. Deprecation warnings for v2.0.0 removals
 
-- [ ] **`src/aipea/engine.py` — `create_model_specific_prompt`** — add
+- [x] **`src/aipea/engine.py` — `create_model_specific_prompt`** — add
   `DeprecationWarning` on call; point to `formulate_search_aware_prompt`
   as replacement. 4 AgoraIV legacy-migrated tests will see the warning;
   v1.8.0 migration PR upstream into AgoraIV addresses those.
-- [ ] **`docs/MIGRATION.md` v0 draft** — NEW. Section per removal
+  *Closed 2026-05-28 (v1.7.0, commit `73c7fa9`)*: `warnings.warn(...,
+  DeprecationWarning, stacklevel=2)` shipped at `engine.py:1041`. The
+  warning message points to BOTH `AIPEAEnhancer.enhance_for_models`
+  (canonical multi-model path) AND `PromptEngine.formulate_search_aware_prompt`
+  (direct per-model formatting), broadening the TODO's single-replacement
+  framing. Existing callers (in `test_engine.py`, `test_live.py`) were
+  decorated with `@pytest.mark.filterwarnings("ignore::DeprecationWarning")`
+  to suppress the warning in their assertions.
+- [x] **`docs/MIGRATION.md` v0 draft** — NEW. Section per removal
   (FedRAMP, HTTP_TIMEOUT, create_model_specific_prompt, TierProcessor).
   Finalized at v2.0.0rc1.
+  *Closed 2026-05-28 (v1.7.0, commit `73c7fa9`)*: file created at
+  `docs/MIGRATION.md` with all 4 sections + before/after migration recipes
+  + v2.0.0 timeline anchor. Will be expanded at v2.0.0rc1 per the
+  original spec.
 
 ### H. Test-coverage hygiene
 
-- [ ] **`tests/test_models.py`** — edge-case tests for `QueryAnalysis`
+- [x] **`tests/test_models.py`** — edge-case tests for `QueryAnalysis`
   dataclass (to_dict serialization, boundary values, None handling).
   Long-deferred; closes the v1.4.0-cycle item and the 2026-04-22 review
   finding.
+  *Closed 2026-05-28 (v1.7.0, commit `d8606ca`)*: file created with
+  `TestQueryAnalysisScoreCoercion`, NaN handling, clamping (parametrized),
+  and `ToDict` round-trip classes. Lifted `models.py` 95 % → 100 %.
 - [ ] **Exception chaining audit** — standardize `raise X from e` in
   `engine.py`. `engine.py:371` bare `raise` is **intentional** (re-raises
   active exception per 2026-04-22 review); audit remaining sites only.
-- [ ] **CLI coverage → 85%+** — currently 78%; ~67 untested error-path
+  *Note (2026-05-28)*: no dedicated audit performed during v1.7.0.
+  ruff `B904` (`raise-without-from-inside-except`) is enabled in
+  `pyproject.toml` `[tool.ruff.lint]` and catches new violations at
+  lint time, but a formal review of existing `engine.py:except` sites
+  remains open. Track as a Tier-2 hygiene item; not blocking for v1.8.0.
+- [x] **CLI coverage → 85%+** — currently 78%; ~67 untested error-path
   lines in `configure` / `doctor` / `seed-kb`.
+  *Closed 2026-05-28 (v1.7.0, commit `d8606ca`)*: lifted `cli.py`
+  76 % → 87 % via new `TestRedteamCommands`, `TestSeedKbDbOption`,
+  and `check`/`doctor` connectivity-failure tests in `tests/test_cli.py`.
+  Above the 85 % target.
 
 ### I. Governance templates (populate real values)
 
-- [ ] **`ai/system-register.yaml`** — replace `id: example-llm` →
+- [x] **`ai/system-register.yaml`** — replace `id: example-llm` →
   `id: aipea`, `owner: team-ml@example.com` → `owner: @joshuakirby`,
   `last_reviewed: "YYYY-MM-DD"` → actual date.
-- [ ] **`ai/model-card.yaml`** — replace `name: example-llm` →
+  *Closed 2026-05-28 (v1.7.0, commit `ab28a5c`)*: `id: aipea`,
+  `owner: joshuakirby <josh@undercurrentholdings.com>`,
+  `last_reviewed: 2026-05-28`. Also added the EU AI Act Title III
+  Ch. 1 minimal-risk negative-finding rationale.
+- [x] **`ai/model-card.yaml`** — replace `name: example-llm` →
   `name: aipea-v1.7.0` (AIPEA's own preprocessing model, not a 3rd-party
   LLM).
-- [ ] **`ai/risk-register.yaml`** — populate both `review_date:` fields
+  *Closed 2026-05-28 (v1.7.0, commit `ab28a5c`)*: minor deviation from
+  the TODO's literal — split into two fields (`name: aipea` +
+  `version: "1.7.0"`) which is materially identical and matches the
+  YAML schema convention. Also clarified AIPEA is model-agnostic
+  preprocessing (not a trained model); only model dependency is the
+  optional offline `gemma3:1b` (Ollama) tier.
+- [x] **`ai/risk-register.yaml`** — populate both `review_date:` fields
   (lines 22, 41) with real quarterly dates.
+  *Closed 2026-05-28 (v1.7.0, commit `ab28a5c`)*: minor deviation —
+  rewrote the register from 2 generic risks → 3 AIPEA-real risks
+  (R-AI-001 prompt-injection, R-AI-002 classified-marker regex
+  false-negative, R-AI-003 integrator-enforcement-boundary). All
+  three carry `review_date: 2026-05-28`; next quarterly review is
+  the implied 2026-08-28.
 
 ### J-bis. PR #52 Phase 4 — ✅ all three Phase 4 deliverables shipped to `main`; will release with v1.7.0
 

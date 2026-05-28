@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation (TODO.md §G / §H / §I post-v1.7.0 sync, 2026-05-28)
+
+- **`TODO.md` §G / §H / §I** — ticked 7 of 8 boxes that shipped in
+  v1.7.0 (PR #75) but were never marked done; each tick carries an
+  inline `*Closed YYYY-MM-DD (v1.7.0, commit <sha>)*` note pointing
+  to the actual delivering commit (`73c7fa9` for §G,
+  `d8606ca` for §H, `ab28a5c` for §I). The eighth box (§H exception-
+  chaining audit) is intentionally left open with a clarification
+  note — ruff `B904` enforces the rule going forward, but no formal
+  review of existing `engine.py:except` sites was conducted in v1.7.0.
+  Surfaced as an out-of-scope finding during the F audit (PR #76);
+  closed in this commit. No code changes.
+
 ### Added (F — AEGIS adapter contract audit, 2026-05-28)
 
 - **NEW `tests/test_aegis_integration.py`** — stdlib-only contract
