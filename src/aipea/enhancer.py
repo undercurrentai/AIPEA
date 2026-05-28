@@ -270,6 +270,8 @@ class AIPEAEnhancer:
         firecrawl_api_key: str | None = None,
         enable_learning: bool = False,
         learning_policy: LearningPolicy | None = None,
+        enable_trust_boundary: bool = False,
+        learning_hmac_key: str | None = None,
     ) -> None:
         """Initialize the prompt enhancement facade.
 
@@ -331,6 +333,24 @@ class AIPEAEnhancer:
                 logger.warning("Failed to initialize learning engine: %s", e)
                 self._learning_engine = None
 
+        # Request-bound trust boundary (opt-in, ALIG B1 — ADR-011)
+        self._served_requests: ServedRequestStore | None = None
+        if enable_trust_boundary:
+            try:
+                from aipea.served_requests import ServedRequestStore
+
+                self._served_requests = ServedRequestStore(
+                    hmac_key=learning_hmac_key,
+                    allow_hipaa=(
+                        learning_policy.allow_hipaa_recording
+                        if learning_policy is not None
+                        else False
+                    ),
+                )
+            except (sqlite3.Error, OSError, RuntimeError) as e:
+                logger.warning("Failed to initialize trust boundary: %s", e)
+                self._served_requests = None
+
         # Thread-safe statistics tracking
         self._stats_lock = threading.Lock()
         self._stats: dict[str, Any] = {
@@ -357,6 +377,9 @@ class AIPEAEnhancer:
         if self._learning_engine is not None:
             self._learning_engine.close()
             self._learning_engine = None
+        if self._served_requests is not None:
+            self._served_requests.close()
+            self._served_requests = None
 
     def __enter__(self) -> AIPEAEnhancer:
         return self
@@ -1364,6 +1387,60 @@ class AIPEAEnhancer:
             score_bounds=(-1.0, 1.0),
             min_samples=threshold,
             approved_strategies=approved_strategies,
+        )
+
+    def issue_feedback_token(
+        self,
+        result: EnhancementResult,
+        *,
+        tenant_id: str,
+        source_id: str | None = None,
+    ) -> str | None:
+        """Issue a single-use, request-bound feedback token for an enhancement.
+
+        Trust-boundary ingestion (ADR-011 B1; opt-in via
+        ``enable_trust_boundary=True``). Hand the returned ``request_id`` to the
+        end user, then collect their score later via
+        :meth:`record_end_user_feedback`, which resolves the trusted query
+        type / strategy / scan flags from the token rather than from
+        caller-supplied values. Returns ``None`` if the trust boundary is
+        disabled, the result has no strategy, or the compliance mode forbids
+        persistence.
+        """
+        if self._served_requests is None or not result.strategy_used:
+            return None
+        scan_flags = tuple(result.scan_result.flags) if result.scan_result else ()
+        return self._served_requests.issue(
+            result.query_analysis.query_type,
+            result.strategy_used,
+            tenant_id=tenant_id,
+            source_id=source_id,
+            scan_flags=scan_flags,
+            compliance_mode=result.security_context.compliance_mode,
+        )
+
+    async def record_end_user_feedback(self, request_id: str, score: float) -> None:
+        """Record untrusted end-user feedback against a server-issued token.
+
+        Accepts ONLY a ``request_id`` + ``score`` — the query type, strategy, and
+        scanner flags are resolved from the consumed token, so an untrusted caller
+        cannot forge them (this is the property the raw :meth:`record_feedback`
+        lacks). The token is single-use: an unknown, expired, or replayed
+        ``request_id`` is silently ignored. The token's original scan flags are
+        threaded through, so ADR-004 taint exclusion still applies.
+        """
+        if self._served_requests is None or self._learning_engine is None:
+            return
+        resolved = self._served_requests.consume(request_id)
+        if resolved is None:
+            logger.info("End-user feedback rejected: invalid, expired, or used token")
+            return
+        await self._learning_engine.arecord_feedback(
+            query_type=resolved.query_type,
+            strategy=resolved.strategy,
+            score=score,
+            compliance_mode=resolved.compliance_mode,
+            scan_flags=resolved.scan_flags,
         )
 
     def _update_avg_time(self, new_time_ms: float) -> None:

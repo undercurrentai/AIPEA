@@ -35,6 +35,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **dev dep**: `hypothesis` added (property-based conservativeness/tightness
   tests for the certificate); core runtime deps unchanged (stdlib + httpx).
 
+### Added (ALIG trust-boundary ingestion — B1, ADR-011, 2026-05-28)
+
+- **NEW `src/aipea/served_requests.py`** — `ServedRequestStore`: request-bound
+  feedback authorization. Single-use, TTL-limited tokens (`secrets.token_urlsafe`);
+  keyed HMAC-SHA256 source hashing (explicit key via `AIPEA_LEARNING_HMAC_KEY` or
+  constructor — **no silent secret-file generation**); atomic single-use claim;
+  ADR-003 compliance gating (TACTICAL never persists, HIPAA default-deny); TTL
+  purge. Shares `aipea_learning.db`; stdlib only; 98% covered.
+- **`AIPEAEnhancer`** gains opt-in (`enable_trust_boundary=True`,
+  `learning_hmac_key=...`) request-bound feedback:
+  `issue_feedback_token(result, *, tenant_id, source_id=None) -> str | None` and
+  `record_end_user_feedback(request_id, score)`. The untrusted path accepts
+  **only** `request_id` + `score`; the query type / strategy / scan flags are
+  resolved from the consumed token, so an untrusted caller cannot forge them (the
+  property the raw `record_feedback` lacks). `enhance()` and `EnhancementResult`
+  are unchanged.
+- Refines ADR-011's HMAC handling to require an **explicit key** (no on-disk
+  secret generation). The certified tier that consumes these source-bound tokens
+  remains v1.9.0 (`CERTIFIED` still disabled).
+
 ### Documentation (TODO.md §G / §H / §I post-v1.7.0 sync, 2026-05-28)
 
 - **`TODO.md` §G / §H / §I** — ticked 7 of 8 boxes that shipped in
