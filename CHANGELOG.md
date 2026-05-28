@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (ALIG — Adaptive Learning Integrity Guardrails, ADR-011, 2026-05-28)
+
+- **NEW `src/aipea/learning_integrity.py`** — a pure-stdlib finite-sample
+  *influence certificate* for adaptive strategy selection.
+  `compute_influence_certificate()` returns the exact event-edit radius under
+  which the learned argmax strategy provably cannot be flipped by a
+  budget-limited adversary (insertion / replacement / deletion models), with
+  latent-rival and min-sample eligibility accounted for. v1.8.0 ships
+  **diagnostic-only**: the `certified` tier is mechanically disabled
+  (`CERTIFIED_STATUS_ENABLED is False`); the emitted status is
+  `RAW_EVENT_EDIT_DIAGNOSTIC` — an honest event-level bound, not a
+  user/source/Sybil guarantee, that does not authorize strategy switching. Zero
+  `aipea` imports (stdlib only), 100% covered.
+- **`AIPEAEnhancer.selection_diagnostic(query_type)`** — read-only diagnostic
+  over the averaging-eligible (non-taint-excluded, per ADR-004) feedback in the
+  learning store; returns `InfluenceCertificate | None` (None when learning is
+  disabled), computed over the learning score range `[-1, 1]`.
+- **`AdaptiveLearningEngine.scores_by_strategy(query_type)`** — reads the
+  non-excluded per-strategy feedback scores that drive selection.
+- **Public API** (+4 symbols, 60 → 64 in `__all__`): `CertificateStatus`,
+  `PerturbationModel`, `InfluenceCertificate`, `compute_influence_certificate`.
+- **NEW ADR-011** (`docs/adr/ADR-011-learning-integrity-guardrails.md`, Proposed)
+  — design + prior-art positioning (certified-poisoning lineage is NN-focused;
+  budget-bounded robust aggregation is standard in bandit/RLHF defense; Sybil-
+  *tolerance* not resistance). Converged via a 3-round Claude↔GPT-5.5-pro dialogue.
+- **dev dep**: `hypothesis` added (property-based conservativeness/tightness
+  tests for the certificate); core runtime deps unchanged (stdlib + httpx).
+
 ### Documentation (TODO.md §G / §H / §I post-v1.7.0 sync, 2026-05-28)
 
 - **`TODO.md` §G / §H / §I** — ticked 7 of 8 boxes that shipped in

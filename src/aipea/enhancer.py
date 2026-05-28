@@ -69,8 +69,11 @@ from aipea.security import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from aipea.engine import OfflineTierProcessor  # used as type hint for _ollama_processor
     from aipea.learning import LearningPolicy  # used as type hint for __init__ param
+    from aipea.learning_integrity import InfluenceCertificate  # selection_diagnostic return
 
 logger = logging.getLogger(__name__)
 
@@ -1322,6 +1325,46 @@ class AIPEAEnhancer:
                 "Learning feedback recorded for audit only (taint: %s)",
                 outcome.taint_flags,
             )
+
+    def selection_diagnostic(
+        self,
+        query_type: QueryType,
+        *,
+        min_samples: int | None = None,
+        approved_strategies: Iterable[str] | None = None,
+    ) -> InfluenceCertificate | None:
+        """Read-only ALIG influence-certificate diagnostic for strategy selection.
+
+        Reports how many adversarial feedback *events* could shift the learned
+        argmax strategy for ``query_type``, computed over the averaging-eligible
+        (non-taint-excluded) feedback in the learning store.  Returns ``None``
+        when adaptive learning is disabled.
+
+        v1.8.0 is diagnostic-only (ADR-011): the result is
+        ``RAW_EVENT_EDIT_DIAGNOSTIC`` — an honest event-level bound, **not** a
+        user/source/Sybil guarantee, and it does **not** authorize strategy
+        switching.
+
+        Args:
+            query_type: The query type whose selection to diagnose.
+            min_samples: Eligibility threshold; defaults to the engine's own
+                selection threshold so the diagnostic reflects what is selected.
+            approved_strategies: Full approved strategy set for latent-rival
+                analysis; defaults to the strategies that have feedback data.
+        """
+        if self._learning_engine is None:
+            return None
+        from aipea.learning import _MIN_SAMPLES
+        from aipea.learning_integrity import compute_influence_certificate
+
+        scores = self._learning_engine.scores_by_strategy(query_type)
+        threshold = _MIN_SAMPLES if min_samples is None else min_samples
+        return compute_influence_certificate(
+            scores,
+            score_bounds=(-1.0, 1.0),
+            min_samples=threshold,
+            approved_strategies=approved_strategies,
+        )
 
     def _update_avg_time(self, new_time_ms: float) -> None:
         """Update the rolling average enhancement time.

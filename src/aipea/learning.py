@@ -387,6 +387,29 @@ class AdaptiveLearningEngine:
             logger.warning("Failed to read learning stats", exc_info=True)
             return {"total_events": 0, "strategies_tracked": 0, "query_types_with_data": 0}
 
+    def scores_by_strategy(self, query_type: QueryType) -> dict[str, list[float]]:
+        """Return averaging-eligible feedback scores per strategy for *query_type*.
+
+        Reads the non-excluded events (``excluded_from_averaging = 0``) — the same
+        population that feeds ``strategy_performance`` — so an integrity diagnostic
+        (ADR-011) sees exactly the scores that drive selection.  Returns ``{}`` on
+        DB error.
+        """
+        out: dict[str, list[float]] = {}
+        try:
+            with self._with_db_lock() as conn:
+                rows = conn.execute(
+                    "SELECT strategy_used, feedback_score FROM learning_events "
+                    "WHERE query_type = ? AND excluded_from_averaging = 0",
+                    (query_type.value,),
+                ).fetchall()
+        except sqlite3.Error:
+            logger.warning("Failed to read scores_by_strategy", exc_info=True)
+            return {}
+        for row in rows:
+            out.setdefault(row["strategy_used"], []).append(float(row["feedback_score"]))
+        return out
+
     # ------------------------------------------------------------------
     # Public API — async wrappers
     # ------------------------------------------------------------------
