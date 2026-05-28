@@ -12,8 +12,10 @@ API calls.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
+import httpx
 import pytest
 
 from aipea.redteam import (
@@ -170,6 +172,54 @@ class TestOpenAIResponsesProvider:
         p = OpenAIResponsesProvider(api_key="test-key")
         assert p.default_model == "gpt-5.5-pro"
         assert p.api_base == "https://api.openai.com/v1"
+
+    def test_terminal_failed_status_logs_detail_and_tags_http_error(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A background response that reaches a non-success terminal status is
+        tagged ``http_error`` AND its error detail is logged.
+
+        Regression guard for a live-testing finding (2026-05-27): gpt-5.5-pro
+        refused adversarial-payload generation with a terminal ``failed`` status
+        carrying ``{"code": "cyber_policy"}`` (Trusted Access for Cyber gate).
+        The provider previously collapsed this into a bare ``http_error`` with
+        no logged reason, so the only diagnostic the API returned was lost.
+        """
+
+        def _create_handler(request: httpx.Request) -> httpx.Response:
+            # Async create call → 200 with a response id (background accepted).
+            return httpx.Response(200, json={"id": "resp_test123", "status": "queued"})
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(_create_handler))
+
+        def _fake_poll(rid: str, **_kw: Any) -> dict[str, Any]:
+            # Terminal "failed" carrying an OpenAI cyber_policy refusal.
+            return {
+                "status": "failed",
+                "error": {
+                    "code": "cyber_policy",
+                    "message": "This content was flagged for possible cybersecurity risk.",
+                },
+            }
+
+        monkeypatch.setattr(
+            "aipea.redteam.providers.openai_responses.poll_until_terminal", _fake_poll
+        )
+        p = OpenAIResponsesProvider(api_key="test-key", client=client)
+        try:
+            with caplog.at_level(
+                logging.WARNING, logger="aipea.redteam.providers.openai_responses"
+            ):
+                results = asyncio.run(p.generate(technique=Technique.PARAPHRASE, prompt="x", num=1))
+        finally:
+            asyncio.run(client.aclose())
+
+        assert len(results) == 1
+        assert results[0].error == "http_error"
+        assert results[0].payload == ""
+        # The diagnostic detail is now logged (was discarded before the fix).
+        assert "cyber_policy" in caplog.text
+        assert "failed" in caplog.text
 
 
 class TestOpenAICodexProvider:
