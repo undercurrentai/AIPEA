@@ -4,29 +4,38 @@
 # NOTE: Keep this file current; link each entry to its model/data cards and technical file.
 
 systems:
-  - id: example-llm
-    name: Example Assistant
-    version: "1.2.3"
-    owner: team-ml@example.com
-    purpose: "Assist support workflows with summarization and suggestions"
-    markets: ["US","EU"]
+  - id: aipea
+    name: "AIPEA (AI Prompt Engineer Agent)"
+    version: "1.7.0"
+    owner: "joshuakirby <josh@undercurrentholdings.com>"
+    purpose: >-
+      Standalone Python library for prompt preprocessing: security screening
+      (injection always-blocked; PII/PHI/classified-marker detection), query
+      analysis, and context enrichment applied BEFORE a prompt reaches an LLM.
+      Model-agnostic; consumed by Agora IV, AEGIS, and other Undercurrent products.
+    markets: ["US", "EU"]
     classification:
-      eu_ai_act: "assess-if-high-risk-per-Annex-III | transparency-only | GPAI"
+      eu_ai_act: "minimal-risk (Title III, Ch. 1) — not Annex III high-risk; no Art. 50 transparency trigger"
       notes: >-
         AIPEA is a prompt-preprocessing library — it does not make autonomous decisions,
         perform biometric identification, operate safety-critical systems, or engage in social
         scoring. Under the EU AI Act risk taxonomy it falls into the "minimal risk" category
-        (Title III, Chapter 1). No Annex III high-risk use case applies. Transparency obligations
-        (Art. 52) are met by documenting that outputs are AI-enriched prompts, not end-user content.
-    model_type: "GPAI | task-specific | ensemble"
-    data_categories: ["customer support transcripts", "product docs"]
-    articles_applicable: ["9","10","11","12","13","14","15","17"]
-    risk_level: "medium"
-    last_reviewed: "YYYY-MM-DD"
-    status: "in-development | in-production | retired"
+        (Title III, Chapter 1). No Annex III high-risk use case applies. It is not directly
+        user-facing (a library, not an end-user product), so Art. 50 transparency obligations
+        bind the integrating product, not AIPEA. This negative finding is the documented basis
+        for the minimal-risk classification (per the EU AI Act inventory practice of recording
+        why a system is out of the high-risk scope).
+    model_type: "N/A — model-agnostic preprocessing library (not a trained model)"
+    data_categories: ["runtime user prompts (scanned for PII/PHI/classified markers; not persisted)"]
+    # Minimal-risk: the high-risk obligations of Art. 9–17 do not bind AIPEA. The Art. 4
+    # AI-literacy duty applies org-wide and is satisfied by this register + the model/data cards.
+    articles_applicable: []
+    risk_level: "minimal"
+    last_reviewed: "2026-05-28"
+    status: "in-development"
     dependencies:
-      cloud: ["<cloud-provider-accounts>"]
-      vendors: ["<llm-api-provider>"]
+      cloud: ["none — core is stdlib + httpx only; no managed cloud dependency"]
+      vendors: ["Exa (optional web search)", "Firecrawl (optional)", "Ollama (optional, offline gemma3:1b)"]
     references:
       model_card: "ai/model-card.yaml"
       data_card: "ai/data-card.yaml"

@@ -1,44 +1,74 @@
 # AI Risk Register
 # EU AI Act Art. 9 | FedRAMP RA-3/5 | SOC 2 CC3.x | ISO 42001 Planning | NIST AI RMF MAP/MEASURE
-# Scale examples: likelihood 1=rare..5=almost certain; impact 1=negligible..5=severe
+# Scale: likelihood 1=rare..5=almost certain; impact 1=negligible..5=severe
 # Use this as the single source of truth; reference risks in PRs that introduce AI changes.
 
 risks:
   - id: R-AI-001
-    title: "Jailbreak leading to PII exfiltration"
-    description: "Adversarial prompts may cause model to output PII or secrets."
-    source: "Threat modeling; prior incidents in industry"
-    likelihood: 3
+    title: "Prompt injection bypasses the screener and reaches the downstream LLM"
+    description: >-
+      An adversarial prompt evades AIPEA's injection detection and is passed to the LLM,
+      potentially overriding system instructions or exfiltrating context.
+    source: "Threat modeling; adversarial red-team corpus"
+    likelihood: 2
     impact: 4
-    inherent_score: 12
+    inherent_score: 8
     controls:
-      - "Adversarial prompt suite in CI"
-      - "Default-deny egress & PII filters"
-      - "Human oversight on sensitive intents"
-    residual_score: 6
-    owner: security@example.com
+      - "Injection patterns are ALWAYS blocked (12 patterns; SQL/shell/path/role-tag/paraphrase)"
+      - "Two-form (stripped + spaced) + NFKC normalization scanning to defeat obfuscation"
+      - "Adversarial corpus in CI (PromptInject / JBB-Behaviors / Garak) + nightly run"
+      - "LLM-driven red-team engine (ADR-009) + triple-AI second-reviewer gate on security PRs"
+    residual_score: 3
+    owner: "joshuakirby <josh@undercurrentholdings.com>"
     treatment: "Mitigate"
     status: "Open"
-    review_date: "YYYY-MM-DD"
+    review_date: "2026-05-28"
     references:
       - "ai/oversight-plan.md"
-      - "ai/technical_file/testing/tev_report_template.md"
+      - "docs/adr/ADR-008-adversarial-evaluation-suite.md"
 
   - id: R-AI-002
-    title: "Training data bias leading to unfair outputs"
-    description: "Imbalanced data may degrade performance for certain groups."
-    source: "Data profiling"
-    likelihood: 3
+    title: "Classified / PII marker false-negative at the regex tier"
+    description: >-
+      A real IC classified marking or PII token is missed because it sits outside the
+      regex tier's structural contract — e.g. a lowercase UNLISTED SCI compartment or a
+      non-ASCII/exotic delimiter. The content could then be routed to an external LLM.
+    source: "Self-audit; PR #73 second-reviewer rounds 13–16 (KNOWN_ISSUES #F12–#F15)"
+    likelihood: 2
     impact: 3
-    inherent_score: 9
+    inherent_score: 6
     controls:
-      - "Data-card balance checks"
-      - "Slice-based evaluations & fairness probes"
-    residual_score: 5
-    owner: data-steward@example.com
-    treatment: "Mitigate"
+      - "Documented regex-tier ceiling deferred to the ADR-010 LLM-as-judge semantic-scan tier"
+      - "Conservative banner-prefix matching (flags on any valid banner at a clean boundary)"
+      - "TACTICAL mode sets force_offline so flagged content routes to a local model"
+      - "Pin tests assert each documented ceiling so a future broadening cannot regress silently"
+    residual_score: 4
+    owner: "joshuakirby <josh@undercurrentholdings.com>"
+    treatment: "Mitigate (full closure deferred to the v2.0.0 semantic-scan tier)"
     status: "Open"
-    review_date: "YYYY-MM-DD"
+    review_date: "2026-05-28"
     references:
-      - "ai/data-card.yaml"
-      - "ai/technical_file/testing/tev_report_template.md"
+      - "KNOWN_ISSUES.md (#F12–#F15)"
+      - "docs/adr/ADR-010-llm-semantic-scan-tier.md"
+
+  - id: R-AI-003
+    title: "Integrator ignores ScanResult flags (enforcement-boundary risk)"
+    description: >-
+      AIPEA DETECTS and FLAGS (injection/PII/PHI/classified) but does not enforce — it sets
+      advisory flags (is_blocked, force_offline, phi_detected, classified_marker). A consuming
+      product that ignores these flags could forward sensitive content to a cloud LLM.
+    source: "Enforcement-boundary audit (Phase 4.b claims calibration, PR #69)"
+    likelihood: 2
+    impact: 4
+    inherent_score: 8
+    controls:
+      - "Enforcement boundary documented in README, SPECIFICATION.md §3.1.3, and CLAUDE.md §7.2"
+      - "Adapter guides (AEGIS/Agora) show honoring flags; integration tests assert the contract"
+    residual_score: 4
+    owner: "joshuakirby <josh@undercurrentholdings.com>"
+    treatment: "Mitigate (documentation + adapter contract; enforcement is the integrator's duty)"
+    status: "Open"
+    review_date: "2026-05-28"
+    references:
+      - "SPECIFICATION.md (§3.1.3 enforcement-boundary contract)"
+      - "docs/integration/aegis-adapter.md"

@@ -1,60 +1,76 @@
-# Model Card (Template)
+# Model Card
 # EU AI Act Art. 11 | ISO 42001 Operation | NIST AI RMF MAP
+# NOTE: AIPEA is NOT a trained model. It is a model-agnostic prompt-preprocessing
+# library. This card is retained for scaffold completeness and documents that
+# distinction; the only model AIPEA optionally depends on is an offline Ollama
+# tier (gemma3:1b), which the integrator downloads.
 
 model:
-  name: example-llm
-  version: "1.2.3"
-  provider_or_arch: "e.g., transformer-based LLM; foundation model reference if applicable"
-  license: "internal | open-source license | commercial"
-  training_window: "YYYY-MM..YYYY-MM | unknown (for proprietary GPAI)"
-  provenance_summary: "Describe sources & licenses at a high level"
+  name: aipea
+  version: "1.7.0"
+  provider_or_arch: "N/A — model-agnostic prompt-preprocessing library (Python stdlib + httpx); not a trained model"
+  license: "MIT (open-source)"
+  training_window: "N/A — not a trained model (no training data, no weights, no fine-tuning)"
+  provenance_summary: >-
+    Deterministic rule/regex-based preprocessing; there is no model provenance to
+    describe. Optional offline enhancement uses Ollama gemma3:1b, downloaded and
+    governed by the integrator (its provenance is the upstream model's, not AIPEA's).
   known_failure_modes:
-    - "Hallucination under sparse context"
-    - "Non-robust to obfuscated jailbreaks"
+    - "Regex-tier ceiling for SCI classified markers — a lowercase UNLISTED compartment or a non-ASCII/exotic delimiter is a documented false-negative deferred to the ADR-010 semantic-scan tier (KNOWN_ISSUES #F13/#F14/#F15)."
+    - "Conversation-separator injection is line-anchored at the regex tier; mid-line role mentions are intentionally not flagged (KNOWN_ISSUES #F12)."
+    - "Search providers fail open to empty results (graceful degradation), never raising — a misconfigured provider silently yields no enrichment."
 
 intended_use:
-  description: "Support assistant for summarization and suggestion"
+  description: >-
+    Preprocess prompts before they reach an LLM: block prompt injection, flag
+    PII/PHI/classified markers, analyze the query, and enrich with offline-KB or
+    web-search context. Output is an AI-enriched prompt, not end-user content.
   out_of_scope:
+    - "Being an LLM / generating end-user content"
+    - "Enforcing any regulatory regime (compliance modes detect + flag; the integrator enforces)"
     - "Legal advice"
     - "Medical diagnosis"
 
 evaluation:
   topline_metrics:
-    accuracy_or_quality: "0.86 (example)"
-    latency_p95_ms: 350
+    accuracy_or_quality: "N/A — not a predictive model; quality is tracked as the test pass rate"
+    test_suite: "1,862 passed / 35 skipped / 5 xfailed @ 91.75% coverage (cycle-17, 2026-05-27)"
   slice_metrics:
-    - slice: "en-US support tickets"
-      quality: 0.88
-    - slice: "accented English"
-      quality: 0.81
+    - slice: "N/A — deterministic, input-independent of demographic/locale slices"
+      quality: "see fairness_probes"
   fairness_probes:
-    methodology: "e.g., demographic parity where lawfully processed"
+    methodology: "Determinism review — identical pattern matching regardless of input language, demographics, or identity"
     results: >-
       AIPEA does not generate content or make decisions — it enriches prompts before they reach
       an LLM. The security scanner applies identical pattern matching regardless of input language,
-      demographics, or user identity. All 8 injection-detection patterns and PII/PHI scanners are
+      demographics, or user identity. The injection-detection patterns and PII/PHI scanners are
       deterministic regex-based checks with no demographic bias vectors. No fairness disparities
-      detected across test corpus (622 tests, 91%+ coverage).
+      are possible by construction (no learned parameters).
 
 robustness:
   tests:
-    - "noise-injection"
+    - "adversarial-corpus (PromptInject / JBB-Behaviors / Garak fixtures)"
     - "prompt-jailbreak-suite"
+    - "invisible-char / two-form normalization"
+    - "ReDoS adversarial inputs (50K-char runs)"
   red_team_summary: >-
-    15 automated bug-hunt sweeps performed across the codebase. Security hardening includes:
-    injection detection (8 regex patterns covering SQL, shell, path traversal, prompt injection),
-    PII/PHI scanning (SSN, email, phone, credit card, medical record numbers), search-result
-    injection filtering, ReDoS prevention (bounded quantifiers, atomic patterns), and a FEDRAMP
-    stub warning for incomplete authorization. All security patterns validated against adversarial
-    test fixtures with zero false-negative escapes.
+    17 automated /quality-gate bug-hunt + remediation cycles, plus an LLM-driven red-team engine
+    (ADR-009) with 4 providers. Security hardening covers: injection detection (always-blocked),
+    PII/PHI scanning, IC classified-marker detection (SCI banner grammar hardened across PR #73
+    rounds 13–16 with a documented regex-tier ceiling), the complete Unicode Default_Ignorable
+    invisible-char class, two-form (stripped + spaced) normalization scanning, and ReDoS
+    prevention (bounded quantifiers; ~2–6 ms on 50K-char adversarial inputs). All security-critical
+    PRs pass a triple-AI second-reviewer gate (GPT 5.4 Pro + Codex + Claude Opus).
 
 security_privacy:
-  pii_handling: "Describe PII controls & masking"
-  egress_control: "Allowlist; deny by default"
-  logging: "See schemas/log_event.schema.json"
+  pii_handling: >-
+    PII/PHI is FLAGGED (e.g. pii_detected:*, phi_detected:*), never stored or transmitted by AIPEA.
+    Redaction/blocking is the integrator's responsibility (AIPEA sets advisory flags on ScanResult).
+  egress_control: "None imposed by the library; search-provider egress is opt-in (keys configured by the integrator). TACTICAL mode sets force_offline as an advisory flag — AIPEA does not block network egress."
+  logging: "Standard library logging; no prompt content is logged at INFO. See SECURITY.md."
 
 operational:
-  intended_deployment: "Kubernetes; region(s)"
-  rollback_strategy: "Blue/green; canary"
-  monitoring: "Drift metrics; safety violations; SLOs"
-  oversight_mode: "human-on-the-loop"
+  intended_deployment: "Imported as a library by the consuming product (no standalone deployment)"
+  rollback_strategy: "SemVer; consumers pin a version. Deprecations warn ≥1 minor before removal (see docs/MIGRATION.md)."
+  monitoring: "Consumer-side; AIPEA exposes ScanResult flags + EnhancementResult for the host product to monitor"
+  oversight_mode: "human-on-the-loop (the integrating product's reviewers act on AIPEA's flags)"
