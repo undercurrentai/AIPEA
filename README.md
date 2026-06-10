@@ -316,12 +316,12 @@ enhancer._learning_engine.prune_events()
 
 AIPEA is designed as a standalone preprocessing layer for LLM systems. It integrates with:
 
-- **[AEGIS Governance](https://github.com/undercurrentai/aegis-governance)** — engineering standards & compliance SDK (`pip install aegis-governance[aipea]`)
+- **[AEGIS Governance](https://aegis.undercurrentholdings.com?utm_source=pypi&utm_medium=aipea-readme)** — quantitative AI governance: six decision gates + hash-chained audit trails (`pip install aegis-governance[aipea]`)
 - **Agora IV** — multi-model orchestration platform (uses AIPEA for prompt preprocessing)
 
 ## Enterprise & Governance
 
-AIPEA is free and open-source. For organizations that need full AI governance — risk registers, model cards, compliance auditing, and policy enforcement — see [AEGIS](https://github.com/undercurrentai/aegis-governance), Undercurrent AI's governance platform.
+AIPEA is free and open-source. For organizations that need full AI governance — risk registers, model cards, compliance auditing, and policy enforcement — see [AEGIS](https://aegis.undercurrentholdings.com?utm_source=pypi&utm_medium=aipea-readme), Undercurrent AI's governance platform. AEGIS has a free Community tier (100 evaluations/month, no credit card) — [get an API key](https://portal.undercurrentholdings.com/signup?product=aegis&utm_source=pypi&utm_medium=aipea-readme) or try the [browser demo](https://aegis.undercurrentholdings.com/advisor) with no signup.
 
 ### What AIPEA's Compliance Modes Do — and Do Not Do
 
