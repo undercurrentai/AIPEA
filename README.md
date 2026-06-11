@@ -180,7 +180,7 @@ result = scanner.scan("Patient John Doe, SSN 123-45-6789, diagnosed with...", co
 print(result.has_pii())       # True
 print(result.has_phi())       # True
 print(result.is_blocked)      # False (PII is flagged, not blocked)
-print(result.flags)           # ["pii_detected:ssn", "phi_detected:diagnosis", ...]
+print(result.flags)           # ["pii_detected:ssn", "phi_detected:patient_name", ...]
 ```
 
 ### Query Analysis
@@ -330,7 +330,7 @@ AIPEA exposes a `ComplianceMode` enum with three supported modes (`GENERAL`, `HI
 | Mode | What AIPEA does | What AIPEA does **not** do |
 |---|---|---|
 | `GENERAL` | Default. PII scanning, injection detection, and homoglyph normalization run for every request. | — |
-| `HIPAA` | Enables PHI regex patterns (MRN, patient identifier, diagnosis-term detection); restricts the LLM allowlist to BAA-capable models; emits `phi_detected:*` flags in the scan result; logs a runtime warning on match. | Does not redact. Does not block the prompt. Does not persist an audit trail. Does not satisfy the HIPAA Security Rule, Privacy Rule, or BAA requirement on behalf of the integrator. |
+| `HIPAA` | Enables PHI regex patterns (MRN, date-of-birth, and patient-name detection); restricts the LLM allowlist to BAA-capable models; emits `phi_detected:*` flags in the scan result; logs a runtime warning on match. | Does not redact. Does not block the prompt. Does not persist an audit trail. Does not satisfy the HIPAA Security Rule, Privacy Rule, or BAA requirement on behalf of the integrator. |
 | `TACTICAL` | Forces the processing tier to Offline; restricts the LLM allowlist to locally-runnable models; enables classified-marker regex patterns (CONFIDENTIAL / SECRET / TOP SECRET and common compartment markings). | Does not validate an air-gap. Does not enforce classification handling beyond detection. Does not substitute for an accredited tactical enclave. |
 
 **Responsibility stays with the integrator.** AIPEA is an input-inspection layer: it tells you what it saw. Your application is responsible for the enforcement decision (block, redact, route to a compliant backend, log to an immutable audit store, obtain BAAs, encrypt at rest and in transit, and satisfy whatever regulatory regime applies).

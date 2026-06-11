@@ -35,8 +35,8 @@ AIPEA is a **prompt-preprocessing library**. Its security layer is designed for 
 ### What AIPEA's security layer does
 
 - **Injection detection**: pattern-based detection of prompt-injection attempts (system-role hijacking, instruction-override phrases, markdown-template injection) with NFKC + homoglyph normalization (`security.py:INJECTION_PATTERNS`).
-- **PII scanning**: regex-based detection of email addresses, SSNs, phone numbers, credit-card numbers.
-- **PHI scanning (HIPAA mode)**: regex-based detection of MRNs, patient identifiers, and common PHI patterns.
+- **PII scanning**: regex-based detection of SSNs, credit-card numbers, API keys, bearer tokens, and password assignments (`security.py:PII_PATTERNS`).
+- **PHI scanning (HIPAA mode)**: regex-based detection of MRNs, dates of birth, and patient names (`security.py:PHI_PATTERNS`).
 - **Classified-marker scanning (TACTICAL mode)**: detection of U.S. classification markers (CONFIDENTIAL / SECRET / TOP SECRET and compartment markings).
 - **Compliance-mode model allowlisting**: the `ComplianceMode` enum restricts which LLM identifiers are permitted per regime.
 - **ReDoS-safe regex validation**: user-supplied patterns are validated against `_is_regex_safe()` before compilation (`security.py`).
