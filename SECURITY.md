@@ -34,7 +34,7 @@ AIPEA is a **prompt-preprocessing library**. Its security layer is designed for 
 
 ### What AIPEA's security layer does
 
-- **Injection detection**: pattern-based detection of prompt-injection attempts (system-role hijacking, instruction-override phrases, markdown-template injection) with NFKC + homoglyph normalization (`security.py:INJECTION_PATTERNS`).
+- **Injection detection**: pattern-based detection of prompt-injection attempts (system-role hijacking, instruction-override phrases, markdown-template injection) with NFKC + homoglyph normalization (`security.py:INJECTION_PATTERNS`). Recall is measured and bounded — this is a pre-filter for *known* patterns, not a complete injection defense. See [Measured injection-detection recall](#measured-injection-detection-recall).
 - **PII scanning**: regex-based detection of SSNs, credit-card numbers, API keys, bearer tokens, and password assignments (`security.py:PII_PATTERNS`).
 - **PHI scanning (HIPAA mode)**: regex-based detection of MRNs, dates of birth, and patient names (`security.py:PHI_PATTERNS`).
 - **Classified-marker scanning (TACTICAL mode)**: detection of U.S. classification markers (CONFIDENTIAL / SECRET / TOP SECRET and compartment markings).
@@ -50,6 +50,47 @@ AIPEA is a **prompt-preprocessing library**. Its security layer is designed for 
 - **No BAA or regulatory certification**: Undercurrent Holdings does not execute Business Associate Agreements for AIPEA, is not SOC 2 / HIPAA / FedRAMP certified as a vendor, and makes no representations about regulatory compliance on the integrator's behalf.
 - **HIPAA / TACTICAL modes are detection + allowlist only**. They are not a substitute for a compliant data pipeline, access controls, encryption, or audit logging. See `src/aipea/security.py` and the README "Compliance Modes" section for the exact behavior of each mode.
 - **`ComplianceMode.FEDRAMP` is deprecated (v1.3.4) and scheduled for removal in v2.0.0.** AIPEA does not implement FedRAMP controls. The enum value was a config-only stub with no behavioral enforcement and is retained only as a deprecated alias for API back-compat through the v1.x line. Constructing a `ComplianceHandler` with `FEDRAMP` now emits a `DeprecationWarning`. Do not ship AIPEA's FedRAMP mode to a FedRAMP environment; migrate to `ComplianceMode.GENERAL` and implement FedRAMP controls in your own application layer. Decision rationale: [`docs/adr/ADR-002-fedramp-removal.md`](docs/adr/ADR-002-fedramp-removal.md).
+
+### Measured injection-detection recall
+
+The injection detector is a **regex + normalization pre-filter, not a complete
+prompt-injection defense.** Measured against the adversarial corpus in
+[`tests/fixtures/adversarial/`](tests/fixtures/adversarial/) (baseline snapshot
+2026-05-02; regenerate with `make adversarial-update-baseline`):
+
+| Corpus | Result |
+|--------|--------|
+| Bright-line (known patterns / regression set) | 67 / 67 caught — 100% |
+| Benign inputs (false-positive check) | 0 / 100 flagged — 0% false-positive rate |
+| JailbreakBench harmful set | 100 / 100 caught — 100% |
+| Extended adversarial corpus (broad) | 213 / 313 caught — 68% |
+
+The 68% hides the part an integrator must understand: on the **OWASP LLM01 obfuscation
+categories a regex is structurally blind to, recall collapses toward zero.**
+
+| OWASP LLM01 category | Caught |
+|----------------------|--------|
+| paraphrase | 0 / 15 |
+| role-play / persona | 0 / 8 |
+| multi-language | 0 / 8 |
+| encoding | 0 / 5 |
+| delimiter / template | 0 / 5 |
+| indirect | 5 / 6 |
+
+The academic injection corpora that lean on the same obfuscation score the same way:
+garak `promptinject` 3 / 43, `promptinject` 5 / 17.
+
+**What this means for an integrator.** The regex layer is a fast, zero-false-positive
+filter for *known* injection shapes: it earns its place as a cheap first pass and will
+not block legitimate traffic. It does **not** catch novel, semantic, encoded, or
+multilingual injection. A higher-recall opt-in **LLM semantic second-pass** is
+*designed but not yet shipped* — [`ADR-010`](docs/adr/ADR-010-llm-semantic-scan-tier.md)
+(status: Proposed) estimates regex-only detection at F1 ~0.3–0.5 and the proposed LLM
+tier at an estimated F1 ~0.93–0.97, but neither that module nor that number is in the
+shipped library yet. Until it ships, **prompt-injection defense is the integrator's
+responsibility at the application layer**: AIPEA inspects input, it does not guarantee a
+clean prompt. See [`ADR-008`](docs/adr/ADR-008-adversarial-evaluation-suite.md) for the
+evaluation methodology.
 
 ### Taint-aware feedback averaging (ADR-004)
 
@@ -86,10 +127,10 @@ Security fixes are backported to the current minor release line only.
 
 | Version | Supported          |
 |---------|--------------------|
-| 1.6.x   | Yes                |
+| 1.7.x   | Yes                |
+| 1.6.x   | Security fixes only |
 | 1.5.x   | Security fixes only |
-| 1.4.x   | Security fixes only |
-| < 1.4   | No — upgrade to 1.6.x |
+| < 1.5   | No — upgrade to 1.7.x |
 
 Users of any pre-`1.4.0` version should upgrade — `1.6.0` closes a feedback-poisoning vector (ADR-004), and `1.3.3` closed a HIPAA-mode compliance leak (#96) and ReDoS (#107). See `CHANGELOG.md` for details.
 
