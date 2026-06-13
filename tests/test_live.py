@@ -160,10 +160,13 @@ class TestPackageIntegrity:
         ]:
             assert mod is not None
 
-    def test_all_has_60_symbols(self):
+    def test_all_has_64_symbols(self):
         # ADR-004 (2026-04-14) added FLAG_*, LearningRecordResult: 44 → 50.
         # B1-followup (Wave-22, 2026-04-28) added 10 redteam exports: 50 → 60.
-        assert len(aipea.__all__) == 60
+        # ADR-011 (ALIG, 2026-05-28) added the influence-certificate surface
+        # (CertificateStatus, PerturbationModel, InfluenceCertificate,
+        # compute_influence_certificate): 60 → 64.
+        assert len(aipea.__all__) == 64
 
     def test_version_matches_pyproject(self):
         """`aipea.__version__` MUST match `[project].version` in pyproject.toml.

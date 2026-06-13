@@ -58,6 +58,14 @@ from aipea.knowledge import (
 # Adaptive learning
 from aipea.learning import AdaptiveLearningEngine, LearningPolicy, LearningRecordResult
 
+# Learning integrity (ALIG influence certificate — ADR-011)
+from aipea.learning_integrity import (
+    CertificateStatus,
+    InfluenceCertificate,
+    PerturbationModel,
+    compute_influence_certificate,
+)
+
 # Data models
 from aipea.models import QueryAnalysis
 
@@ -114,6 +122,7 @@ __all__ = [
     "AIPEAError",
     "AdaptiveLearningEngine",
     "AnthropicProvider",
+    "CertificateStatus",
     "ComplianceHandler",
     "ComplianceMode",
     "ConfigError",
@@ -123,6 +132,7 @@ __all__ = [
     "EnhancementResult",
     "ExaSearchProvider",
     "FirecrawlProvider",
+    "InfluenceCertificate",
     "KnowledgeDomain",
     "KnowledgeNode",
     "KnowledgeSearchResult",
@@ -133,6 +143,7 @@ __all__ = [
     "OllamaProvider",
     "OpenAICodexProvider",
     "OpenAIResponsesProvider",
+    "PerturbationModel",
     "ProcessingTier",
     "PromptEngine",
     "QualityAssessor",
@@ -159,6 +170,7 @@ __all__ = [
     "StorageTier",
     "Technique",
     "__version__",
+    "compute_influence_certificate",
     "enhance_prompt",
     "get_enhancer",
     "load_config",
