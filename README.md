@@ -8,7 +8,7 @@
 [![PyPI](https://img.shields.io/pypi/v/aipea)](https://pypi.org/project/aipea/)
 [![Downloads](https://img.shields.io/pypi/dm/aipea)](https://pypi.org/project/aipea/)
 
-A standalone Python library for prompt preprocessing, security screening, query analysis, and context enrichment for LLM systems. Extracted from [Agora IV](https://github.com/undercurrentai/agora-iv) production (v4.1.49).
+A standalone Python library for prompt preprocessing, security screening, query analysis, and context enrichment for LLM systems. Extracted from the prompt-preprocessing layer of Agora IV (v4.1.49), an internal Undercurrent Holdings platform.
 
 > **Security:** Report vulnerabilities privately via [GitHub Security Advisories](https://github.com/undercurrentai/AIPEA/security/advisories/new) or email `security@undercurrentholdings.com`. See [`SECURITY.md`](SECURITY.md) for scope, response SLAs, and honest framing of what AIPEA's compliance modes do and do not enforce.
 
@@ -316,12 +316,12 @@ enhancer._learning_engine.prune_events()
 
 AIPEA is designed as a standalone preprocessing layer for LLM systems. It integrates with:
 
-- **[AEGIS Governance](https://aegis.undercurrentholdings.com?utm_source=pypi&utm_medium=aipea-readme)** — quantitative AI governance: six decision gates + hash-chained audit trails (`pip install aegis-governance[aipea]`)
-- **Agora IV** — multi-model orchestration platform (uses AIPEA for prompt preprocessing)
+- **AEGIS**: Undercurrent Holdings' separate governance research project (pre-product). Its Python SDK, [`aegis-governance`](https://pypi.org/project/aegis-governance/), is on PyPI; hosted evaluation is not publicly available.
+- **Agora IV**: Undercurrent Holdings' internal multi-model orchestration platform (not public; uses AIPEA for prompt preprocessing)
 
-## Enterprise & Governance
+## Governance
 
-AIPEA is free and open-source. For organizations that need full AI governance — risk registers, model cards, compliance auditing, and policy enforcement — see [AEGIS](https://aegis.undercurrentholdings.com?utm_source=pypi&utm_medium=aipea-readme), Undercurrent AI's governance platform. AEGIS has a free Community tier (100 evaluations/month, no credit card) — [get an API key](https://portal.undercurrentholdings.com/signup?product=aegis&utm_source=pypi&utm_medium=aipea-readme) or try the [browser demo](https://aegis.undercurrentholdings.com/advisor) with no signup.
+AIPEA is free and open-source. AEGIS, Undercurrent Holdings' separate governance research project, is pre-product R&D. Its hosted evaluation service is not publicly available, and there is no public signup or API key program. Current status: [undercurrentholdings.com/developers](https://www.undercurrentholdings.com/developers).
 
 ### What AIPEA's Compliance Modes Do — and Do Not Do
 
@@ -339,7 +339,7 @@ AIPEA exposes a `ComplianceMode` enum with three supported modes (`GENERAL`, `HI
 
 For the full scope statement, supported versions, and vulnerability disclosure policy, see [`SECURITY.md`](SECURITY.md).
 
-AEGIS adds the organizational layer that AIPEA deliberately does not: audit trails, human oversight workflows, policy enforcement, and regulatory reporting. If you need those, pair AIPEA with AEGIS rather than treating AIPEA's compliance modes as substitutes for them.
+AIPEA deliberately does not provide an organizational layer: audit trails, human oversight workflows, policy enforcement, and regulatory reporting. If you need those, build them in your own application layer rather than treating AIPEA's compliance modes as substitutes for them.
 
 Learn more at [undercurrentholdings.com](https://undercurrentholdings.com).
 
