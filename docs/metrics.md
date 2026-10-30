@@ -136,9 +136,10 @@ approved v2.0.0 roadmap in [`TODO.md`](../TODO.md).
 
 ### Named adopters
 
-- **Agora IV** — extraction source and longest-running consumer (see
-  [`docs/adopters.md`](adopters.md)).
-- **AEGIS** — downstream via `aegis-governance/src/integration/aipea_bridge.py`.
+- **Agora IV**: extraction source and internal consumer (internal Undercurrent
+  Holdings platform, not public; see [`docs/adopters.md`](adopters.md)).
+- **AEGIS**: downstream via an adapter bridge in the private
+  `aegis-governance` repo (pre-product research project; not publicly verifiable).
 
 ### Dependent-repo count (public signal)
 
@@ -198,8 +199,8 @@ Honest gaps, per the PR #52 adversarial VC review §7 diligence
 questions. We list these so the absence isn't discoverable only by
 searching for "dependents: 0".
 
-- **Funnel conversion rate** (AIPEA → Agora IV / AEGIS paid seats) —
-  blocked on AEGIS/Agora-side instrumentation. Tracked as Plan B
+- **Funnel conversion rate** (AIPEA → Agora IV / AEGIS): not measurable,
+  because Agora IV is internal and AEGIS is pre-product with no paid seats. Tracked as Plan B
   finding #14 in the
   [PR #52 response plan](https://github.com/undercurrentai/AIPEA/blob/main/docs/adr/ADR-005-pr52-vc-adversarial-review-response.md)
   (ADR-005 shipping v1.7.0). Until that exists, the open-core gateway
@@ -216,10 +217,8 @@ searching for "dependents: 0".
 - **Named customer counts beyond internal Undercurrent products** — we
   don't have design partners or beta customers yet. When we do, they'll
   appear in [`docs/adopters.md`](adopters.md) with their consent.
-- **Projected revenue** — AIPEA is a platform library, not a SaaS product;
-  revenue signals live at the product layer (AEGIS, LIBERTAS). See
-  [Undercurrent Holdings root CLAUDE.md](../../../CLAUDE.md) §12 for
-  product pricing.
+- **Projected revenue**: AIPEA is a platform library, not a SaaS product.
+  No AEGIS pricing or paid offering exists today (pre-product R&D).
 - **Internal incident-rate metrics** — covered under the Agora IV case
   study at [`case-studies/agora-iv-v1.md`](../case-studies/agora-iv-v1.md)
   with appropriate anonymization of internal operational details.

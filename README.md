@@ -49,7 +49,7 @@ User Query → SecurityScanner → QueryAnalyzer → SearchOrchestrator → Prom
 Named adopters and integration patterns → [`docs/adopters.md`](docs/adopters.md).
 Live download trajectory, engineering-quality signals, and the honest "not
 yet published" list → [`docs/metrics.md`](docs/metrics.md).
-Production narrative (Wave 18-20 hardening) → [`case-studies/agora-iv-v1.md`](case-studies/agora-iv-v1.md).
+Internal case study (Agora IV, not publicly verifiable; Wave 18-20 hardening) → [`case-studies/agora-iv-v1.md`](case-studies/agora-iv-v1.md).
 
 ## Installation
 
