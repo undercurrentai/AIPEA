@@ -2,12 +2,14 @@
 
 > Signals of AIPEA's adoption, usage, and engineering quality. Small
 > numbers, honestly reported. Updated 2026-05-02 (post-Phase-4.c PR #70
-> adversarial corpus expansion shipped; v1.6.2 shipped to PyPI 2026-04-24;
-> v1.7.0 release-cut target 2026-06-15).
+> adversarial corpus expansion shipped). Release facts corrected
+> 2026-10-29: v1.7.0, shipped to PyPI 2026-05-28, is the latest release.
 
 This page exists because an investor's first two questions are
 "who's using it?" and "who's about to?" — and "trust me" isn't an
-answer. The numbers below are all externally verifiable.
+answer. The PyPI, GitHub, and benchmark numbers below are externally
+verifiable; statements about Undercurrent Holdings' private repositories
+are not.
 
 ---
 
@@ -43,7 +45,7 @@ See the README badges for live rendering of these.
 
 | Metric | Value | Source of truth |
 |---|---|---|
-| Library version | 1.6.2 (PyPI); v1.7.0-RC on `main` | [`pyproject.toml`](../pyproject.toml), [PyPI](https://pypi.org/project/aipea/1.6.2/) |
+| Library version | 1.7.0 (PyPI, 2026-05-28) | [`pyproject.toml`](../pyproject.toml), [PyPI](https://pypi.org/project/aipea/1.7.0/) |
 | Source LOC | ~13,538 (11,442 top-level + 2,096 `redteam/`) | `find src/aipea -name '*.py' \| xargs wc -l` |
 | Test count | 1,866 collected (1,826 passed, 35 skipped, 5 xfailed) | `pytest --collect-only` / `make test` |
 | Test coverage | 91.75% | Codecov, `make test` |
@@ -115,20 +117,26 @@ published here so any drift downward is publicly visible.
 
 | Version | PyPI date | Headline change |
 |---|---|---|
-| v1.0.0 | 2026-02-14 | Extraction from Agora IV v4.1.49 |
-| v1.1.0 | 2026-02-17 | Engine test coverage (49% → 99%) |
+| v1.1.0 | 2026-03-09 | Engine test coverage (49% → 99%) |
 | v1.2.0 | 2026-03-13 | Logic coherence remediation (F1-F14) |
-| v1.3.0 | 2026-03-?? | Dialogical Clarification + named strategies + semantic KB search + quality assessor |
+| v1.3.0 | 2026-03-13 | Dialogical Clarification + named strategies + semantic KB search + quality assessor |
+| v1.3.1 | 2026-03-15 | See CHANGELOG |
+| v1.3.2 | 2026-04-09 | See CHANGELOG |
 | v1.3.3 | 2026-04-11 | Wave A: 13 security fixes; SECURITY.md added |
 | v1.4.0 | 2026-04-13 | Adaptive Learning Engine (PR #31) |
 | v1.5.0 | 2026-04-15 | Compliance-aware learning (ADR-003; PR #40) |
 | v1.6.0 | 2026-04-15 | Taint-aware feedback averaging (ADR-004; PR #44) |
-| v1.6.1 | 2026-04-22 | Injection-regex hardening (8 → 10 patterns; PR #50) |
+| v1.6.1 | 2026-04-23 | Injection-regex hardening (8 → 10 patterns; PR #50) |
 | v1.6.2 | 2026-04-24 | PR #52 VC-review response, telemetry dashboard, HTTP_TIMEOUT deprecation, P5e trio, benchmarks deleted (PRs #51/#52/#53/#55/#56) |
+| v1.7.0 | 2026-05-28 | Release-cut of the v1.7.0-RC work (PRs #57 to #74), including DeprecationWarning + `docs/MIGRATION.md` (see CHANGELOG) |
 
-Average cadence from v1.3.0 onward: ~1 release/10 days. 10 PyPI releases
-over ~10 weeks. Next planned release: v1.7.0 (~2026-06-15) per the
-approved v2.0.0 roadmap in [`TODO.md`](../TODO.md).
+PyPI dates are upload dates (UTC) from pypi.org. v1.0.0 (2026-02-14, the
+extraction from Agora IV v4.1.49, an internal platform) was not published
+to PyPI and has no git tag.
+
+12 PyPI releases from 2026-03-09 to 2026-05-28 (1.1.0 through 1.7.0). No
+release since 1.7.0 (as of 2026-10-29); planned v2.0.0 work is tracked in
+[`TODO.md`](../TODO.md).
 
 ---
 
@@ -179,8 +187,9 @@ Beyond the automated gates:
 
 - 20 security/correctness defects fixed via bug-hunt waves 18, 19, 20
   (all with regression tests). Full list: [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md).
-- Zero post-release security incidents across 9 PyPI releases (2026-02-14
-  to 2026-04-23).
+- No security advisories have been published for AIPEA (GitHub Security
+  Advisories, checked 2026-10-29). Post-release incident tracking is
+  self-reported.
 - Every `security.py`, `__init__.py`, `pyproject.toml`, or
   `.github/workflows/**` PR has been reviewed by **three** AI reviewers
   (gpt-5.4-pro, OpenAI Codex gpt-5.3-codex, Claude Opus 4.6) since Wave C1
